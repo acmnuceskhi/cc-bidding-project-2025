@@ -8,7 +8,7 @@
 
 2. Install dependencies:
 
-   npm i
+   `npm i`
 
 3. Create a `.env.local` file in the project root with required environment variables:
 
