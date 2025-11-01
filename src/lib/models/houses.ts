@@ -54,4 +54,28 @@ export const Houses = {
         const client = await clientPromise;
         return client.db().collection<House>(collectionName).findOne({ _id: new ObjectId(id) });
     },
+    
+    /**
+     * Get houses that have placed bids for a specific participant
+     * @param participantID - Participant ID as string
+     */
+    async getHousesWithBidsForParticipant(participantID: string): Promise<House[]> {
+        const client = await clientPromise;
+        
+        // First get all bids for this participant
+        const bidsCollection = client.db().collection("bids");
+        const bids = await bidsCollection.find({ 
+            participantID: new ObjectId(participantID) 
+        }).toArray();
+        
+        // Get unique house IDs from bids
+        const houseIds = [...new Set(bids.map(bid => bid.houseID.toString()))];
+        
+        // Get houses
+        const houses = await client.db().collection<House>(collectionName).find({
+            _id: { $in: houseIds.map(id => new ObjectId(id)) }
+        }).toArray();
+        
+        return houses;
+    }
 };

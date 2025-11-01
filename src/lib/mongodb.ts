@@ -1,9 +1,14 @@
 import { MongoClient } from "mongodb";
 
-const uri = process.env.MONGODB_URI!;
+const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/bidding-system";
 const options = {};
 
 let client: MongoClient;
+let clientPromise: Promise<MongoClient>;
+
+if (!uri) {
+  throw new Error("Please define the MONGODB_URI environment variable");
+}
 
 declare global {
   // allow global caching of the promise
@@ -16,6 +21,6 @@ if (!global._mongoClientPromise) {
   global._mongoClientPromise = client.connect();
 }
 
-const clientPromise = global._mongoClientPromise;
+clientPromise = global._mongoClientPromise;
 
 export default clientPromise;

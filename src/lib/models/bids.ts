@@ -52,4 +52,25 @@ export const Bids = {
         const client = await clientPromise;
         return client.db().collection<Bid>(collectionName).find({}).sort({ timestamp: -1 }).toArray();
     },
+    
+    /**
+     * Get the winning bid for a participant based on highest amount and earliest timestamp
+     * @param participantID - Participant ID as string
+     */
+    async getWinningBid(participantID: string): Promise<Bid | null> {
+        const client = await clientPromise;
+        
+        // Get all bids for this participant
+        const bids = await client.db().collection<Bid>(collectionName)
+            .find({ participantID: new ObjectId(participantID) })
+            .sort({ amount: -1, timestamp: 1 })
+            .toArray();
+            
+        if (bids.length === 0) {
+            return null;
+        }
+        
+        // Return the first bid (highest amount, earliest timestamp)
+        return bids[0];
+    }
 };
