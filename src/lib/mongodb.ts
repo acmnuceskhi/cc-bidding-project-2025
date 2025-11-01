@@ -1,7 +1,13 @@
-import { MongoClient } from "mongodb";
+import { MongoClient, type MongoClientOptions } from "mongodb";
 
-const uri = process.env.MONGODB_URI!;
-const options = {};
+const uri = process.env.MONGODB_URI;
+if (!uri) {
+  throw new Error(
+    "Please define MONGODB_URI in your environment (e.g. .env.local)"
+  );
+}
+
+const options: MongoClientOptions = {};
 
 let client: MongoClient;
 
