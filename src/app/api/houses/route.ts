@@ -1,9 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Houses } from "@/lib/models/houses";
+import { verifyAuth } from "@/lib/auth";
 
 // GET /api/houses - Get all houses with their budgets
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Check authentication
+    const authResult = await verifyAuth(request);
+    if (!authResult) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
     const houses = await Houses.getAll();
     return NextResponse.json(houses);
   } catch (error) {

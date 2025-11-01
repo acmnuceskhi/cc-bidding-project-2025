@@ -1,15 +1,24 @@
 import { config } from "dotenv";
+import path from "path";
+
+// Load environment variables from .env.local first, then .env
+config({ path: path.resolve(process.cwd(), '.env.local') });
+config({ path: path.resolve(process.cwd(), '.env') });
+
 import { Houses } from "@/lib/models/houses";
 import { Participants } from "@/lib/models/participants";
+import { Rounds } from "@/lib/models/rounds";
+import { Users } from "@/lib/models/users";
+import { hashPassword } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
-
-// Load environment variables
-config();
 
 async function initializeData() {
   try {
+    console.log("Environment check:");
+    console.log("MONGODB_URI exists:", !!process.env.MONGODB_URI);
+    console.log("MONGODB_URI value:", process.env.MONGODB_URI?.substring(0, 20) + "...");
+    
     console.log("Connecting to MongoDB...");
-    console.log("MongoDB URI:", process.env.MONGODB_URI);
     
     // Connect to database
     const client = await clientPromise;
@@ -23,6 +32,7 @@ async function initializeData() {
     await db.collection("bids").deleteMany({});
     await db.collection("rounds").deleteMany({});
     await db.collection("teams").deleteMany({});
+    await db.collection("users").deleteMany({});
     
     console.log("Cleared existing data");
     
@@ -50,13 +60,61 @@ async function initializeData() {
       });
     }
     
+    const participantIds = [];
     for (const participant of participants) {
-      await Participants.create(participant);
+      const result = await Participants.create(participant);
+      participantIds.push(result.insertedId);
       console.log(`Created participant: ${participant.name}`);
+    }
+
+    // Create predefined rounds for all participants
+    console.log("Creating predefined rounds...");
+    for (let i = 0; i < participantIds.length; i++) {
+      const scheduledStart = new Date(Date.now() + (i * 2 * 60 * 1000)); // 2 minutes apart
+      const timerEnd = new Date(scheduledStart.getTime() + 60 * 1000); // 1 minute duration
+      
+      const round = {
+        participantId: participantIds[i],
+        bids: [],
+        status: "scheduled" as const,
+        timerEnd,
+        scheduledStart
+      };
+      
+      await Rounds.create(round);
+      if (i < 5) { // Only log first 5 to avoid spam
+        console.log(`Created round for participant ${i + 1}`);
+      }
+    }
+    console.log(`Created ${participantIds.length} predefined rounds`);
+    
+    // Create default users
+    const adminPassword = await hashPassword("admin123");
+    const adminUser = {
+      username: "admin",
+      password: adminPassword,
+      role: "admin" as const
+    };
+    await Users.create(adminUser);
+    console.log("Created admin user: admin / admin123");
+
+    // Create house captain users
+    const captainPassword = await hashPassword("captain123");
+    const houseData = await Houses.getAll();
+    
+    for (const house of houseData) {
+      const captainUser = {
+        username: `captain_${house.name.toLowerCase().replace(/\s+/g, '_')}`,
+        password: captainPassword,
+        role: "house_captain" as const,
+        houseId: house._id
+      };
+      await Users.create(captainUser);
+      console.log(`Created house captain: ${captainUser.username} / captain123`);
     }
     
     console.log("Database initialization complete!");
-    console.log(`Created ${houses.length} houses and ${participants.length} participants`);
+    console.log(`Created ${houses.length} houses, ${participants.length} participants, and ${houseData.length + 1} users`);
     
     process.exit(0);
   } catch (error) {

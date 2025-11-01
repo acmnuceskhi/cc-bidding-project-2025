@@ -8,14 +8,63 @@ import NoSSR from "@/components/NoSSR";
 export default function Home() {
   const [houses, setHouses] = useState<House[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    fetchHouses();
+    checkAuthentication();
   }, []);
+
+  const checkAuthentication = async () => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    const houseId = localStorage.getItem("houseId");
+
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
+    // Verify token and redirect based on role
+    try {
+      const response = await fetch("/api/auth/me", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        
+        // Redirect based on role
+        if (userData.role === "admin") {
+          window.location.href = "/admin";
+        } else if (userData.role === "house_captain" && userData.houseId) {
+          window.location.href = `/house/${userData.houseId}`;
+        } else {
+          // Show home page for other cases
+          setIsAuthenticated(true);
+          fetchHouses();
+        }
+      } else {
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        localStorage.removeItem("houseId");
+        window.location.href = "/login";
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error);
+      window.location.href = "/login";
+    }
+  };
 
   const fetchHouses = async () => {
     try {
-      const response = await fetch("/api/houses");
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/houses", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setHouses(Array.isArray(data) ? data : []);

@@ -23,18 +23,18 @@ export async function GET() {
     const activeRound = activeRounds[0];
     
     // Get current participant
-    const participant = await Participants.getByID(activeRound.participantID.toString());
+    const participant = await Participants.getByID(activeRound.participantId.toString());
     
     // Get all houses
     const houses = await Houses.getAll();
     
     // Get bids for current participant
-    const bids = await Bids.getByParticipant(activeRound.participantID.toString());
+    const bids = await Bids.getByParticipant(activeRound.participantId.toString());
     
     // Create a list of houses that placed bids (without amounts)
     const housesWithBids = houses
       .filter(house => 
-        bids.some(bid => bid.houseID.toString() === house._id?.toString())
+        bids.some(bid => bid.houseId.toString() === house._id?.toString())
       )
       .map(house => ({
         id: house._id,

@@ -1,12 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
+import { verifyAuth, hasRole } from "@/lib/auth";
 
-// POST /api/rounds/:id/start - Start a round
+// POST /api/rounds/:id/start - Start a round (Admin only)
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Check authentication
+    const authResult = await verifyAuth(request);
+    if (!authResult) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Only admins can start rounds
+    if (!hasRole(authResult.payload, "admin")) {
+      return NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
+      );
+    }
+
     const { id } = params;
 
     if (!id) {
@@ -34,8 +52,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      modifiedCount: result.modifiedCount,
-      timerEnd
+      roundId: id,
+      message: "Round started successfully"
     });
   } catch (error) {
     console.error("Error starting round:", error);

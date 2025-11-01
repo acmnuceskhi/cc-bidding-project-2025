@@ -1,15 +1,34 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Participants } from "@/lib/models/participants";
 import { Houses } from "@/lib/models/houses";
 import { Bids } from "@/lib/models/bids";
+import { verifyAuth, hasRole } from "@/lib/auth";
+import type { Bid } from "@/lib/models/bids";
 
-// POST /api/rounds/:id/end - End a round and determine winner
+// POST /api/rounds/:id/end - End a round and determine winner (Admin only)
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Check authentication
+    const authResult = await verifyAuth(request);
+    if (!authResult) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Only admins can end rounds
+    if (!hasRole(authResult.payload, "admin")) {
+      return NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
+      );
+    }
+
     const { id } = params;
 
     if (!id) {
@@ -29,14 +48,14 @@ export async function POST(
     }
 
     // Get all bids for this round's participant
-    const bids = await Bids.getByParticipant(round.participantID.toString());
+    const bids = await Bids.getByParticipant(round.participantId.toString());
 
     // Find the winning bid (highest amount, earliest timestamp in case of tie)
-    let winningBid = null;
+    let winningBid: Bid | null = null;
     let winningHouse = null;
     
     if (bids.length > 0) {
-      winningBid = bids.reduce((winner, current) => {
+      winningBid = bids.reduce((winner: Bid, current: Bid) => {
         // If current bid is higher, it wins
         if (current.amount > winner.amount) {
           return current;
@@ -49,7 +68,7 @@ export async function POST(
       });
 
       // Get the winning house details
-      winningHouse = await Houses.getByID(winningBid.houseID.toString());
+      winningHouse = await Houses.getByID(winningBid.houseId.toString());
     }
 
     // Update round status to completed
@@ -65,7 +84,7 @@ export async function POST(
       });
 
       // Assign participant to winning house
-      await Participants.update(round.participantID.toString(), {
+      await Participants.update(round.participantId.toString(), {
         assignedHouse: winningHouse._id
       });
     }
@@ -73,13 +92,13 @@ export async function POST(
     return NextResponse.json({
       success: true,
       winningBid: winningBid ? {
-        houseID: winningBid.houseID,
+        houseID: winningBid.houseId,
         houseName: winningHouse?.name,
         amount: winningBid.amount,
         timestamp: winningBid.timestamp
       } : null,
       allBids: bids.map(bid => ({
-        houseID: bid.houseID,
+        houseID: bid.houseId,
         amount: bid.amount,
         timestamp: bid.timestamp
       })),

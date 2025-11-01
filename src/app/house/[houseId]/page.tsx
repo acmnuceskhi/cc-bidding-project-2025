@@ -19,6 +19,7 @@ export default function HouseDashboard() {
   const [loading, setLoading] = useState(false);
   const [hasBid, setHasBid] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -26,16 +27,62 @@ export default function HouseDashboard() {
 
   useEffect(() => {
     if (mounted && houseId) {
-      fetchData();
-      const interval = setInterval(fetchData, 1000); // Refresh every second
-      return () => clearInterval(interval);
+      checkAuthentication();
     }
   }, [houseId, mounted]);
 
+  const checkAuthentication = async () => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+    const userHouseId = localStorage.getItem("houseId");
+
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+
+    // Verify token and check house access
+    try {
+      const response = await fetch("/api/auth/me", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        
+        // Check if user can access this house
+        if (userData.role === "admin" || userData.houseId === houseId) {
+          setIsAuthenticated(true);
+          fetchData();
+          const interval = setInterval(fetchData, 1000); // Refresh every second
+          return () => clearInterval(interval);
+        } else {
+          alert("Access denied. You don't have permission to access this house.");
+          window.location.href = "/login";
+        }
+      } else {
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        localStorage.removeItem("houseId");
+        window.location.href = "/login";
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error);
+      window.location.href = "/login";
+    }
+  };
+
   const fetchData = async () => {
     try {
+      const token = localStorage.getItem("token");
+      const authHeaders = {
+        "Authorization": `Bearer ${token}`
+      };
+
       // Fetch house data
-      const houseRes = await fetch("/api/houses");
+      const houseRes = await fetch("/api/houses", { headers: authHeaders });
       if (houseRes.ok) {
         const housesData = await houseRes.json();
         const currentHouse = Array.isArray(housesData) 
@@ -45,7 +92,7 @@ export default function HouseDashboard() {
       }
 
       // Fetch active round
-      const roundsRes = await fetch("/api/rounds?active=true");
+      const roundsRes = await fetch("/api/rounds?active=true", { headers: authHeaders });
       if (roundsRes.ok) {
         const roundsData = await roundsRes.json();
         const activeRoundData = Array.isArray(roundsData) && roundsData.length > 0 ? roundsData[0] : null;
@@ -53,11 +100,11 @@ export default function HouseDashboard() {
 
         if (activeRoundData) {
           // Fetch current participant
-          const participantsRes = await fetch("/api/participants");
+          const participantsRes = await fetch("/api/participants", { headers: authHeaders });
           if (participantsRes.ok) {
             const participantsData = await participantsRes.json();
             const participant = Array.isArray(participantsData)
-              ? participantsData.find((p: Participant) => p._id?.toString() === activeRoundData.participantID.toString())
+              ? participantsData.find((p: Participant) => p._id?.toString() === activeRoundData.participantId?.toString())
               : null;
             setCurrentParticipant(participant || null);
           }
@@ -68,11 +115,16 @@ export default function HouseDashboard() {
           setTimeLeft(Math.max(0, endTime - now));
 
           // Check if house has already placed a bid
-          const bidsRes = await fetch(`/api/bids?participantID=${activeRoundData.participantID}`);
+          const token = localStorage.getItem("token");
+          const bidsRes = await fetch(`/api/bids?participantID=${activeRoundData.participantId}`, {
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          });
           if (bidsRes.ok) {
             const bidsData = await bidsRes.json();
             const houseBid = Array.isArray(bidsData)
-              ? bidsData.find((bid: Bid) => bid.houseID.toString() === houseId)
+              ? bidsData.find((bid: Bid) => bid.houseId.toString() === houseId)
               : null;
             setHasBid(!!houseBid);
           }
@@ -97,14 +149,15 @@ export default function HouseDashboard() {
 
     setLoading(true);
     try {
+      const token = localStorage.getItem("token");
       const response = await fetch("/api/bids", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          houseID: houseId,
-          participantID: currentParticipant._id?.toString(),
+          roundId: activeRound._id?.toString(),
           amount: bidAmount,
         }),
       });
@@ -130,15 +183,23 @@ export default function HouseDashboard() {
     return `${seconds}s`;
   };
 
-  if (!mounted) {
-    return null; // Prevent hydration mismatch
+  if (!mounted || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Checking Authentication</h2>
+          <p className="text-gray-600">Please wait...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!house) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-xl">
-          {mounted ? "House not found. Please check the URL or connect to database." : "Loading..."}
+          House not found. Please check the URL or connect to database.
         </div>
       </div>
     );
@@ -148,7 +209,20 @@ export default function HouseDashboard() {
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{house.name} Dashboard</h1>
+          <div className="flex justify-between items-center mb-2">
+            <h1 className="text-3xl font-bold text-gray-900">{house.name} Dashboard</h1>
+            <button
+              onClick={() => {
+                localStorage.removeItem("token");
+                localStorage.removeItem("role");
+                localStorage.removeItem("houseId");
+                window.location.href = "/login";
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-lg text-gray-600">

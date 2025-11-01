@@ -13,6 +13,8 @@ export default function AdminDashboard() {
   const [selectedParticipant, setSelectedParticipant] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userRole, setUserRole] = useState<string>("");
 
   useEffect(() => {
     setMounted(true);
@@ -20,18 +22,64 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (mounted) {
-      fetchData();
-      const interval = setInterval(fetchData, 2000); // Refresh every 2 seconds
-      return () => clearInterval(interval);
+      checkAuthentication();
     }
   }, [mounted]);
 
+  const checkAuthentication = async () => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
+
+    if (!token) {
+      // Redirect to login
+      window.location.href = "/login";
+      return;
+    }
+
+    // Verify token with server
+    try {
+      const response = await fetch("/api/auth/me", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        if (userData.role !== "admin") {
+          alert("Access denied. Admin privileges required.");
+          window.location.href = "/login";
+          return;
+        }
+        setIsAuthenticated(true);
+        setUserRole(userData.role);
+        fetchData();
+        const interval = setInterval(fetchData, 2000); // Refresh every 2 seconds
+        return () => clearInterval(interval);
+      } else {
+        // Token invalid, redirect to login
+        localStorage.removeItem("token");
+        localStorage.removeItem("role");
+        localStorage.removeItem("houseId");
+        window.location.href = "/login";
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error);
+      window.location.href = "/login";
+    }
+  };
+
   const fetchData = async () => {
     try {
+      const token = localStorage.getItem("token");
+      const authHeaders = {
+        "Authorization": `Bearer ${token}`
+      };
+
       const [housesRes, participantsRes, roundsRes] = await Promise.all([
-        fetch("/api/houses"),
-        fetch("/api/participants"),
-        fetch("/api/rounds?active=true")
+        fetch("/api/houses", { headers: authHeaders }),
+        fetch("/api/participants", { headers: authHeaders }),
+        fetch("/api/rounds?active=true", { headers: authHeaders })
       ]);
 
       const housesData = housesRes.ok ? await housesRes.json() : [];
@@ -41,7 +89,13 @@ export default function AdminDashboard() {
       setHouses(Array.isArray(housesData) ? housesData : []);
       setParticipants(Array.isArray(participantsData) ? participantsData : []);
       setRounds(Array.isArray(roundsData) ? roundsData : []);
-      setActiveRound(roundsData.length > 0 ? roundsData[0] : null);
+      setActiveRound(Array.isArray(roundsData) && roundsData.length > 0 ? roundsData[0] : null);
+      
+      console.log("Fetched data:", {
+        houses: housesData?.length || 0,
+        participants: participantsData?.length || 0,
+        rounds: roundsData?.length || 0
+      });
     } catch (error) {
       console.error("Error fetching data:", error);
       setHouses([]);
@@ -59,13 +113,15 @@ export default function AdminDashboard() {
 
     setLoading(true);
     try {
+      const token = localStorage.getItem("token");
       const response = await fetch("/api/rounds", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
-          participantID: selectedParticipant,
+          participantId: selectedParticipant,
         }),
       });
 
@@ -85,12 +141,20 @@ export default function AdminDashboard() {
   };
 
   const endRound = async () => {
-    if (!activeRound) return;
+    if (!activeRound || !activeRound._id) {
+      alert("No active round found");
+      return;
+    }
 
     setLoading(true);
     try {
+      const token = localStorage.getItem("token");
+      console.log("Ending round with ID:", activeRound._id);
       const response = await fetch(`/api/rounds/${activeRound._id}/end`, {
         method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
       });
 
       if (response.ok) {
@@ -109,16 +173,45 @@ export default function AdminDashboard() {
     }
   };
 
+  // Filter participants that are not assigned to any house and don't have an active round
   const availableParticipants = participants.filter(p => !p.assignedHouse);
 
-  if (!mounted) {
-    return null; // Prevent hydration mismatch
+  console.log("Available participants:", {
+    total: participants.length,
+    available: availableParticipants.length,
+    assigned: participants.filter(p => p.assignedHouse).length,
+    sampleParticipant: participants[0]
+  });
+
+  if (!mounted || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Checking Authentication</h2>
+          <p className="text-gray-600">Please wait...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Admin Dashboard</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <button
+            onClick={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("role");
+              localStorage.removeItem("houseId");
+              window.location.href = "/login";
+            }}
+            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+          >
+            Logout
+          </button>
+        </div>
 
         {/* Active Round Section */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
@@ -128,7 +221,7 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-lg">
-                    Participant: {participants.find(p => p._id?.toString() === activeRound.participantID.toString())?.name}
+                    Participant: {participants.find(p => p._id?.toString() === activeRound.participantId?.toString())?.name || "Unknown"}
                   </p>
                   <p className="text-sm text-gray-600">
                     Ends at: {new Date(activeRound.timerEnd).toLocaleTimeString()}
@@ -211,7 +304,7 @@ export default function AdminDashboard() {
                 </p>
                 {participant.assignedHouse && (
                   <p className="text-sm text-green-600">
-                    House: {houses.find(h => h._id?.toString() === participant.assignedHouse?.toString())?.name}
+                    House: {houses.find(h => h._id?.toString() === participant.assignedHouse?.toString())?.name || "Unknown"}
                   </p>
                 )}
               </div>

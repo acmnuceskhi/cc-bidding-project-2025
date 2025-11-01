@@ -1,9 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Participants } from "@/lib/models/participants";
+import { verifyAuth } from "@/lib/auth";
 
 // GET /api/participants - Get all participants
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Check authentication
+    const authResult = await verifyAuth(request);
+    if (!authResult) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
     const participants = await Participants.getAll();
     return NextResponse.json(participants);
   } catch (error) {

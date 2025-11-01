@@ -1,4 +1,10 @@
 import { MongoClient, type MongoClientOptions } from "mongodb";
+import { config } from "dotenv";
+import path from "path";
+
+// Load environment variables
+config({ path: path.resolve(process.cwd(), '.env.local') });
+config({ path: path.resolve(process.cwd(), '.env') });
 
 const uri = process.env.MONGODB_URI;
 if (!uri) {
