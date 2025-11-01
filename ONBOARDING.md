@@ -10,9 +10,7 @@
 
    `npm i`
 
-3. Create a `.env.local` file in the project root with required environment variables:
-
-   MONGODB_URI=mongodb://127.0.0.1:27017
+3. Create a `.env.local` file in the project root with required environment variables (see Database section below).
 
 4. Start the development server:
 
@@ -50,14 +48,29 @@ const db = client.db();
 
 ### Database: Atlas (hosted)
 
-- MongoDB Atlas (recommended for shared/team development)
-  1. Copy the connection string (it will look like `mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/mydb?retryWrites=true&w=majority`). Replace `<password>` and the default DB name.
-  2. Add the connection string to `.env.local` as `MONGODB_URI="<your-atlas-connection-string>"`.
+1. **Pull `.env.example`**  
+   The repo includes a `.env.example` with placeholders. Copy it to your project root folder and rename it as `.env.local`.
 
-Notes:
+2. **Add the shared URI**  
+   Ask the team lead or group for the MongoDB connection string.
 
-- Do not commit `.env.local` or any secrets to git.
-- The app expects `process.env.MONGODB_URI` and `src/lib/mongodb.ts` reuses a cached connection. Always import `clientPromise` and reuse it rather than constructing a new `MongoClient`.
+   Paste it into `.env.local` as `MONGODB_URI`:
+
+```env
+   MONGODB_URI="mongodb+srv://sharedUser:password@cluster0.rgz9psr.mongodb.net/mydb?retryWrites=true&w=majority&appName=Cluster0"
+```
+
+⚠️ **Never commit `.env.local` to Git.** Only `.env.example` is tracked in the repo.
+
+3. **Install dependencies**  
+   dotenv was just added to packages.json, make sure to install it:
+
+   `npm i`
+
+4. **Test locally**  
+   Quick Mongo shell test:
+
+   `mongosh "${env:MONGODB_URI}"`
 
 ## Scripts
 
