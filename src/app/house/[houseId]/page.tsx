@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -7,13 +8,18 @@ import { Participant } from "@/lib/models/participants";
 import { Round } from "@/lib/models/rounds";
 import { Bid } from "@/lib/models/bids";
 
+interface ParticipantWithDetails extends Participant {
+  batch?: string;
+  universityId?: string;
+}
+
 export default function HouseDashboard() {
   const params = useParams();
   const houseId = params.houseId as string;
 
   const [house, setHouse] = useState<House | null>(null);
-  const [activeRound, setActiveRound] = useState<Round | null>(null);
-  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null);
+  const [activeRound, setActiveRound] = useState<(Round & { roundNumber?: number }) | null>(null);
+  const [currentParticipant, setCurrentParticipant] = useState<ParticipantWithDetails | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
@@ -29,11 +35,17 @@ export default function HouseDashboard() {
     if (mounted && houseId) {
       // checkAuthentication(); // disabled for UI testing
       // Mock data for house dashboard
-      const mockHouse: House = { _id: houseId as any, name: `House ${houseId}`, totalBudget: 1000, remainingBudget: 800 };
+      const mockHouse: House = { 
+        _id: houseId as any, 
+        name: "Lord Shen's Army", 
+        totalBudget: 1000, 
+        remainingBudget: 750 
+      };
       setHouse(mockHouse);
       const now = Date.now();
       const mockRound: any = {
         _id: "r1" as any,
+        roundNumber: 15,
         participantId: "p1" as any,
         bids: [],
         status: "active" as const,
@@ -41,7 +53,14 @@ export default function HouseDashboard() {
         scheduledStart: new Date(now - 5000),
       };
       setActiveRound(mockRound);
-      setCurrentParticipant({ _id: "p1" as any, name: "Player One", picture: "", roundStats: [] });
+      setCurrentParticipant({ 
+        _id: "p1" as any, 
+        name: "Master Shifu", 
+        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Shifu", 
+        batch: "Senior",
+        universityId: "22K-3456",
+        roundStats: [] 
+      });
       setTimeLeft(45000);
       setHasBid(false);
       setIsAuthenticated(true);
@@ -185,11 +204,11 @@ export default function HouseDashboard() {
 
   if (!mounted || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Checking Authentication</h2>
-          <p className="text-gray-600">Please wait...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-yellow-400 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-semibold text-white mb-2">Checking Authentication</h2>
+          <p className="text-gray-300">Please wait...</p>
         </div>
       </div>
     );
@@ -197,146 +216,225 @@ export default function HouseDashboard() {
 
   if (!house) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-xl">
+      <div className="min-h-screen bg-gradient-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
+        <div className="text-xl text-white">
           House not found. Please check the URL or connect to database.
         </div>
       </div>
     );
   }
 
+  const timeLeftValue = Math.max(0, timeLeft);
+  const isTimeRunningOut = timeLeftValue < 10000;
+  const budgetPercentage = (house.remainingBudget / house.totalBudget) * 100;
+
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <h1 className="text-3xl font-bold text-gray-900">{house.name} Dashboard</h1>
-            <button
-              onClick={() => {
-                localStorage.removeItem("token");
-                localStorage.removeItem("role");
-                localStorage.removeItem("houseId");
-                window.location.href = "/login";
-              }}
-              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-            >
-              Logout
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-lg text-gray-600">
-                Remaining Budget: <span className="font-semibold text-green-600">${house.remainingBudget}</span>
-              </p>
-              <p className="text-sm text-gray-500">
-                Total Budget: ${house.totalBudget}
-              </p>
-            </div>
-            <div className="w-48">
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-green-600 h-3 rounded-full"
-                  style={{
-                    width: `${(house.remainingBudget / house.totalBudget) * 100}%`,
-                  }}
-                ></div>
+    <div 
+      className="min-h-screen bg-cover bg-center bg-fixed relative"
+      style={{
+        backgroundImage: "url('/arena-background.jpg')",
+      }}
+    >
+      {/* Dark overlay for text visibility */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+      {/* Content */}
+      <div className="relative z-10 min-h-screen p-8">
+        <div className="max-w-6xl mx-auto">
+          {/* Header with House Info and Logout */}
+          <div className="bg-gradient-to-r from-red-800 to-orange-800 rounded-2xl p-8 mb-8 border-4 border-yellow-600 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h1 className="text-5xl font-bold text-yellow-400 drop-shadow-lg mb-2">
+                  🏯 {house.name}
+                </h1>
+                <p className="text-xl text-gray-200">Command Center</p>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {activeRound && currentParticipant ? (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-semibold">Current Bidding Round</h2>
-              <div className={`text-xl font-bold ${timeLeft < 10000 ? "text-red-600" : "text-green-600"}`}>
-                {formatTime(timeLeft)}
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-                <div
-                  className={`h-4 rounded-full transition-all duration-1000 ${
-                    timeLeft < 10000 ? "bg-red-600" : "bg-green-600"
-                  }`}
-                  style={{
-                    width: `${Math.max(0, (timeLeft / 60000) * 100)}%`,
-                  }}
-                ></div>
-              </div>
+              <button
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  localStorage.removeItem("role");
+                  localStorage.removeItem("houseId");
+                  window.location.href = "/login";
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition-all transform hover:scale-105"
+              >
+                Logout
+              </button>
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-6 mb-6">
-              <h3 className="text-xl font-semibold mb-2">Current Participant</h3>
-              <p className="text-lg">{currentParticipant.name}</p>
-              {currentParticipant.picture && (
-                <img
-                  src={currentParticipant.picture}
-                  alt={currentParticipant.name}
-                  className="w-32 h-32 object-cover rounded-lg mt-4"
-                />
-              )}
-            </div>
-
-            {timeLeft > 0 && !hasBid ? (
-              <div className="space-y-4">
+            {/* Budget Display */}
+            <div className="bg-black bg-opacity-40 rounded-xl p-6 border-2 border-yellow-500">
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-700 mb-2">
-                    Place Your Bid
-                  </label>
-                  <div className="flex gap-4">
-                    <input
-                      type="number"
-                      id="bidAmount"
-                      min="1"
-                      max={house.remainingBudget}
-                      value={bidAmount}
-                      onChange={(e) => setBidAmount(Number(e.target.value))}
-                      className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter bid amount"
-                    />
-                    <button
-                      onClick={placeBid}
-                      disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
-                      className={`px-6 py-2 rounded-md text-white font-medium ${
-                        loading || bidAmount <= 0 || bidAmount > house.remainingBudget
-                          ? "bg-gray-400 cursor-not-allowed"
-                          : "bg-blue-600 hover:bg-blue-700"
-                      }`}
-                    >
-                      {loading ? "Placing..." : "Place Bid"}
-                    </button>
+                  <p className="text-gray-300 text-lg mb-1">Treasury Balance</p>
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-5xl font-bold text-yellow-300">
+                      ${house.remainingBudget}
+                    </span>
+                    <span className="text-xl text-gray-400">
+                      / ${house.totalBudget}
+                    </span>
                   </div>
-                  {bidAmount > house.remainingBudget && (
-                    <p className="text-red-600 text-sm mt-1">
-                      Bid amount exceeds remaining budget
-                    </p>
-                  )}
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-yellow-400">
+                    {budgetPercentage.toFixed(0)}%
+                  </div>
+                  <div className="text-sm text-gray-400">Remaining</div>
                 </div>
               </div>
-            ) : hasBid ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-green-800 font-medium">
-                  ✓ You have already placed a bid for this participant
-                </p>
+              <div className="w-full bg-black bg-opacity-60 rounded-full h-4 border-2 border-yellow-600">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    budgetPercentage > 50 ? "bg-green-500" : budgetPercentage > 25 ? "bg-yellow-500" : "bg-red-500"
+                  }`}
+                  style={{ width: `${budgetPercentage}%` }}
+                ></div>
               </div>
-            ) : (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-red-800 font-medium">
-                  ⏰ Time's up! Bidding has ended for this round
-                </p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-semibold text-gray-600 mb-2">No Active Round</h2>
-              <p className="text-gray-500">Waiting for admin to start the next bidding round...</p>
             </div>
           </div>
-        )}
+
+          {activeRound && currentParticipant ? (
+            <div className="space-y-8">
+              {/* Round Info and Timer */}
+              <div className="bg-gradient-to-br from-yellow-600 to-orange-700 rounded-2xl p-8 border-4 border-yellow-400 shadow-2xl">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-4xl font-bold text-black drop-shadow-lg">
+                    ⚔️ ROUND {activeRound.roundNumber || "?"}
+                  </h2>
+                  <div className="text-center">
+                    <div className={`text-6xl font-bold ${isTimeRunningOut ? "text-red-600 animate-pulse" : "text-black"}`}>
+                      {formatTime(timeLeftValue)}
+                    </div>
+                    <div className="text-sm text-black font-semibold mt-1">Time Left</div>
+                  </div>
+                </div>
+
+                {/* Timer Progress Bar */}
+                <div className="w-full bg-black bg-opacity-40 rounded-full h-4 border-2 border-black">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${
+                      isTimeRunningOut ? "bg-red-500" : "bg-green-500"
+                    }`}
+                    style={{
+                      width: `${Math.max(0, (timeLeftValue / 60000) * 100)}%`,
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Player Info */}
+              <div className="bg-black bg-opacity-80 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
+                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center drop-shadow-lg">
+                  🥋 WARRIOR UP FOR BIDDING
+                </h2>
+                <div className="flex items-center gap-8">
+                  {/* Player Picture */}
+                  <div className="relative">
+                    {currentParticipant.picture ? (
+                      <img
+                        src={currentParticipant.picture}
+                        alt={currentParticipant.name}
+                        className="w-48 h-48 object-cover rounded-full border-8 border-yellow-400 shadow-2xl"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full border-8 border-yellow-400 shadow-2xl flex items-center justify-center">
+                        <span className="text-6xl">👤</span>
+                      </div>
+                    )}
+                    {currentParticipant.batch && (
+                      <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-6 py-2 rounded-full border-4 border-yellow-400">
+                        <span className="text-yellow-400 font-bold text-lg">{currentParticipant.batch}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Player Details */}
+                  <div className="flex-1 space-y-3">
+                    <h3 className="text-4xl font-bold text-white drop-shadow-lg">
+                      {currentParticipant.name}
+                    </h3>
+                    {currentParticipant.universityId && (
+                      <div className="flex items-center gap-3">
+                        <span className="bg-yellow-600 text-black px-4 py-2 rounded-lg font-bold text-xl border-2 border-yellow-400">
+                          🎓 {currentParticipant.universityId}
+                        </span>
+                      </div>
+                    )}
+                    {currentParticipant.batch && (
+                      <div className="text-xl text-gray-300">
+                        📚 Year: <span className="text-yellow-400 font-semibold">{currentParticipant.batch}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bidding Section */}
+              <div className="bg-black bg-opacity-80 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
+                {timeLeftValue > 0 && !hasBid ? (
+                  <div className="space-y-6">
+                    <h2 className="text-3xl font-bold text-yellow-400 text-center">
+                      💰 PLACE YOUR BID
+                    </h2>
+                    <div className="flex gap-4">
+                      <input
+                        type="number"
+                        id="bidAmount"
+                        min="1"
+                        max={house.remainingBudget}
+                        value={bidAmount}
+                        onChange={(e) => setBidAmount(Number(e.target.value))}
+                        className="flex-1 bg-gray-800 border-4 border-yellow-600 rounded-xl px-6 py-4 text-white text-2xl font-bold focus:outline-none focus:ring-4 focus:ring-yellow-500"
+                        placeholder="Enter bid amount"
+                      />
+                      <button
+                        onClick={placeBid}
+                        disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
+                        className={`px-8 py-4 rounded-xl text-2xl font-bold transition-all transform ${
+                          loading || bidAmount <= 0 || bidAmount > house.remainingBudget
+                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                            : "bg-green-600 hover:bg-green-700 text-white hover:scale-105 shadow-lg"
+                        }`}
+                      >
+                        {loading ? "⏳ Placing..." : "✅ Place Bid"}
+                      </button>
+                    </div>
+                    {bidAmount > house.remainingBudget && (
+                      <div className="bg-red-900 border-2 border-red-500 rounded-lg p-4 text-center">
+                        <p className="text-red-300 font-bold text-lg">
+                          ⚠️ Bid amount exceeds your remaining treasury!
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : hasBid ? (
+                  <div className="bg-green-900 border-4 border-green-500 rounded-xl p-6 text-center">
+                    <p className="text-green-300 font-bold text-2xl">
+                      ✅ Your bid has been placed for this warrior!
+                    </p>
+                    <p className="text-green-400 mt-2">Wait for the round to complete</p>
+                  </div>
+                ) : (
+                  <div className="bg-red-900 border-4 border-red-500 rounded-xl p-6 text-center">
+                    <p className="text-red-300 font-bold text-2xl">
+                      ⏰ Time's Up! Bidding has ended for this round
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-black bg-opacity-80 rounded-2xl p-12 border-4 border-yellow-600 shadow-2xl">
+              <div className="text-center">
+                <h2 className="text-4xl font-bold text-yellow-400 mb-4">⏸️ No Active Round</h2>
+                <p className="text-xl text-gray-300">Waiting for the next battle to begin...</p>
+                <p className="text-gray-400 mt-4">The admin will start the next round soon</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
