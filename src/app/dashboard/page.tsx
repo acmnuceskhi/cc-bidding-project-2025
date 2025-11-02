@@ -19,31 +19,48 @@ export default function Dashboard() {
 
   // Fetch initial data
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch houses
-        const housesRes = await fetch('/api/houses');
-        const housesData = await housesRes.json();
-        setHouses(housesData);
+    // ORIGINAL CODE (commented out for UI testing):
+    // const fetchData = async () => {
+    //   try {
+    //     // Fetch houses
+    //     const housesRes = await fetch('/api/houses');
+    //     const housesData = await housesRes.json();
+    //     setHouses(housesData);
+    //
+    //     // Fetch participants
+    //     const participantsRes = await fetch('/api/participants');
+    //     const participantsData = await participantsRes.json();
+    //     setParticipants(participantsData);
+    //
+    //     // Set first participant as active
+    //     if (participantsData.length > 0) {
+    //       setActiveParticipant(participantsData[0]);
+    //     }
+    //
+    //     setLoading(false);
+    //   } catch (error) {
+    //     console.error('Error fetching data:', error);
+    //     setLoading(false);
+    //   }
+    // };
+    //
+    // fetchData();
 
-        // Fetch participants
-        const participantsRes = await fetch('/api/participants');
-        const participantsData = await participantsRes.json();
-        setParticipants(participantsData);
-
-        // Set first participant as active
-        if (participantsData.length > 0) {
-          setActiveParticipant(participantsData[0]);
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    // Mock data for dashboard UI (for testing without backend)
+    const mockHouses: House[] = [
+      { _id: "h1" as any, name: "Alpha", totalBudget: 1000, remainingBudget: 900 },
+      { _id: "h2" as any, name: "Bravo", totalBudget: 1000, remainingBudget: 750 },
+      { _id: "h3" as any, name: "Charlie", totalBudget: 1000, remainingBudget: 1000 },
+    ];
+    const mockParticipants: Participant[] = [
+      { _id: "p1" as any, name: "Player One", picture: "", roundStats: [] },
+      { _id: "p2" as any, name: "Player Two", picture: "", roundStats: [] },
+      { _id: "p3" as any, name: "Player Three", picture: "", roundStats: [] },
+    ];
+    setHouses(mockHouses);
+    setParticipants(mockParticipants);
+    setActiveParticipant(mockParticipants[0]);
+    setLoading(false);
   }, []);
 
   // Timer effect
@@ -80,45 +97,63 @@ export default function Dashboard() {
   const handleBid = async (houseId: string, amount: number) => {
     if (!activeParticipant) return;
 
-    try {
-      const res = await fetch('/api/bids', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          houseID: houseId,
-          participantID: activeParticipant._id,
-          amount
-        })
-      });
+    // ORIGINAL API-based code (commented out for UI testing):
+    // try {
+    //   const res = await fetch('/api/bids', {
+    //     method: 'POST',
+    //     headers: {
+    //       'Content-Type': 'application/json',
+    //     },
+    //     body: JSON.stringify({
+    //       houseID: houseId,
+    //       participantID: activeParticipant._id,
+    //       amount
+    //     })
+    //   });
+    //
+    //   const result = await res.json();
+    //   
+    //   if (result.success) {
+    //     // Update house budget locally
+    //     setHouses(prevHouses => 
+    //       prevHouses.map(house => 
+    //         house._id?.toString() === houseId 
+    //           ? { ...house, remainingBudget: house.remainingBudget - amount } 
+    //           : house
+    //       )
+    //     );
+    //
+    //     // Update current bids display
+    //     const house = houses.find(h => h._id?.toString() === houseId);
+    //     if (house) {
+    //       setCurrentBids(prev => [
+    //         ...prev.filter(bid => bid.houseName !== house.name),
+    //         { houseName: house.name, amount }
+    //       ]);
+    //     }
+    //   } else {
+    //     alert(`Error placing bid: ${result.error}`);
+    //   }
+    // } catch (error) {
+    //   console.error('Error placing bid:', error);
+    //   alert('Error placing bid');
+    // }
 
-      const result = await res.json();
-      
-      if (result.success) {
-        // Update house budget locally
-        setHouses(prevHouses => 
-          prevHouses.map(house => 
-            house._id?.toString() === houseId 
-              ? { ...house, remainingBudget: house.remainingBudget - amount } 
-              : house
-          )
-        );
+    // Mock implementation for UI testing (updates local state only):
+    setHouses(prevHouses => 
+      prevHouses.map(house => 
+        house._id?.toString() === houseId 
+          ? { ...house, remainingBudget: house.remainingBudget - amount } 
+          : house
+      )
+    );
 
-        // Update current bids display
-        const house = houses.find(h => h._id?.toString() === houseId);
-        if (house) {
-          setCurrentBids(prev => [
-            ...prev.filter(bid => bid.houseName !== house.name),
-            { houseName: house.name, amount }
-          ]);
-        }
-      } else {
-        alert(`Error placing bid: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('Error placing bid:', error);
-      alert('Error placing bid');
+    const house = houses.find(h => h._id?.toString() === houseId);
+    if (house) {
+      setCurrentBids(prev => [
+        ...prev.filter(bid => bid.houseName !== house.name),
+        { houseName: house.name, amount }
+      ]);
     }
   };
 

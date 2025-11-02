@@ -39,38 +39,84 @@ export default function ProjectorDisplay() {
 
   useEffect(() => {
     if (mounted) {
-      fetchStatus();
-      const interval = setInterval(fetchStatus, 1000); // Refresh every second
+      // ORIGINAL CODE (commented out for UI testing):
+      // fetchStatus();
+      // const interval = setInterval(fetchStatus, 1000); // Refresh every second
+      // return () => clearInterval(interval);
+
+      // Mock data for projector display (for testing without backend):
+      const now = Date.now();
+      const mockStatus: ProjectorStatus = {
+        activeRound: {
+          id: "r1",
+          timerEnd: new Date(now + 45000).toISOString(),
+          timeLeft: 45000,
+        },
+        currentParticipant: {
+          id: "p1",
+          name: "Player One",
+          picture: "",
+        },
+        housesWithBids: [
+          { id: "h1", name: "Alpha" },
+          { id: "h2", name: "Bravo" },
+        ],
+        winningHouse: null,
+      };
+      const mockHouses: House[] = [
+        { _id: "h1" as any, name: "Alpha", totalBudget: 1000, remainingBudget: 900 },
+        { _id: "h2" as any, name: "Bravo", totalBudget: 1000, remainingBudget: 750 },
+        { _id: "h3" as any, name: "Charlie", totalBudget: 1000, remainingBudget: 620 },
+        { _id: "h4" as any, name: "Delta", totalBudget: 1000, remainingBudget: 1000 },
+      ];
+      setStatus(mockStatus);
+      setHouses(mockHouses);
+
+      // Tick down the timer every second
+      const interval = setInterval(() => {
+        setStatus((prev) => {
+          if (!prev?.activeRound) return prev;
+          const newTimeLeft = Math.max(0, prev.activeRound.timeLeft - 1000);
+          return {
+            ...prev,
+            activeRound: {
+              ...prev.activeRound,
+              timeLeft: newTimeLeft,
+            },
+          };
+        });
+      }, 1000);
       return () => clearInterval(interval);
     }
   }, [mounted]);
 
   const fetchStatus = async () => {
-    try {
-      const [statusRes, housesRes] = await Promise.all([
-        fetch("/api/status"),
-        fetch("/api/houses")
-      ]);
-
-      const statusData = statusRes.ok ? await statusRes.json() : null;
-      const housesData = housesRes.ok ? await housesRes.json() : [];
-
-      setStatus(statusData);
-      setHouses(Array.isArray(housesData) ? housesData : []);
-
-      // If there was an active round but now there isn't, show results
-      if (status?.activeRound && statusData && !statusData.activeRound && !showResults) {
-        // Fetch the latest completed round results
-        setTimeout(() => {
-          setShowResults(true);
-          setTimeout(() => setShowResults(false), 10000); // Show results for 10 seconds
-        }, 1000);
-      }
-    } catch (error) {
-      console.error("Error fetching status:", error);
-      setStatus(null);
-      setHouses([]);
-    }
+    // ORIGINAL CODE (commented out for UI testing):
+    // try {
+    //   const [statusRes, housesRes] = await Promise.all([
+    //     fetch("/api/status"),
+    //     fetch("/api/houses")
+    //   ]);
+    //
+    //   const statusData = statusRes.ok ? await statusRes.json() : null;
+    //   const housesData = housesRes.ok ? await housesRes.json() : [];
+    //
+    //   setStatus(statusData);
+    //   setHouses(Array.isArray(housesData) ? housesData : []);
+    //
+    //   // If there was an active round but now there isn't, show results
+    //   if (status?.activeRound && statusData && !statusData.activeRound && !showResults) {
+    //     // Fetch the latest completed round results
+    //     setTimeout(() => {
+    //       setShowResults(true);
+    //       setTimeout(() => setShowResults(false), 10000); // Show results for 10 seconds
+    //     }, 1000);
+    //   }
+    // } catch (error) {
+    //   console.error("Error fetching status:", error);
+    //   setStatus(null);
+    //   setHouses([]);
+    // }
   };
 
   const formatTime = (milliseconds: number) => {
