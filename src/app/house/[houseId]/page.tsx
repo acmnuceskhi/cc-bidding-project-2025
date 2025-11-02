@@ -27,7 +27,28 @@ export default function HouseDashboard() {
 
   useEffect(() => {
     if (mounted && houseId) {
-      checkAuthentication();
+      // checkAuthentication(); // disabled for UI testing
+      // Mock data for house dashboard
+      const mockHouse: House = { _id: houseId as any, name: `House ${houseId}`, totalBudget: 1000, remainingBudget: 800 };
+      setHouse(mockHouse);
+      const now = Date.now();
+      const mockRound: any = {
+        _id: "r1" as any,
+        participantId: "p1" as any,
+        bids: [],
+        status: "active" as const,
+        timerEnd: new Date(now + 45000),
+        scheduledStart: new Date(now - 5000),
+      };
+      setActiveRound(mockRound);
+      setCurrentParticipant({ _id: "p1" as any, name: "Player One", picture: "", roundStats: [] });
+      setTimeLeft(45000);
+      setHasBid(false);
+      setIsAuthenticated(true);
+      const interval = setInterval(() => {
+        setTimeLeft((t) => Math.max(0, t - 1000));
+      }, 1000);
+      return () => clearInterval(interval);
     }
   }, [houseId, mounted]);
 
@@ -145,37 +166,16 @@ export default function HouseDashboard() {
   };
 
   const placeBid = async () => {
-    if (!activeRound || !currentParticipant || bidAmount <= 0) return;
-
+    if (!activeRound || !currentParticipant || bidAmount <= 0 || !house) return;
+    // UI-only bid: update local state and flag hasBid
     setLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/bids", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          roundId: activeRound._id?.toString(),
-          amount: bidAmount,
-        }),
-      });
-
-      if (response.ok) {
-        setBidAmount(0);
-        fetchData();
-        alert("Bid placed successfully!");
-      } else {
-        const error = await response.json();
-        alert(`Error: ${error.error}`);
-      }
-    } catch (error) {
-      console.error("Error placing bid:", error);
-      alert("Error placing bid");
-    } finally {
+    setTimeout(() => {
+      setHouse({ ...house, remainingBudget: house.remainingBudget - bidAmount });
+      setBidAmount(0);
+      setHasBid(true);
       setLoading(false);
-    }
+      alert("Bid placed (mock)");
+    }, 300);
   };
 
   const formatTime = (milliseconds: number) => {

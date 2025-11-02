@@ -22,7 +22,39 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (mounted) {
-      checkAuthentication();
+      // checkAuthentication(); // disabled for UI testing
+      // Mock admin data for UI rendering without backend/auth
+      const mockHouses: House[] = [
+        { _id: "h1" as any, name: "Alpha", totalBudget: 1000, remainingBudget: 900 },
+        { _id: "h2" as any, name: "Bravo", totalBudget: 1000, remainingBudget: 750 },
+        { _id: "h3" as any, name: "Charlie", totalBudget: 1000, remainingBudget: 620 },
+      ];
+      const mockParticipants: Participant[] = [
+        { _id: "p1" as any, name: "Player One", picture: "", roundStats: [], assignedHouse: undefined as any },
+        { _id: "p2" as any, name: "Player Two", picture: "", roundStats: [], assignedHouse: undefined as any },
+        { _id: "p3" as any, name: "Player Three", picture: "", roundStats: [], assignedHouse: undefined as any },
+      ];
+      const now = Date.now();
+      const mockRounds: Round[] = [
+        {
+          _id: "r1" as any,
+          participantId: "p1" as any,
+          bids: [],
+          status: "active",
+          timerEnd: new Date(now + 45000),
+          scheduledStart: new Date(now - 5000),
+        },
+      ];
+      setHouses(mockHouses);
+      setParticipants(mockParticipants);
+      setRounds(mockRounds);
+      setActiveRound(mockRounds[0]);
+      setIsAuthenticated(true);
+      const interval = setInterval(() => {
+        // simple countdown effect to update timer visually
+        setActiveRound((prev) => (prev ? { ...prev, timerEnd: new Date(prev.timerEnd) } : prev));
+      }, 2000);
+      return () => clearInterval(interval);
     }
   }, [mounted]);
 
@@ -69,41 +101,43 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchData = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const authHeaders = {
-        "Authorization": `Bearer ${token}`
-      };
-
-      const [housesRes, participantsRes, roundsRes] = await Promise.all([
-        fetch("/api/houses", { headers: authHeaders }),
-        fetch("/api/participants", { headers: authHeaders }),
-        fetch("/api/rounds?active=true", { headers: authHeaders })
-      ]);
-
-      const housesData = housesRes.ok ? await housesRes.json() : [];
-      const participantsData = participantsRes.ok ? await participantsRes.json() : [];
-      const roundsData = roundsRes.ok ? await roundsRes.json() : [];
-
-      setHouses(Array.isArray(housesData) ? housesData : []);
-      setParticipants(Array.isArray(participantsData) ? participantsData : []);
-      setRounds(Array.isArray(roundsData) ? roundsData : []);
-      setActiveRound(Array.isArray(roundsData) && roundsData.length > 0 ? roundsData[0] : null);
-      
-      console.log("Fetched data:", {
-        houses: housesData?.length || 0,
-        participants: participantsData?.length || 0,
-        rounds: roundsData?.length || 0
-      });
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      setHouses([]);
-      setParticipants([]);
-      setRounds([]);
-      setActiveRound(null);
-    }
-  };
+  // const fetchData = async () => {
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     const authHeaders = {
+  //       "Authorization": `Bearer ${token}`
+  //     };
+  //
+  //     const [housesRes, participantsRes, roundsRes] = await Promise.all([
+  //       fetch("/api/houses", { headers: authHeaders }),
+  //       fetch("/api/participants", { headers: authHeaders }),
+  //       fetch("/api/rounds?active=true", { headers: authHeaders })
+  //     ]);
+  //
+  //     const housesData = housesRes.ok ? await housesRes.json() : [];
+  //     const participantsData = participantsRes.ok ? await participantsRes.json() : [];
+  //     const roundsData = roundsRes.ok ? await roundsRes.json() : [];
+  //
+  //     setHouses(Array.isArray(housesData) ? housesData : []);
+  //     setParticipants(Array.isArray(participantsData) ? participantsData : []);
+  //     setRounds(Array.isArray(roundsData) ? roundsData : []);
+  //     setActiveRound(Array.isArray(roundsData) && roundsData.length > 0 ? roundsData[0] : null);
+  //     
+  //     console.log("Fetched data:", {
+  //       houses: housesData?.length || 0,
+  //       participants: participantsData?.length || 0,
+  //       rounds: roundsData?.length || 0
+  //     });
+  //   } catch (error) {
+  //     console.error("Error fetching data:", error);
+  //     setHouses([]);
+  //     setParticipants([]);
+  //     setRounds([]);
+  //     setActiveRound(null);
+  //   }
+  // };
+  // Mock no-op for UI testing
+  const fetchData = () => {};
 
   const startRound = async () => {
     if (!selectedParticipant) {

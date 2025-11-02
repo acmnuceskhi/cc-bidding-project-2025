@@ -11,7 +11,16 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    checkAuthentication();
+    // checkAuthentication(); // disabled for UI testing
+    // Mock data to render UI without backend
+    const mockHouses: House[] = [
+      { _id: "h1" as any, name: "Alpha", totalBudget: 1000, remainingBudget: 850 },
+      { _id: "h2" as any, name: "Bravo", totalBudget: 1000, remainingBudget: 730 },
+      { _id: "h3" as any, name: "Charlie", totalBudget: 1000, remainingBudget: 1000 },
+    ];
+    setHouses(mockHouses);
+    setIsAuthenticated(true);
+    setLoading(false);
   }, []);
 
   const checkAuthentication = async () => {
@@ -80,7 +89,7 @@ export default function Home() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
+  <div className="min-h-screen bg-linear-to-br from-blue-900 to-purple-900 text-white">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-6xl font-bold mb-4">CC Bidding System</h1>
