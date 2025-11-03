@@ -23,7 +23,7 @@ export async function GET() {
     const activeRound = activeRounds[0];
     
     // Get current participant
-    const participant = await Participants.getByID(activeRound.participantId.toString());
+    const participant = await Participants.getById(activeRound.participantId.toString());
     
     // Get all houses
     const houses = await Houses.getAll();

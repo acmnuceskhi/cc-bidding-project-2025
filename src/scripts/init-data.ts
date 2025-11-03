@@ -31,17 +31,16 @@ async function initializeData() {
     await db.collection("participants").deleteMany({});
     await db.collection("bids").deleteMany({});
     await db.collection("rounds").deleteMany({});
-    await db.collection("teams").deleteMany({});
     await db.collection("users").deleteMany({});
     
     console.log("Cleared existing data");
     
     // Create 4 houses with equal budget
     const houses = [
-      { name: "Lord Shen", totalBudget: 1000, remainingBudget: 1000, teams: [] },
-      { name: "Dragon Warrior", totalBudget: 1000, remainingBudget: 1000, teams: [] },
-      { name: "Master Oogway", totalBudget: 1000, remainingBudget: 1000, teams: [] },
-      { name: "Tai Lung", totalBudget: 1000, remainingBudget: 1000, teams: [] }
+      { name: "Lord Shen", totalBudget: 1000, remainingBudget: 1000 },
+      { name: "Dragon Warrior", totalBudget: 1000, remainingBudget: 1000 },
+      { name: "Master Oogway", totalBudget: 1000, remainingBudget: 1000 },
+      { name: "Tai Lung", totalBudget: 1000, remainingBudget: 1000 }
     ];
     
     const houseIds = [];

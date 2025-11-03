@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if participant exists
-    const participant = await Participants.getByID(participantId);
+    const participant = await Participants.getById(participantId);
     if (!participant) {
       return NextResponse.json(
         { error: "Participant not found" },

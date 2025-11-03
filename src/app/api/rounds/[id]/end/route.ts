@@ -39,7 +39,7 @@ export async function POST(
     }
 
     // Get the round
-    const round = await Rounds.getByID(id);
+    const round = await Rounds.getById(id);
     if (!round) {
       return NextResponse.json(
         { error: "Round not found" },
@@ -68,7 +68,7 @@ export async function POST(
       });
 
       // Get the winning house details
-      winningHouse = await Houses.getByID(winningBid.houseId.toString());
+      winningHouse = await Houses.getById(winningBid.houseId.toString());
     }
 
     // Update round status to completed
@@ -85,20 +85,20 @@ export async function POST(
 
       // Assign participant to winning house
       await Participants.update(round.participantId.toString(), {
-        assignedHouse: winningHouse._id
+        houseId: winningHouse._id
       });
     }
 
     return NextResponse.json({
       success: true,
       winningBid: winningBid ? {
-        houseID: winningBid.houseId,
+        houseId: winningBid.houseId,
         houseName: winningHouse?.name,
         amount: winningBid.amount,
         timestamp: winningBid.timestamp
       } : null,
       allBids: bids.map(bid => ({
-        houseID: bid.houseId,
+        houseId: bid.houseId,
         amount: bid.amount,
         timestamp: bid.timestamp
       })),

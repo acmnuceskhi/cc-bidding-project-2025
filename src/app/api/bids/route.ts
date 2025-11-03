@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the round
-    const round = await Rounds.getByID(roundId);
+    const round = await Rounds.getById(roundId);
     if (!round) {
       return NextResponse.json(
         { 
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if house exists and has sufficient budget
-    const house = await Houses.getByID(houseId);
+    const house = await Houses.getById(houseId);
     if (!house) {
       return NextResponse.json(
         { 
@@ -212,21 +212,21 @@ export async function GET(request: NextRequest) {
 
     const { payload } = authResult;
     const { searchParams } = new URL(request.url);
-    const participantID = searchParams.get("participantID");
-    const houseID = searchParams.get("houseID");
+    const participantId = searchParams.get("participantId");
+    const houseId = searchParams.get("houseId");
     
     let bids;
-    if (participantID) {
-      bids = await Bids.getByParticipant(participantID);
-    } else if (houseID) {
+    if (participantId) {
+      bids = await Bids.getByParticipant(participantId);
+    } else if (houseId) {
       // Check if user can access this house's bids
-      if (payload.role !== "admin" && payload.houseId !== houseID) {
+      if (payload.role !== "admin" && payload.houseId !== houseId) {
         return NextResponse.json(
           { error: "Access denied" },
           { status: 403 }
         );
       }
-      bids = await Bids.getByHouse(houseID);
+      bids = await Bids.getByHouse(houseId);
     } else {
       // Only admins can see all bids
       if (payload.role !== "admin") {
