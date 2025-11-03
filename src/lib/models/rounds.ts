@@ -100,7 +100,7 @@ export const Rounds = {
    * Fetch a single round by ID
    * @param id - MongoDB ObjectId as string
    */
-  async getByID(id: string): Promise<Round | null> {
+  async getById(id: string): Promise<Round | null> {
     const client = await clientPromise;
     return client
       .db()

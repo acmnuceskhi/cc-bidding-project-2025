@@ -6,7 +6,7 @@ export interface Participant {
   _id?: ObjectId; // MongoDB document ID
   name: string; // Participant's name
   picture?: string; // URL to participant's picture
-  assignedHouse?: ObjectId; // ID of the house assigned (ObjectId reference)
+  houseId?: ObjectId; // ID of the house assigned (ObjectId reference)
   roundStats?: {
     roundId: ObjectId; // Round ID (ObjectId reference)
     bidAmount: number; // Amount bid in this round
@@ -53,8 +53,8 @@ export const Participants = {
     const client = await clientPromise;
 
     // Convert string references to ObjectId when passed inside update
-    if (update.assignedHouse && typeof update.assignedHouse === "string") {
-      update.assignedHouse = new ObjectId(update.assignedHouse);
+    if (update.houseId && typeof update.houseId === "string") {
+      update.houseId = new ObjectId(update.houseId);
     }
 
     if (update.roundStats) {
@@ -77,7 +77,7 @@ export const Participants = {
    * Fetch a single participant by ID
    * @param id - MongoDB ObjectId as string
    */
-  async getByID(id: string): Promise<Participant | null> {
+  async getById(id: string): Promise<Participant | null> {
     const client = await clientPromise;
     return client
       .db()

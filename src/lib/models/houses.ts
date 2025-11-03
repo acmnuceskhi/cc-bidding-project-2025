@@ -58,7 +58,7 @@ export const Houses = {
    * Fetch a single house by ID
    * @param id - MongoDB ObjectId as string
    */
-  async getByID(id: string): Promise<House | null> {
+  async getById(id: string): Promise<House | null> {
     const client = await clientPromise;
     return client
       .db()

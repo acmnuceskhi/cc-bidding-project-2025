@@ -1,5 +1,5 @@
 import clientPromise from "@/lib/mongodb";
-import { ObjectId, InsertOneResult, UpdateResult, DeleteResult } from "mongodb";
+import { ObjectId, InsertOneResult, UpdateResult } from "mongodb";
 
 // Interface representing a User document in MongoDB
 export interface User {
@@ -26,6 +26,11 @@ export const Users = {
   // Create a new user
   async create(user: Omit<User, '_id' | 'createdAt'>): Promise<InsertOneResult<User>> {
     const client = await clientPromise;
+
+    if (user.houseId && typeof user.houseId === 'string') {
+      user.houseId = new ObjectId(user.houseId);
+    }
+
     const newUser = {
       ...user,
       createdAt: new Date()
@@ -42,10 +47,27 @@ export const Users = {
     );
   },
 
+  // Generic update
+  async update(id: string, updateData: Partial<User>): Promise<UpdateResult<User>> {
+    const client = await clientPromise;
+
+    if (updateData.houseId && typeof updateData.houseId === 'string') {
+      updateData.houseId = new ObjectId(updateData.houseId);
+    }
+
+    return client.db().collection<User>(collectionName).updateOne({ _id: new ObjectId(id) }, { $set: updateData });
+  },
+
   // Get user by ID
   async getById(id: string): Promise<User | null> {
     const client = await clientPromise;
     return client.db().collection<User>(collectionName).findOne({ _id: new ObjectId(id) });
+  },
+
+  // Get user(s) by role
+  async getByRole(role: User["role"]): Promise<User[]> {
+    const client = await clientPromise;
+    return client.db().collection<User>(collectionName).find({ role }).toArray();
   },
 
   // Get all users
