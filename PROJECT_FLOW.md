@@ -1,4 +1,4 @@
-# CC Bidding Project – Project Logic Flow
+# CC Bidding Project – Project Logic Logic Flow
 
 ---
 
@@ -13,7 +13,7 @@
 
 - **House Captain**
   - Places bids from remaining house points
-  - Can edit placed bid **once only** before timer ends (tracked via `edits` field)
+  - Can edit placed bid **once only** before timer ends
 
 - **Spectators**
   - Only view projector display
@@ -54,10 +54,6 @@
 - Houses that placed a bid (without showing amounts during round)
 - Winning house and **winning/losing bid amounts/timestamp** when round ends
 - Live updates via **SSE or WebSocket** recommended (polling optional)
-- Canonical events (examples):
-  - `round:started` → `{ roundId, participantId, scheduledStart }`
-  - `bid:placed` → `{ bidId, houseId, amount, edits }`
-  - `round:ended` → `{ roundId, winner, losers }`
 
 ---
 
@@ -70,40 +66,67 @@
 - Tie with identical timestamps → Admin can rerun round
 - Scheduled rounds: each round can have a pre-defined start time; Admin may apply a **delay offset** to shift all subsequent rounds accordingly
 
----
-
-## 4. Database Transactions / Atomicity
-
-- Bid submission → check budget → add bid → update round → update house → assign participant
-- Ensure **winner calculation** is atomic considering bid amount and timestamp
-- Prevent overspend using **server-side budget check + decrement in one atomic operation**
-- Bid edits tracked with `edits` field
-- Scheduled start time updates must also be atomic
-- MongoDB multi-document transactions require **Atlas (replica set)**
-
-**Concurrency note:**  
-Example: inside a MongoDB transaction, decrement house budget only if `remainingBudget >= bid.amount` and insert bid atomically to avoid race conditions.
+**Note:** Bid submission and budget deduction occur atomically on the server to prevent overspending. Scheduled round offsets are also applied atomically.
 
 ---
 
-## 5. API Endpoints
+## 4. Key Database Models
 
-**All endpoints requiring authentication use JWT:** `Authorization: Bearer <token>`
-
-- Admin-only: `/api/rounds/:id/start`, `/api/rounds/:id/end`, rerun actions
-- House Captain-only: `/api/bids`
-- Token expiration: 1 hour (example; adjustable)
-- 403 Forbidden returned if role not allowed
-- 409 Conflict returned for business rule violations (e.g., insufficient budget, exceeding bid edits)
+| Collection     | Key Fields                                                                        |
+| -------------- | --------------------------------------------------------------------------------- |
+| `houses`       | name, totalBudget, remainingBudget                                                |
+| `participants` | name, picture?, houseId?, roundStats[]                                            |
+| `rounds`       | participantId, bids[], status, timerEnd, scheduledStart?                          |
+| `bids`         | roundId, houseId, participantId, amount, timestamp, edits?                        |
+| `users`        | username, password, role ("admin" \| "house_captain"), houseId?, createdAt, lastLogin? |
 
 ---
 
-### 5.1 Login
+## 5. Budget & Rules
+
+- 4 teams per house (enforcement outside scope)
+- Each team: 2–3 members
+- Fixed budget per house
+- Only winning bid deducts budget
+- Participant assignment via auction only
+
+---
+
+
+## 6. API Endpoints
+
+**Role-based access (JWT required):**
+
+* **Admin-only:**
+  * Start/end rounds (`/api/rounds/:id/start`, `/api/rounds/:id/end`)
+  * Rerun rounds in case of tie
+  * Adjust house budgets (`PUT /api/houses/:id`)
+  * View all bids immediately
+
+* **House Captain-only:**
+  * Submit bids and edit **once only** (`/api/bids`)
+
+* **Spectators / Projector-only:**
+  * View projector display info (`/api/status`)
+
+* **Public / Auth endpoints:**
+  * Login/logout (`/api/auth/login`, `/api/auth/logout`)
+  * Ping (`/api/ping`)
+
+**Error / status behavior:**
+* 401 Unauthorized — missing or invalid JWT
+* 403 Forbidden — role not permitted
+* 409 Conflict — business rule violation (bid exceeds budget, bid edit limit, tie needing rerun)
+* JWT expiration: 1 hour (adjustable)
+
+
+**Endpoints:**
+
+### 6.1 Login
 
 **POST /api/auth/login**
 
-**Request Body:**
-
+**Request:**
 ```json
 {
   "username": "admin1",
@@ -112,7 +135,6 @@ Example: inside a MongoDB transaction, decrement house budget only if `remaining
 ```
 
 **Response (200 OK):**
-
 ```json
 {
   "success": true,
@@ -121,8 +143,7 @@ Example: inside a MongoDB transaction, decrement house budget only if `remaining
 }
 ```
 
-**Error Response (401 Unauthorized):**
-
+**Error (401 Unauthorized):**
 ```json
 {
   "success": false,
@@ -133,12 +154,11 @@ Example: inside a MongoDB transaction, decrement house budget only if `remaining
 
 ---
 
-### 5.2 Logout
+### 6.2 Logout
 
 **POST /api/auth/logout**
 
 **Response (200 OK):**
-
 ```json
 {
   "success": true,
@@ -148,13 +168,11 @@ Example: inside a MongoDB transaction, decrement house budget only if `remaining
 
 ---
 
-### 5.3 Get Current User
+### 6.3 Get Current User
 
-**GET /api/auth/me**  
-Requires `Authorization: Bearer <token>`
+**GET /api/auth/me**
 
 **Response (200 OK):**
-
 ```json
 {
   "id": "u1",
@@ -166,13 +184,11 @@ Requires `Authorization: Bearer <token>`
 
 ---
 
-### 5.4 Fetch Rounds
+### 6.4 Fetch Rounds
 
-**GET /api/rounds**  
-Optional pagination: `?limit=10&page=1`
+**GET /api/rounds**
 
-**Response (200 OK):**
-
+**Response:**
 ```json
 [
   {
@@ -196,12 +212,11 @@ Optional pagination: `?limit=10&page=1`
 
 ---
 
-### 5.5 Start Round
+### 6.5 Start Round
 
 **POST /api/rounds/:id/start**
 
-**Request Body (optional):**
-
+**Optional:**
 ```json
 {
   "delayOffsetMinutes": 5
@@ -209,7 +224,6 @@ Optional pagination: `?limit=10&page=1`
 ```
 
 **Response (200 OK):**
-
 ```json
 {
   "success": true,
@@ -220,12 +234,11 @@ Optional pagination: `?limit=10&page=1`
 
 ---
 
-### 5.6 End Round
+### 6.6 End Round
 
 **POST /api/rounds/:id/end**
 
 **Response (200 OK):**
-
 ```json
 {
   "success": true,
@@ -246,8 +259,7 @@ Optional pagination: `?limit=10&page=1`
 }
 ```
 
-**Error Response (409 Conflict for tie needing rerun):**
-
+**Error (409 Conflict for tie):**
 ```json
 {
   "success": false,
@@ -258,12 +270,11 @@ Optional pagination: `?limit=10&page=1`
 
 ---
 
-### 5.7 Submit Bid
+### 6.7 Submit Bid
 
 **POST /api/bids**
 
-**Request Body:**
-
+**Request:**
 ```json
 {
   "roundId": "r1",
@@ -272,7 +283,6 @@ Optional pagination: `?limit=10&page=1`
 ```
 
 **Response (200 OK):**
-
 ```json
 {
   "success": true,
@@ -281,8 +291,7 @@ Optional pagination: `?limit=10&page=1`
 }
 ```
 
-**Error Response (409 Conflict for insufficient credits or exceeding edits):**
-
+**Error (409 Conflict):**
 ```json
 {
   "success": false,
@@ -290,7 +299,6 @@ Optional pagination: `?limit=10&page=1`
   "message": "You have 200 credits remaining, but bid 250"
 }
 ```
-
 ```json
 {
   "success": false,
@@ -301,13 +309,11 @@ Optional pagination: `?limit=10&page=1`
 
 ---
 
-### 5.8 Fetch Houses
+### 6.8 Fetch Houses
 
-**GET /api/houses**  
-Optional pagination: `?limit=10&page=1`
+**GET /api/houses**
 
-**Response (200 OK):**
-
+**Response:**
 ```json
 [
   {
@@ -325,39 +331,35 @@ Optional pagination: `?limit=10&page=1`
 
 ---
 
-### 5.9 Fetch Participants
+### 6.9 Fetch Participants
 
-**GET /api/participants**  
-Optional pagination: `?limit=10&page=1`
+**GET /api/participants**
 
-**Response (200 OK):**
-
+**Response:**
 ```json
 [
   {
     "participantId": "p1",
     "name": "Alice",
     "picture": "url",
-    "assignedHouse": null
+    "houseId": null
   },
   {
     "participantId": "p2",
     "name": "Bob",
     "picture": "url",
-    "assignedHouse": "h2"
+    "houseId": "h2"
   }
 ]
 ```
 
 ---
 
-### 5.10 Projector Status
+### 6.10 Projector Status
 
-**GET /api/status**  
-Projector display: current participant + round info. SSE/WebSocket recommended for live updates.
+**GET /api/status**
 
-**Response (200 OK):**
-
+**Response:**
 ```json
 {
   "roundId": "r1",
@@ -380,25 +382,3 @@ Projector display: current participant + round info. SSE/WebSocket recommended f
 ```
 
 ---
-
-## 6. Budget / Member Rules
-
-- 4 teams per house (enforcement not part of this project)
-- Each team: 2–3 members
-- Fixed budget per house
-- Bids can only be placed within remaining points
-- Budget deduction happens after winning bid only
-- Participant assignment is only via auction, not pre-created teams
-
----
-
-## 7. Database / Collections (MongoDB)
-
-All models are located in `src/lib/models/`:
-
-| Collection     | Purpose                                   | Key Fields                                              |
-| -------------- | ----------------------------------------- | ------------------------------------------------------- |
-| `houses`       | Stores house details and remaining budget | name, totalBudget, remainingBudget                      |
-| `participants` | Participant info                          | name, picture, assignedHouse, roundStats[]              |
-| `rounds`       | Track each round and bids                 | participantId, bids[], status, timerEnd, scheduledStart |
-| `bids`         | Individual bid entries                    | houseId, participantId, amount, timestamp, edits        |
