@@ -15,7 +15,18 @@ export async function GET(request: NextRequest) {
     }
 
     const participants = await Participants.getAll();
-    return NextResponse.json(participants);
+
+    // Transform to include only required fields
+    const filteredParticipants = participants.map((participant) => ({
+      participantId: participant._id?.toString(),
+      name: participant.name,
+      picture: participant.picture || "url",
+      houseId: participant.houseId
+        ? participant.houseId.toString()
+        : null,
+    }));
+
+    return NextResponse.json(filteredParticipants);
   } catch (error) {
     console.error("Error fetching participants:", error);
     return NextResponse.json(

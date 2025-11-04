@@ -5,15 +5,16 @@ import { ObjectId, InsertOneResult, UpdateResult, DeleteResult } from "mongodb";
 export interface Round {
   _id?: ObjectId; // MongoDB document ID
   participantId: ObjectId; // ID of the participant up for bidding
+  status: "scheduled" | "active" | "completed"; // Round status flag
+  timerEnd: Date; // Timestamp when round ends
+  scheduledStart?: Date; // Round scheduled start time
   bids: {
+    _id?: ObjectId; // MongoDB document ID
     houseId: ObjectId; // ID of house placing the bid
     amount: number; // Bid amount
     timestamp: Date; // When the bid was placed
     edits?: number; // Times the bid has been edited; max 1
   }[];
-  status: "scheduled" | "active" | "completed"; // Round status flag
-  timerEnd: Date; // Timestamp when round ends
-  scheduledStart?: Date; // Round scheduled start time
 }
 
 // Name of MongoDB collection

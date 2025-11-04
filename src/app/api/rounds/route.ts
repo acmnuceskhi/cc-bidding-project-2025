@@ -95,7 +95,23 @@ export async function GET(request: NextRequest) {
       rounds = await Rounds.getAll();
     }
     
-    return NextResponse.json(rounds);
+    // Transform rounds to match the expected response format
+    const formattedRounds = rounds.map(round => ({
+      roundId: round._id?.toString(),
+      participantId: round.participantId.toString(),
+      status: round.status,
+      timerEnd: round.timerEnd.toISOString(),
+      scheduledStart: round.scheduledStart?.toISOString(),
+      bids: round.bids.map(bid => ({
+        bidId: bid._id?.toString(),
+        houseId: bid.houseId.toString(),
+        amount: bid.amount,
+        timestamp: bid.timestamp.toISOString(),
+        edits: bid.edits || 0
+      }))
+    }));
+    
+    return NextResponse.json(formattedRounds);
   } catch (error) {
     console.error("Error fetching rounds:", error);
     return NextResponse.json(

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Houses } from "@/lib/models/houses";
-import { verifyAuth } from "@/lib/auth";
+import { verifyAuth, hasRole } from "@/lib/auth";
 
 // GET /api/houses - Get all houses with their budgets
 export async function GET(request: NextRequest) {
@@ -14,8 +14,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Fetch all houses
     const houses = await Houses.getAll();
-    return NextResponse.json(houses);
+
+    // Transform to include only houseId, name, and remainingBudget
+    const filteredHouses = houses.map((house) => ({
+      houseId: house._id?.toString(),
+      name: house.name,
+      remainingBudget: house.remainingBudget,
+    }));
+
+    return NextResponse.json(filteredHouses);
   } catch (error) {
     console.error("Error fetching houses:", error);
     return NextResponse.json(
@@ -26,8 +35,25 @@ export async function GET(request: NextRequest) {
 }
 
 // PUT /api/houses/:id - Update house budget (admin only)
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
+    // Verify authentication
+    const authResult = await verifyAuth(request);
+    if (!authResult) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    // Verify admin role
+    if (!hasRole(authResult.payload, 'admin')) {
+      return NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
+      );
+    }
+
     const url = new URL(request.url);
     const pathParts = url.pathname.split("/");
     const id = pathParts[pathParts.length - 1];
