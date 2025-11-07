@@ -1,64 +1,61 @@
 import { NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Participants } from "@/lib/models/participants";
-import { Houses } from "@/lib/models/houses";
 import { Bids } from "@/lib/models/bids";
 
 // GET /api/status - Get current status for projector display
 export async function GET() {
   try {
-    // Get active rounds
+    // Get the currently active round (assuming only one active round at a time)
     const activeRounds = await Rounds.getActive();
-    
+
     if (activeRounds.length === 0) {
       return NextResponse.json({
-        activeRound: null,
-        currentParticipant: null,
-        housesWithBids: [],
-        winningHouse: null
+        roundId: null,
+        participant: null,
+        roundStatus: "idle",
+        timerRemaining: 0,
+        bidsPlaced: []
       });
     }
 
-    // Get the first active round (assuming only one active round at a time)
     const activeRound = activeRounds[0];
-    
-    // Get current participant
+
+    // Fetch participant info
     const participant = await Participants.getById(activeRound.participantId.toString());
-    
-    // Get all houses
-    const houses = await Houses.getAll();
-    
-    // Get bids for current participant
-    const bids = await Bids.getByParticipant(activeRound.participantId.toString());
-    
-    // Create a list of houses that placed bids (without amounts)
-    const housesWithBids = houses
-      .filter(house => 
-        bids.some(bid => bid.houseId.toString() === house._id?.toString())
-      )
-      .map(house => ({
-        id: house._id,
-        name: house.name
-      }));
+
+    // Fetch all bids for the current round (not participant — as per logical flow)
+    const roundBids = await Bids.getByRound(activeRound._id!.toString());
+
+    // Calculate remaining time in seconds
+    const now = Date.now();
+    const timerRemaining = Math.max(
+      0,
+      Math.floor((activeRound.timerEnd.getTime() - now) / 1000)
+    );
+
+    // Collect houses that have placed bids (no amounts)
+    const bidsPlaced = roundBids.map((bid) => ({
+      houseId: bid.houseId.toString()
+    }));
 
     return NextResponse.json({
-      activeRound: {
-        id: activeRound._id,
-        timerEnd: activeRound.timerEnd,
-        timeLeft: activeRound.timerEnd.getTime() - Date.now()
-      },
-      currentParticipant: participant ? {
-        id: participant._id,
-        name: participant.name,
-        picture: participant.picture
-      } : null,
-      housesWithBids,
-      winningHouse: null // Will be set when round ends
+      roundId: activeRound._id?.toString(),
+      participant: participant
+        ? {
+            participantId: participant._id?.toString(),
+            name: participant.name,
+            picture: participant.picture ?? null
+          }
+        : null,
+      roundStatus: activeRound.status,
+      timerRemaining,
+      bidsPlaced
     });
   } catch (error) {
     console.error("Error fetching status:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { success: false, error: "INTERNAL_SERVER_ERROR" },
       { status: 500 }
     );
   }
