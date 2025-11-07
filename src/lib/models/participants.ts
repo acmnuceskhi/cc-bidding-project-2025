@@ -1,12 +1,16 @@
 import clientPromise from "@/lib/mongodb";
-import { ObjectId, InsertOneResult, UpdateResult } from "mongodb";
+import { ObjectId, InsertOneResult, UpdateResult, Db } from "mongodb";
 
 // Interface representing a Participant document in MongoDB
 export interface Participant {
   _id?: ObjectId; // MongoDB document ID
   name: string; // Participant's name
   picture?: string; // URL to participant's picture
+
   houseId?: ObjectId; // ID of the house assigned (ObjectId reference)
+
+  teamId: ObjectId; // ID of the Round 1 team assigned (ObjectId reference)
+
   roundStats?: {
     roundId: ObjectId; // Round ID (ObjectId reference)
     bidAmount: number; // Amount bid in this round
@@ -35,10 +39,28 @@ export const Participants = {
     participant: Participant
   ): Promise<InsertOneResult<Participant>> {
     const client = await clientPromise;
-    return client
-      .db()
+    const db = client.db();
+
+    if (!participant.teamId) {
+      throw new Error("teamId (round 1) is required to create a participant");
+    }
+
+    // Convert string into ObjectId
+    if (typeof participant.teamId === "string") {
+      participant.teamId = new ObjectId(participant.teamId);
+    }
+
+    const exists = await db
+      .collection("teams")
+      .countDocuments({ _id: participant.teamId });
+
+    if (exists === 0) {
+      throw new Error("Invalid teamId: No such team exists");
+    }
+
+    return db
       .collection<Participant>(collectionName)
-      .insertOne(participant);
+      .insertOne({ ...participant });
   },
 
   /**
@@ -51,12 +73,29 @@ export const Participants = {
     update: Partial<Participant>
   ): Promise<UpdateResult<Participant>> {
     const client = await clientPromise;
+    const db = client.db();
 
     // Convert string references to ObjectId when passed inside update
     if (update.houseId && typeof update.houseId === "string") {
       update.houseId = new ObjectId(update.houseId);
     }
 
+    if (update.teamId && typeof update.teamId === "string") {
+      update.teamId = new ObjectId(update.teamId);
+    }
+
+    // Validate updated team reference
+    if (update.teamId) {
+      const exists = await db
+        .collection("teams")
+        .countDocuments({ _id: update.teamId });
+
+      if (exists === 0) {
+        throw new Error("Invalid teamId: No such team exists");
+      }
+    }
+
+    // RoundId conversion
     if (update.roundStats) {
       update.roundStats = update.roundStats.map((stat) => ({
         ...stat,
@@ -67,8 +106,7 @@ export const Participants = {
       }));
     }
 
-    return client
-      .db()
+    return db
       .collection<Participant>(collectionName)
       .updateOne({ _id: new ObjectId(id) }, { $set: update });
   },
