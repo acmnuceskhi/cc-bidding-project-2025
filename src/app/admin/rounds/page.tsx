@@ -25,7 +25,8 @@ export default function RoundsPage() {
         _id: "r1",
         roundNumber: 1,
         participantName: "Master Shifu",
-        participantPicture: "https://api.dicebear.com/7.x/initials/svg?seed=Shifu",
+        participantPicture:
+          "https://api.dicebear.com/7.x/initials/svg?seed=Shifu",
         status: "completed",
         winnerHouse: "Lord Shen",
         winningBid: 150,
@@ -43,7 +44,8 @@ export default function RoundsPage() {
         _id: "r3",
         roundNumber: 3,
         participantName: "Tigress",
-        participantPicture: "https://api.dicebear.com/7.x/initials/svg?seed=Tigress",
+        participantPicture:
+          "https://api.dicebear.com/7.x/initials/svg?seed=Tigress",
         status: "active",
         timerEnd: new Date(Date.now() + 35000),
       },
@@ -51,14 +53,16 @@ export default function RoundsPage() {
         _id: "r4",
         roundNumber: 4,
         participantName: "Mantis",
-        participantPicture: "https://api.dicebear.com/7.x/initials/svg?seed=Mantis",
+        participantPicture:
+          "https://api.dicebear.com/7.x/initials/svg?seed=Mantis",
         status: "not_started",
       },
       {
         _id: "r5",
         roundNumber: 5,
         participantName: "Crane",
-        participantPicture: "https://api.dicebear.com/7.x/initials/svg?seed=Crane",
+        participantPicture:
+          "https://api.dicebear.com/7.x/initials/svg?seed=Crane",
         status: "not_started",
       },
     ];
@@ -95,7 +99,9 @@ export default function RoundsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">⏱️ Bidding Rounds</h1>
+        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          ⏱️ Bidding Rounds
+        </h1>
         <p className="text-gray-300">Complete history of all auction rounds</p>
       </div>
 
@@ -108,8 +114,8 @@ export default function RoundsPage() {
               round.status === "active"
                 ? "bg-gradient-to-r from-yellow-700 to-orange-700 border-yellow-400 animate-pulse"
                 : round.status === "completed"
-                ? "bg-gradient-to-r from-green-700 to-green-900 border-green-500"
-                : "bg-gradient-to-r from-gray-700 to-gray-900 border-gray-500"
+                  ? "bg-gradient-to-r from-green-700 to-green-900 border-green-500"
+                  : "bg-gradient-to-r from-gray-700 to-gray-900 border-gray-500"
             }`}
           >
             <div className="flex items-center justify-between">
@@ -142,7 +148,10 @@ export default function RoundsPage() {
                   </h3>
                   {round.status === "completed" && round.winnerHouse && (
                     <p className="text-lg text-gray-200">
-                      Sold to <span className="text-yellow-400 font-bold">{round.winnerHouse}</span>{" "}
+                      Sold to{" "}
+                      <span className="text-yellow-400 font-bold">
+                        {round.winnerHouse}
+                      </span>{" "}
                       for{" "}
                       <span className="text-green-400 font-bold text-2xl">
                         ${round.winningBid}

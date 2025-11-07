@@ -5,6 +5,6 @@ export async function POST() {
   // by removing the token from storage
   return NextResponse.json({
     success: true,
-    message: "Logged out successfully"
+    message: "Logged out successfully",
   });
 }

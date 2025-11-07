@@ -11,15 +11,37 @@ interface PlayerWithPrice extends Participant {
 
 export default function HousesPage() {
   const [houses, setHouses] = useState<House[]>([]);
-  const [housePlayers, setHousePlayers] = useState<Record<string, PlayerWithPrice[]>>({});
+  const [housePlayers, setHousePlayers] = useState<
+    Record<string, PlayerWithPrice[]>
+  >({});
 
   useEffect(() => {
     // Mock data - using 'unknown' to avoid 'any' type errors
     const mockHouses: House[] = [
-      { _id: "h1" as unknown as House["_id"], name: "Lord Shen", totalBudget: 1000, remainingBudget: 750 },
-      { _id: "h2" as unknown as House["_id"], name: "Dragon Warrior", totalBudget: 1000, remainingBudget: 820 },
-      { _id: "h3" as unknown as House["_id"], name: "Master Oogway", totalBudget: 1000, remainingBudget: 650 },
-      { _id: "h4" as unknown as House["_id"], name: "Tai Lung", totalBudget: 1000, remainingBudget: 900 },
+      {
+        _id: "h1" as unknown as House["_id"],
+        name: "Lord Shen",
+        totalBudget: 1000,
+        remainingBudget: 750,
+      },
+      {
+        _id: "h2" as unknown as House["_id"],
+        name: "Dragon Warrior",
+        totalBudget: 1000,
+        remainingBudget: 820,
+      },
+      {
+        _id: "h3" as unknown as House["_id"],
+        name: "Master Oogway",
+        totalBudget: 1000,
+        remainingBudget: 650,
+      },
+      {
+        _id: "h4" as unknown as House["_id"],
+        name: "Tai Lung",
+        totalBudget: 1000,
+        remainingBudget: 900,
+      },
     ];
     setHouses(mockHouses);
 
@@ -84,8 +106,12 @@ export default function HousesPage() {
   return (
     <div className="space-y-8">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">🏯 House Rosters</h1>
-        <p className="text-gray-300">View all houses and their acquired warriors</p>
+        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          🏯 House Rosters
+        </h1>
+        <p className="text-gray-300">
+          View all houses and their acquired warriors
+        </p>
       </div>
 
       {houses.map((house, index) => {
@@ -103,9 +129,12 @@ export default function HousesPage() {
             {/* House Header */}
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-3xl font-bold text-white mb-2">{house.name}</h2>
+                <h2 className="text-3xl font-bold text-white mb-2">
+                  {house.name}
+                </h2>
                 <p className="text-gray-200">
-                  {players.length} warrior{players.length !== 1 ? "s" : ""} recruited
+                  {players.length} warrior{players.length !== 1 ? "s" : ""}{" "}
+                  recruited
                 </p>
               </div>
               <div className="text-right">
@@ -141,13 +170,17 @@ export default function HousesPage() {
                         />
                       )}
                       <div className="flex-1">
-                        <h3 className="text-lg font-bold text-white">{player.name}</h3>
+                        <h3 className="text-lg font-bold text-white">
+                          {player.name}
+                        </h3>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-2xl font-bold text-yellow-400">
                             ${player.purchasePrice}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-300 mt-1">Acquired Warrior</p>
+                        <p className="text-xs text-gray-300 mt-1">
+                          Acquired Warrior
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -155,7 +188,9 @@ export default function HousesPage() {
               </div>
             ) : (
               <div className="text-center py-12 bg-black bg-opacity-30 rounded-xl border-2 border-dashed border-gray-600">
-                <p className="text-xl text-gray-400">No warriors recruited yet</p>
+                <p className="text-xl text-gray-400">
+                  No warriors recruited yet
+                </p>
                 <p className="text-sm text-gray-500 mt-2">
                   Start bidding to build your roster!
                 </p>

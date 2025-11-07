@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       bids: [],
       status: "active" as const,
       timerEnd,
-      scheduledStart
+      scheduledStart,
     };
 
     const result = await Rounds.create(round);
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       roundId: result.insertedId.toString(),
-      message: "Round created successfully"
+      message: "Round created successfully",
     });
   } catch (error) {
     console.error("Error creating round:", error);
@@ -87,30 +87,30 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") === "true";
-    
+
     let rounds;
     if (activeOnly) {
       rounds = await Rounds.getActive();
     } else {
       rounds = await Rounds.getAll();
     }
-    
+
     // Transform rounds to match the expected response format
-    const formattedRounds = rounds.map(round => ({
+    const formattedRounds = rounds.map((round) => ({
       roundId: round._id?.toString(),
       participantId: round.participantId.toString(),
       status: round.status,
       timerEnd: round.timerEnd.toISOString(),
       scheduledStart: round.scheduledStart?.toISOString(),
-      bids: round.bids.map(bid => ({
+      bids: round.bids.map((bid) => ({
         bidId: bid._id?.toString(),
         houseId: bid.houseId.toString(),
         amount: bid.amount,
         timestamp: bid.timestamp.toISOString(),
-        edits: bid.edits || 0
-      }))
+        edits: bid.edits || 0,
+      })),
     }));
-    
+
     return NextResponse.json(formattedRounds);
   } catch (error) {
     console.error("Error fetching rounds:", error);

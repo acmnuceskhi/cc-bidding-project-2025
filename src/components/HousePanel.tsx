@@ -1,5 +1,5 @@
-import React from 'react';
-import { House } from '@/lib/models/houses';
+import React from "react";
+import { House } from "@/lib/models/houses";
 
 interface HousePanelProps {
   house: House;
@@ -9,7 +9,7 @@ interface HousePanelProps {
 
 const HousePanel: React.FC<HousePanelProps> = ({ house, onBid, disabled }) => {
   const [bidAmount, setBidAmount] = React.useState(0);
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (bidAmount > 0 && bidAmount <= house.remainingBudget) {
@@ -22,18 +22,25 @@ const HousePanel: React.FC<HousePanelProps> = ({ house, onBid, disabled }) => {
     <div className="border rounded-lg p-4 shadow-md bg-white">
       <h3 className="text-xl font-bold mb-2">{house.name}</h3>
       <div className="mb-4">
-        <p className="text-gray-600">Budget: ${house.remainingBudget} / ${house.totalBudget}</p>
+        <p className="text-gray-600">
+          Budget: ${house.remainingBudget} / ${house.totalBudget}
+        </p>
         <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-          <div 
-            className="bg-blue-600 h-2 rounded-full" 
-            style={{ width: `${(house.remainingBudget / house.totalBudget) * 100}%` }}
+          <div
+            className="bg-blue-600 h-2 rounded-full"
+            style={{
+              width: `${(house.remainingBudget / house.totalBudget) * 100}%`,
+            }}
           ></div>
         </div>
       </div>
-      
+
       <form onSubmit={handleSubmit} className="space-y-2">
         <div>
-          <label htmlFor={`bid-${house._id}`} className="block text-sm font-medium text-gray-700">
+          <label
+            htmlFor={`bid-${house._id}`}
+            className="block text-sm font-medium text-gray-700"
+          >
             Place Bid
           </label>
           <input
@@ -49,11 +56,13 @@ const HousePanel: React.FC<HousePanelProps> = ({ house, onBid, disabled }) => {
         </div>
         <button
           type="submit"
-          disabled={disabled || bidAmount <= 0 || bidAmount > house.remainingBudget}
+          disabled={
+            disabled || bidAmount <= 0 || bidAmount > house.remainingBudget
+          }
           className={`w-full py-2 px-4 rounded-md text-white ${
             disabled || bidAmount <= 0 || bidAmount > house.remainingBudget
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-indigo-600 hover:bg-indigo-700'
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-indigo-600 hover:bg-indigo-700"
           }`}
         >
           Submit Bid

@@ -1,3 +1,5 @@
+// Unlimited bids within round timer (lock at 50 seconds mark optional)
+
 import { NextRequest, NextResponse } from "next/server";
 import { Houses } from "@/lib/models/houses";
 import { verifyAuth, hasRole } from "@/lib/auth";
@@ -47,7 +49,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Verify admin role
-    if (!hasRole(authResult.payload, 'admin')) {
+    if (!hasRole(authResult.payload, "admin")) {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 }
@@ -59,27 +61,21 @@ export async function PUT(request: NextRequest) {
     const id = pathParts[pathParts.length - 1];
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Missing house ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing house ID" }, { status: 400 });
     }
 
     const body = await request.json();
-    
+
     // Update the house
     const result = await Houses.update(id, body);
 
     if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "House not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "House not found" }, { status: 404 });
     }
 
     return NextResponse.json({
       success: true,
-      modifiedCount: result.modifiedCount
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
     console.error("Error updating house:", error);

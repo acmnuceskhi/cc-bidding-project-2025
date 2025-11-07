@@ -35,7 +35,8 @@ export default function LoginPage() {
         if (data.houseId) localStorage.setItem("houseId", data.houseId);
 
         if (data.role === "admin") router.push("/admin");
-        else if (data.role === "house_captain") router.push(`/house/${data.houseId}`);
+        else if (data.role === "house_captain")
+          router.push(`/house/${data.houseId}`);
         else router.push("/");
       } else {
         setError(data.message || "Login failed");

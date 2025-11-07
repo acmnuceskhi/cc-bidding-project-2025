@@ -9,17 +9,38 @@ import { Round } from "@/lib/models/rounds";
 export default function OverviewPage() {
   const [houses, setHouses] = useState<House[]>([]);
   const [activeRound, setActiveRound] = useState<Round | null>(null);
-  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null);
+  const [currentParticipant, setCurrentParticipant] =
+    useState<Participant | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [roundNumber, setRoundNumber] = useState<number>(1);
 
   useEffect(() => {
     // Mock data for UI testing
     const mockHouses: House[] = [
-      { _id: "h1" as any, name: "Lord Shen", totalBudget: 1000, remainingBudget: 750 },
-      { _id: "h2" as any, name: "Dragon Warrior", totalBudget: 1000, remainingBudget: 820 },
-      { _id: "h3" as any, name: "Master Oogway", totalBudget: 1000, remainingBudget: 650 },
-      { _id: "h4" as any, name: "Tai Lung", totalBudget: 1000, remainingBudget: 900 },
+      {
+        _id: "h1" as any,
+        name: "Lord Shen",
+        totalBudget: 1000,
+        remainingBudget: 750,
+      },
+      {
+        _id: "h2" as any,
+        name: "Dragon Warrior",
+        totalBudget: 1000,
+        remainingBudget: 820,
+      },
+      {
+        _id: "h3" as any,
+        name: "Master Oogway",
+        totalBudget: 1000,
+        remainingBudget: 650,
+      },
+      {
+        _id: "h4" as any,
+        name: "Tai Lung",
+        totalBudget: 1000,
+        remainingBudget: 900,
+      },
     ];
     setHouses(mockHouses);
 
@@ -74,8 +95,8 @@ export default function OverviewPage() {
                 timeLeft > 30000
                   ? "bg-green-500"
                   : timeLeft > 10000
-                  ? "bg-yellow-500"
-                  : "bg-red-500"
+                    ? "bg-yellow-500"
+                    : "bg-red-500"
               }`}
               style={{ width: `${(timeLeft / 60000) * 100}%` }}
             ></div>
@@ -85,7 +106,9 @@ export default function OverviewPage() {
         {/* Current Participant */}
         {currentParticipant && (
           <div className="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-xl p-6 text-center">
-            <h3 className="text-2xl font-bold text-black mb-4">🥋 Current Warrior</h3>
+            <h3 className="text-2xl font-bold text-black mb-4">
+              🥋 Current Warrior
+            </h3>
             <div className="flex items-center justify-center gap-6">
               {currentParticipant.picture && (
                 <img
@@ -98,7 +121,9 @@ export default function OverviewPage() {
                 <p className="text-3xl font-bold text-black">
                   {currentParticipant.name}
                 </p>
-                <p className="text-black text-opacity-80">Awaiting house bids...</p>
+                <p className="text-black text-opacity-80">
+                  Awaiting house bids...
+                </p>
               </div>
             </div>
           </div>
@@ -112,7 +137,8 @@ export default function OverviewPage() {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {houses.map((house) => {
-            const percentage = (house.remainingBudget / house.totalBudget) * 100;
+            const percentage =
+              (house.remainingBudget / house.totalBudget) * 100;
             const getColor = () => {
               if (percentage > 70) return "from-green-600 to-green-800";
               if (percentage > 40) return "from-yellow-600 to-orange-700";

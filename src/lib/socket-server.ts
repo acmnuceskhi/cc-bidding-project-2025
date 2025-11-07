@@ -5,13 +5,21 @@ import { Participants } from "./models/participants";
 import { Houses } from "./models/houses";
 import { Bids } from "./models/bids";
 
-export type AppState = 
+export type AppState =
   | { screen: "waiting"; message: string }
-  | { screen: "bidding"; roundId: string; participantId: string; timeLeft: number }
+  | {
+      screen: "bidding";
+      roundId: string;
+      participantId: string;
+      timeLeft: number;
+    }
   | { screen: "results"; roundId: string; winner: any; losers: any[] };
 
 let io: SocketIOServer | null = null;
-let currentState: AppState = { screen: "waiting", message: "Waiting for admin to start..." };
+let currentState: AppState = {
+  screen: "waiting",
+  message: "Waiting for admin to start...",
+};
 
 export function initializeSocket(httpServer: HTTPServer) {
   if (io) return io;
@@ -19,8 +27,8 @@ export function initializeSocket(httpServer: HTTPServer) {
   io = new SocketIOServer(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+    },
   });
 
   io.on("connection", (socket) => {
@@ -34,15 +42,17 @@ export function initializeSocket(httpServer: HTTPServer) {
       try {
         const { roundId } = data;
         const round = await Rounds.getById(roundId);
-        
+
         if (round) {
-          const participant = await Participants.getById(round.participantId.toString());
-          
+          const participant = await Participants.getById(
+            round.participantId.toString()
+          );
+
           currentState = {
             screen: "bidding",
             roundId: roundId,
             participantId: round.participantId.toString(),
-            timeLeft: Math.max(0, round.timerEnd.getTime() - Date.now())
+            timeLeft: Math.max(0, round.timerEnd.getTime() - Date.now()),
           };
 
           // Broadcast to all clients
@@ -50,7 +60,7 @@ export function initializeSocket(httpServer: HTTPServer) {
           io?.emit("round-started", {
             roundId,
             participant,
-            timerEnd: round.timerEnd
+            timerEnd: round.timerEnd,
           });
         }
       } catch (error) {
@@ -61,12 +71,12 @@ export function initializeSocket(httpServer: HTTPServer) {
     socket.on("admin:end-round", async (data) => {
       try {
         const { roundId, winner, losers } = data;
-        
+
         currentState = {
           screen: "results",
           roundId,
           winner,
-          losers
+          losers,
         };
 
         // Broadcast to all clients
@@ -82,7 +92,7 @@ export function initializeSocket(httpServer: HTTPServer) {
       io?.emit("bid-notification", {
         houseId: data.houseId,
         houseName: data.houseName,
-        roundId: data.roundId
+        roundId: data.roundId,
       });
     });
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Participant } from '@/lib/models/participants';
+import React from "react";
+import { Participant } from "@/lib/models/participants";
 
 interface ParticipantCardProps {
   participant: Participant;
@@ -8,14 +8,16 @@ interface ParticipantCardProps {
   currentBids?: { houseName: string; amount: number }[];
 }
 
-const ParticipantCard: React.FC<ParticipantCardProps> = ({ 
-  participant, 
-  isActive, 
+const ParticipantCard: React.FC<ParticipantCardProps> = ({
+  participant,
+  isActive,
   timeLeft,
-  currentBids 
+  currentBids,
 }) => {
   return (
-    <div className={`border rounded-lg p-4 shadow-md ${isActive ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
+    <div
+      className={`border rounded-lg p-4 shadow-md ${isActive ? "border-green-500 bg-green-50" : "border-gray-200"}`}
+    >
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">{participant.name}</h3>
         {isActive && timeLeft !== undefined && (
@@ -24,7 +26,7 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({
           </span>
         )}
       </div>
-      
+
       {isActive && (
         <div className="mt-4">
           <h4 className="font-medium mb-2">Current Bids:</h4>

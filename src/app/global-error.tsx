@@ -74,7 +74,8 @@ export default function GlobalError({
 
                 {/* Helper Text */}
                 <p className="text-gray-400 text-sm mt-8">
-                  This is a critical error. Please refresh the page or contact support.
+                  This is a critical error. Please refresh the page or contact
+                  support.
                 </p>
               </div>
             </div>

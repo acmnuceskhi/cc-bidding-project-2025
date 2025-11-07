@@ -21,9 +21,7 @@ export async function GET(request: NextRequest) {
       participantId: participant._id?.toString(),
       name: participant.name,
       picture: participant.picture || "url",
-      houseId: participant.houseId
-        ? participant.houseId.toString()
-        : null,
+      houseId: participant.houseId ? participant.houseId.toString() : null,
     }));
 
     return NextResponse.json(filteredParticipants);
@@ -54,7 +52,7 @@ export async function POST(request: Request) {
     const participant = {
       name,
       picture: picture || "",
-      roundStats: []
+      roundStats: [],
     };
 
     const result = await Participants.create(participant);
@@ -63,8 +61,8 @@ export async function POST(request: Request) {
       success: true,
       participant: {
         ...participant,
-        _id: result.insertedId
-      }
+        _id: result.insertedId,
+      },
     });
   } catch (error) {
     console.error("Error creating participant:", error);

@@ -15,14 +15,16 @@ export async function GET() {
         participant: null,
         roundStatus: "idle",
         timerRemaining: 0,
-        bidsPlaced: []
+        bidsPlaced: [],
       });
     }
 
     const activeRound = activeRounds[0];
 
     // Fetch participant info
-    const participant = await Participants.getById(activeRound.participantId.toString());
+    const participant = await Participants.getById(
+      activeRound.participantId.toString()
+    );
 
     // Fetch all bids for the current round (not participant — as per logical flow)
     const roundBids = await Bids.getByRound(activeRound._id!.toString());
@@ -36,7 +38,7 @@ export async function GET() {
 
     // Collect houses that have placed bids (no amounts)
     const bidsPlaced = roundBids.map((bid) => ({
-      houseId: bid.houseId.toString()
+      houseId: bid.houseId.toString(),
     }));
 
     return NextResponse.json({
@@ -45,12 +47,12 @@ export async function GET() {
         ? {
             participantId: participant._id?.toString(),
             name: participant.name,
-            picture: participant.picture ?? null
+            picture: participant.picture ?? null,
           }
         : null,
       roundStatus: activeRound.status,
       timerRemaining,
-      bidsPlaced
+      bidsPlaced,
     });
   } catch (error) {
     console.error("Error fetching status:", error);

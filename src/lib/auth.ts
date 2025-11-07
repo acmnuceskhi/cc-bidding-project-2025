@@ -1,14 +1,14 @@
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { NextRequest } from 'next/server';
-import { Users, User } from './models/users';
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import { NextRequest } from "next/server";
+import { Users, User } from "./models/users";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key";
 
 export interface JWTPayload {
   userId: string;
   username: string;
-  role: 'admin' | 'house_captain';
+  role: "admin" | "house_captain";
   houseId?: string;
 }
 
@@ -18,13 +18,16 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 // Verify password
-export async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  hashedPassword: string
+): Promise<boolean> {
   return bcrypt.compare(password, hashedPassword);
 }
 
 // Generate JWT token
 export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
 }
 
 // Verify JWT token
@@ -38,15 +41,17 @@ export function verifyToken(token: string): JWTPayload | null {
 
 // Extract token from request
 export function getTokenFromRequest(request: NextRequest): string | null {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return null;
   }
   return authHeader.substring(7);
 }
 
 // Middleware to verify authentication
-export async function verifyAuth(request: NextRequest): Promise<{ user: User; payload: JWTPayload } | null> {
+export async function verifyAuth(
+  request: NextRequest
+): Promise<{ user: User; payload: JWTPayload } | null> {
   const token = getTokenFromRequest(request);
   if (!token) {
     return null;
@@ -66,16 +71,19 @@ export async function verifyAuth(request: NextRequest): Promise<{ user: User; pa
 }
 
 // Check if user has required role
-export function hasRole(payload: JWTPayload, requiredRole: 'admin' | 'house_captain'): boolean {
-  if (requiredRole === 'admin') {
-    return payload.role === 'admin';
+export function hasRole(
+  payload: JWTPayload,
+  requiredRole: "admin" | "house_captain"
+): boolean {
+  if (requiredRole === "admin") {
+    return payload.role === "admin";
   }
-  return payload.role === 'admin' || payload.role === 'house_captain';
+  return payload.role === "admin" || payload.role === "house_captain";
 }
 
 // Check if user can access house data
 export function canAccessHouse(payload: JWTPayload, houseId: string): boolean {
-  if (payload.role === 'admin') {
+  if (payload.role === "admin") {
     return true;
   }
   return payload.houseId === houseId;

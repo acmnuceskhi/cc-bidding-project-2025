@@ -70,7 +70,7 @@ export default function FinalTeamsPage() {
 
       <div className="relative z-10 w-full max-w-7xl p-8 text-center">
         <h1 className="text-5xl font-extrabold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-12">
-        ☯︎ Final Teams Line-Up ☯︎
+          ☯︎ Final Teams Line-Up ☯︎
         </h1>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">

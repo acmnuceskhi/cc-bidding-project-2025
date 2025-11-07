@@ -15,8 +15,12 @@ interface PlayerWithDetails extends Participant {
 
 export default function PlayersPage() {
   const [players, setPlayers] = useState<PlayerWithDetails[]>([]);
-  const [sortBy, setSortBy] = useState<"round" | "price-asc" | "price-desc" | "name">("round");
-  const [filterStatus, setFilterStatus] = useState<"all" | "available" | "sold">("all");
+  const [sortBy, setSortBy] = useState<
+    "round" | "price-asc" | "price-desc" | "name"
+  >("round");
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "available" | "sold"
+  >("all");
 
   useEffect(() => {
     // Mock player data
@@ -113,7 +117,9 @@ export default function PlayersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">🥋 All Warriors</h1>
+        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          🥋 All Warriors
+        </h1>
         <p className="text-gray-300">
           {availableCount} available • {soldCount} recruited
         </p>
@@ -196,7 +202,9 @@ export default function PlayersPage() {
               <div className="flex-1">
                 <h3 className="text-xl font-bold text-white">{player.name}</h3>
                 {player.roundNumber && (
-                  <p className="text-sm text-gray-300">Round {player.roundNumber}</p>
+                  <p className="text-sm text-gray-300">
+                    Round {player.roundNumber}
+                  </p>
                 )}
               </div>
             </div>
@@ -233,7 +241,9 @@ export default function PlayersPage() {
 
       {sortedPlayers.length === 0 && (
         <div className="text-center py-12 bg-black bg-opacity-40 rounded-xl border-2 border-dashed border-gray-600">
-          <p className="text-xl text-gray-400">No warriors match your filters</p>
+          <p className="text-xl text-gray-400">
+            No warriors match your filters
+          </p>
         </div>
       )}
     </div>

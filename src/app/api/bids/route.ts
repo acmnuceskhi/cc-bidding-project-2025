@@ -12,10 +12,10 @@ export async function POST(request: NextRequest) {
     const authResult = await verifyAuth(request);
     if (!authResult) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "UNAUTHORIZED",
-          message: "Authentication required" 
+          message: "Authentication required",
         },
         { status: 401 }
       );
@@ -26,10 +26,10 @@ export async function POST(request: NextRequest) {
     // Only house captains can place bids (not admins)
     if (payload.role !== "house_captain") {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "FORBIDDEN",
-          message: "Only house captains can place bids" 
+          message: "Only house captains can place bids",
         },
         { status: 403 }
       );
@@ -41,10 +41,10 @@ export async function POST(request: NextRequest) {
     // Validate input
     if (!roundId || !amount) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "MISSING_FIELDS",
-          message: "Missing required fields: roundId, amount" 
+          message: "Missing required fields: roundId, amount",
         },
         { status: 400 }
       );
@@ -52,10 +52,10 @@ export async function POST(request: NextRequest) {
 
     if (amount <= 0) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "INVALID_AMOUNT",
-          message: "Bid amount must be greater than 0" 
+          message: "Bid amount must be greater than 0",
         },
         { status: 400 }
       );
@@ -65,10 +65,10 @@ export async function POST(request: NextRequest) {
     const round = await Rounds.getById(roundId);
     if (!round) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "ROUND_NOT_FOUND",
-          message: "Round not found" 
+          message: "Round not found",
         },
         { status: 404 }
       );
@@ -77,10 +77,10 @@ export async function POST(request: NextRequest) {
     // Check if round is active
     if (round.status !== "active") {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "ROUND_NOT_ACTIVE",
-          message: "Round is not active" 
+          message: "Round is not active",
         },
         { status: 400 }
       );
@@ -89,10 +89,10 @@ export async function POST(request: NextRequest) {
     // Check if round has expired
     if (new Date() > round.timerEnd) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "ROUND_EXPIRED",
-          message: "Round has expired" 
+          message: "Round has expired",
         },
         { status: 400 }
       );
@@ -103,10 +103,10 @@ export async function POST(request: NextRequest) {
     const houseId = payload.houseId;
     if (!houseId) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "NO_HOUSE_ASSIGNED",
-          message: `House captain ${payload.username} is not assigned to a house. Please contact admin.`
+          message: `House captain ${payload.username} is not assigned to a house. Please contact admin.`,
         },
         { status: 400 }
       );
@@ -116,10 +116,10 @@ export async function POST(request: NextRequest) {
     const house = await Houses.getById(houseId);
     if (!house) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "HOUSE_NOT_FOUND",
-          message: "House not found" 
+          message: "House not found",
         },
         { status: 404 }
       );
@@ -127,29 +127,32 @@ export async function POST(request: NextRequest) {
 
     if (amount > house.remainingBudget) {
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "INSUFFICIENT_CREDITS",
-          message: `You have ${house.remainingBudget} credits remaining, but bid ${amount}` 
+          message: `You have ${house.remainingBudget} credits remaining, but bid ${amount}`,
         },
         { status: 409 }
       );
     }
 
     // Check if house has already placed a bid for this round
-    const existingBids = await Bids.getByParticipant(round.participantId.toString());
-    const houseBid = existingBids.find(bid => 
-      bid.houseId.toString() === houseId && bid.roundId.toString() === roundId
+    const existingBids = await Bids.getByParticipant(
+      round.participantId.toString()
+    );
+    const houseBid = existingBids.find(
+      (bid) =>
+        bid.houseId.toString() === houseId && bid.roundId.toString() === roundId
     );
 
     if (houseBid) {
       // Check if this is an edit attempt
       if (houseBid.edits && houseBid.edits >= 1) {
         return NextResponse.json(
-          { 
+          {
             success: false,
             error: "BID_EDIT_LIMIT",
-            message: "Bid can only be edited once" 
+            message: "Bid can only be edited once",
           },
           { status: 409 }
         );
@@ -159,10 +162,10 @@ export async function POST(request: NextRequest) {
       // Note: In a real implementation, you'd want to update the existing bid
       // For now, we'll prevent multiple bids
       return NextResponse.json(
-        { 
+        {
           success: false,
           error: "BID_ALREADY_EXISTS",
-          message: "House has already placed a bid for this round" 
+          message: "House has already placed a bid for this round",
         },
         { status: 400 }
       );
@@ -175,7 +178,7 @@ export async function POST(request: NextRequest) {
       participantId: new ObjectId(round.participantId.toString()),
       amount: Number(amount),
       timestamp: new Date(),
-      edits: 0
+      edits: 0,
     };
 
     const result = await Bids.create(bid);
@@ -183,15 +186,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       bidId: result.insertedId.toString(),
-      message: "Bid submitted successfully"
+      message: "Bid submitted successfully",
     });
   } catch (error) {
     console.error("Error creating bid:", error);
     return NextResponse.json(
-      { 
+      {
         success: false,
         error: "INTERNAL_ERROR",
-        message: "Internal server error" 
+        message: "Internal server error",
       },
       { status: 500 }
     );
@@ -214,17 +217,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const participantId = searchParams.get("participantId");
     const houseId = searchParams.get("houseId");
-    
+
     let bids;
     if (participantId) {
       bids = await Bids.getByParticipant(participantId);
     } else if (houseId) {
       // Check if user can access this house's bids
       if (payload.role !== "admin" && payload.houseId !== houseId) {
-        return NextResponse.json(
-          { error: "Access denied" },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
       }
       bids = await Bids.getByHouse(houseId);
     } else {
@@ -237,7 +237,7 @@ export async function GET(request: NextRequest) {
       }
       bids = await Bids.getAll();
     }
-    
+
     return NextResponse.json(bids);
   } catch (error) {
     console.error("Error fetching bids:", error);

@@ -12,7 +12,7 @@ export default function NavigationLoader() {
     // When pathname changes, show loading
     if (pathname !== previousPath) {
       setLoading(true);
-      
+
       // Minimum loading time to make it visible (300ms)
       const timer = setTimeout(() => {
         setLoading(false);
@@ -42,32 +42,59 @@ export default function NavigationLoader() {
 
         {/* Bouncy CODERS CUP Text */}
         <div className="flex items-center justify-center gap-2 mb-4">
-          <span className="text-4xl font-bold text-yellow-400 animate-bounce" style={{ animationDelay: "0s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-400 animate-bounce"
+            style={{ animationDelay: "0s" }}
+          >
             C
           </span>
-          <span className="text-4xl font-bold text-yellow-300 animate-bounce" style={{ animationDelay: "0.1s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-300 animate-bounce"
+            style={{ animationDelay: "0.1s" }}
+          >
             O
           </span>
-          <span className="text-4xl font-bold text-yellow-400 animate-bounce" style={{ animationDelay: "0.2s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-400 animate-bounce"
+            style={{ animationDelay: "0.2s" }}
+          >
             D
           </span>
-          <span className="text-4xl font-bold text-yellow-300 animate-bounce" style={{ animationDelay: "0.3s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-300 animate-bounce"
+            style={{ animationDelay: "0.3s" }}
+          >
             E
           </span>
-          <span className="text-4xl font-bold text-yellow-400 animate-bounce" style={{ animationDelay: "0.4s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-400 animate-bounce"
+            style={{ animationDelay: "0.4s" }}
+          >
             R
           </span>
-          <span className="text-4xl font-bold text-yellow-300 animate-bounce" style={{ animationDelay: "0.5s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-300 animate-bounce"
+            style={{ animationDelay: "0.5s" }}
+          >
             S
           </span>
           <span className="text-4xl font-bold text-red-500 mx-3">⚔️</span>
-          <span className="text-4xl font-bold text-yellow-400 animate-bounce" style={{ animationDelay: "0.6s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-400 animate-bounce"
+            style={{ animationDelay: "0.6s" }}
+          >
             C
           </span>
-          <span className="text-4xl font-bold text-yellow-300 animate-bounce" style={{ animationDelay: "0.7s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-300 animate-bounce"
+            style={{ animationDelay: "0.7s" }}
+          >
             U
           </span>
-          <span className="text-4xl font-bold text-yellow-400 animate-bounce" style={{ animationDelay: "0.8s" }}>
+          <span
+            className="text-4xl font-bold text-yellow-400 animate-bounce"
+            style={{ animationDelay: "0.8s" }}
+          >
             P
           </span>
         </div>

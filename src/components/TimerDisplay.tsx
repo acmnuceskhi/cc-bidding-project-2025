@@ -1,16 +1,19 @@
-import React from 'react';
+import React from "react";
 
 interface TimerDisplayProps {
   timeLeft: number;
   total_time: number;
 }
 
-const TimerDisplay: React.FC<TimerDisplayProps> = ({ timeLeft, total_time }) => {
+const TimerDisplay: React.FC<TimerDisplayProps> = ({
+  timeLeft,
+  total_time,
+}) => {
   const percentage = (timeLeft / total_time) * 100;
-  
+
   return (
     <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
-      <div 
+      <div
         className="bg-red-600 h-4 rounded-full transition-all duration-1000 ease-linear"
         style={{ width: `${percentage}%` }}
       ></div>

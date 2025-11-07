@@ -55,6 +55,6 @@ export function useSocket() {
     isConnected,
     currentState,
     emit,
-    on
+    on,
   };
 }

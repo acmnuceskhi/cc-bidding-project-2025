@@ -32,19 +32,13 @@ export async function POST(
     const { id } = params;
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Missing round ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing round ID" }, { status: 400 });
     }
 
     // Get the round
     const round = await Rounds.getById(id);
     if (!round) {
-      return NextResponse.json(
-        { error: "Round not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
     // Get all bids for this round's participant
@@ -53,7 +47,7 @@ export async function POST(
     // Find the winning bid (highest amount, earliest timestamp in case of tie)
     let winningBid: Bid | null = null;
     let winningHouse = null;
-    
+
     if (bids.length > 0) {
       winningBid = bids.reduce((winner: Bid, current: Bid) => {
         // If current bid is higher, it wins
@@ -61,7 +55,10 @@ export async function POST(
           return current;
         }
         // If amounts are equal, earliest timestamp wins
-        if (current.amount === winner.amount && current.timestamp < winner.timestamp) {
+        if (
+          current.amount === winner.amount &&
+          current.timestamp < winner.timestamp
+        ) {
           return current;
         }
         return winner;
@@ -73,38 +70,40 @@ export async function POST(
 
     // Update round status to completed
     await Rounds.update(id, {
-      status: "completed"
+      status: "completed",
     });
 
     // If there's a winning bid, update house budget and assign participant
     if (winningBid && winningHouse) {
       // Deduct bid amount from house's remaining budget
       await Houses.update(winningHouse._id!.toString(), {
-        remainingBudget: winningHouse.remainingBudget - winningBid.amount
+        remainingBudget: winningHouse.remainingBudget - winningBid.amount,
       });
 
       // Assign participant to winning house
       await Participants.update(round.participantId.toString(), {
-        houseId: winningHouse._id
+        houseId: winningHouse._id,
       });
     }
 
     return NextResponse.json({
       success: true,
-      winningBid: winningBid ? {
-        houseId: winningBid.houseId,
-        houseName: winningHouse?.name,
-        amount: winningBid.amount,
-        timestamp: winningBid.timestamp
-      } : null,
-      allBids: bids.map(bid => ({
+      winningBid: winningBid
+        ? {
+            houseId: winningBid.houseId,
+            houseName: winningHouse?.name,
+            amount: winningBid.amount,
+            timestamp: winningBid.timestamp,
+          }
+        : null,
+      allBids: bids.map((bid) => ({
         houseId: bid.houseId,
         amount: bid.amount,
-        timestamp: bid.timestamp
+        timestamp: bid.timestamp,
       })),
-      message: winningBid 
-        ? `Participant won by ${winningHouse?.name} with bid $${winningBid.amount}` 
-        : "Round ended with no bids"
+      message: winningBid
+        ? `Participant won by ${winningHouse?.name} with bid $${winningBid.amount}`
+        : "Round ended with no bids",
     });
   } catch (error) {
     console.error("Error ending round:", error);

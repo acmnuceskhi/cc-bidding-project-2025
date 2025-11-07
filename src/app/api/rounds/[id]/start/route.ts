@@ -28,10 +28,7 @@ export async function POST(
     const { id } = params;
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Missing round ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing round ID" }, { status: 400 });
     }
 
     // Set round timer to 1 minute from now
@@ -40,20 +37,17 @@ export async function POST(
     // Update the round to active status
     const result = await Rounds.update(id, {
       status: "active",
-      timerEnd
+      timerEnd,
     });
 
     if (result.matchedCount === 0) {
-      return NextResponse.json(
-        { error: "Round not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
     return NextResponse.json({
       success: true,
       roundId: id,
-      message: "Round started successfully"
+      message: "Round started successfully",
     });
   } catch (error) {
     console.error("Error starting round:", error);

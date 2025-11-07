@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: "MISSING_CREDENTIALS",
-          message: "Username and password are required"
+          message: "Username and password are required",
         },
         { status: 400 }
       );
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: "INVALID_CREDENTIALS",
-          message: "Username or password incorrect"
+          message: "Username or password incorrect",
         },
         { status: 401 }
       );
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: "INVALID_CREDENTIALS",
-          message: "Username or password incorrect"
+          message: "Username or password incorrect",
         },
         { status: 401 }
       );
@@ -51,9 +51,9 @@ export async function POST(request: NextRequest) {
       userId: user._id!.toString(),
       username: user.username,
       role: user.role,
-      houseId: user.houseId?.toString()
+      houseId: user.houseId?.toString(),
     };
-    
+
     console.log("Generating token for user:", tokenPayload);
     const token = generateToken(tokenPayload);
 
@@ -61,16 +61,15 @@ export async function POST(request: NextRequest) {
       success: true,
       token,
       role: user.role,
-      houseId: user.houseId?.toString()
+      houseId: user.houseId?.toString(),
     });
-
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json(
       {
         success: false,
         error: "INTERNAL_ERROR",
-        message: "Internal server error"
+        message: "Internal server error",
       },
       { status: 500 }
     );

@@ -1,10 +1,10 @@
-const { createServer } = require('http');
-const { parse } = require('url');
-const next = require('next');
-const { Server } = require('socket.io');
+const { createServer } = require("http");
+const { parse } = require("url");
+const next = require("next");
+const { Server } = require("socket.io");
 
-const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
+const dev = process.env.NODE_ENV !== "production";
+const hostname = "localhost";
 const port = 3000;
 
 const app = next({ dev, hostname, port });
@@ -16,77 +16,80 @@ app.prepare().then(() => {
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
     } catch (err) {
-      console.error('Error occurred handling', req.url, err);
+      console.error("Error occurred handling", req.url, err);
       res.statusCode = 500;
-      res.end('internal server error');
+      res.end("internal server error");
     }
   });
 
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+    },
   });
 
-  let currentState = { screen: "waiting", message: "Waiting for admin to start..." };
+  let currentState = {
+    screen: "waiting",
+    message: "Waiting for admin to start...",
+  };
 
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+  io.on("connection", (socket) => {
+    console.log("Client connected:", socket.id);
 
     // Send current state to newly connected client
-    socket.emit('state-update', currentState);
+    socket.emit("state-update", currentState);
 
     // Admin actions
-    socket.on('admin:start-round', (data) => {
-      console.log('Admin starting round:', data);
+    socket.on("admin:start-round", (data) => {
+      console.log("Admin starting round:", data);
       currentState = {
-        screen: 'bidding',
+        screen: "bidding",
         roundId: data.roundId,
         participantId: data.participantId,
         participant: data.participant,
-        timerEnd: data.timerEnd
+        timerEnd: data.timerEnd,
       };
-      io.emit('state-update', currentState);
+      io.emit("state-update", currentState);
     });
 
-    socket.on('admin:end-round', (data) => {
-      console.log('Admin ending round:', data);
+    socket.on("admin:end-round", (data) => {
+      console.log("Admin ending round:", data);
       currentState = {
-        screen: 'results',
+        screen: "results",
         roundId: data.roundId,
         winner: data.winner,
         losers: data.losers,
-        participant: data.participant
+        participant: data.participant,
       };
-      io.emit('state-update', currentState);
+      io.emit("state-update", currentState);
     });
 
-    socket.on('admin:show-waiting', (data) => {
-      console.log('Admin showing waiting screen');
+    socket.on("admin:show-waiting", (data) => {
+      console.log("Admin showing waiting screen");
       currentState = {
-        screen: 'waiting',
-        message: data.message || 'Waiting for next round...'
+        screen: "waiting",
+        message: data.message || "Waiting for next round...",
       };
-      io.emit('state-update', currentState);
+      io.emit("state-update", currentState);
     });
 
-    socket.on('bid-placed', (data) => {
-      console.log('Bid placed:', data);
-      io.emit('bid-notification', {
+    socket.on("bid-placed", (data) => {
+      console.log("Bid placed:", data);
+      io.emit("bid-notification", {
         houseId: data.houseId,
         houseName: data.houseName,
-        roundId: data.roundId
+        roundId: data.roundId,
       });
     });
 
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
+    socket.on("disconnect", () => {
+      console.log("Client disconnected:", socket.id);
     });
   });
 
   httpServer
-    .once('error', (err) => {
+    .once("error", (err) => {
       console.error(err);
       process.exit(1);
     })

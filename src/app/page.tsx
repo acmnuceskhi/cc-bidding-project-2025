@@ -27,13 +27,13 @@ export default function Home() {
     try {
       const response = await fetch("/api/auth/me", {
         headers: {
-          "Authorization": `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (response.ok) {
         const userData = await response.json();
-        
+
         // Redirect based on role
         if (userData.role === "admin") {
           window.location.href = "/admin";
@@ -61,8 +61,8 @@ export default function Home() {
       const token = localStorage.getItem("token");
       const response = await fetch("/api/houses", {
         headers: {
-          "Authorization": `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
       if (response.ok) {
         const data = await response.json();
@@ -76,10 +76,8 @@ export default function Home() {
     }
   };
 
-
-
   return (
-    <div 
+    <div
       className="min-h-screen bg-cover bg-center bg-fixed relative"
       style={{
         backgroundImage: "url('/arena-background.jpg')",
@@ -107,13 +105,20 @@ export default function Home() {
             <Link href="/login">
               <div className="bg-gradient-to-br from-red-800 to-orange-800 rounded-2xl p-8 hover:scale-105 transition-all duration-300 cursor-pointer border-4 border-yellow-600 shadow-2xl group">
                 <div className="text-center">
-                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">🏯</div>
-                  <h2 className="text-3xl font-bold mb-4 text-yellow-400">House Captain</h2>
+                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">
+                    🏯
+                  </div>
+                  <h2 className="text-3xl font-bold mb-4 text-yellow-400">
+                    House Captain
+                  </h2>
                   <p className="text-gray-200 text-lg">
-                    Lead your house to victory! Place strategic bids to recruit the best warriors.
+                    Lead your house to victory! Place strategic bids to recruit
+                    the best warriors.
                   </p>
                   <div className="mt-6 bg-black/40 rounded-lg py-3 px-4">
-                    <span className="text-yellow-300 font-semibold">🔒 Login Required</span>
+                    <span className="text-yellow-300 font-semibold">
+                      🔒 Login Required
+                    </span>
                   </div>
                 </div>
               </div>
@@ -123,13 +128,20 @@ export default function Home() {
             <Link href="/projector">
               <div className="bg-gradient-to-br from-yellow-600 to-orange-700 rounded-2xl p-8 hover:scale-105 transition-all duration-300 cursor-pointer border-4 border-yellow-400 shadow-2xl group">
                 <div className="text-center">
-                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">📺</div>
-                  <h2 className="text-3xl font-bold mb-4 text-black">Projector Display</h2>
+                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">
+                    📺
+                  </div>
+                  <h2 className="text-3xl font-bold mb-4 text-black">
+                    Projector Display
+                  </h2>
                   <p className="text-black text-lg font-medium">
-                    Watch the auction live! See which warriors are up for bidding in real-time.
+                    Watch the auction live! See which warriors are up for
+                    bidding in real-time.
                   </p>
                   <div className="mt-6 bg-black/40 rounded-lg py-3 px-4">
-                    <span className="text-yellow-200 font-semibold">✨ Public Access</span>
+                    <span className="text-yellow-200 font-semibold">
+                      ✨ Public Access
+                    </span>
                   </div>
                 </div>
               </div>
@@ -139,13 +151,20 @@ export default function Home() {
             <Link href="/login">
               <div className="bg-gradient-to-br from-black to-gray-900 rounded-2xl p-8 hover:scale-105 transition-all duration-300 cursor-pointer border-4 border-red-600 shadow-2xl group">
                 <div className="text-center">
-                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">👑</div>
-                  <h2 className="text-3xl font-bold mb-4 text-red-500">Admin Control</h2>
+                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">
+                    👑
+                  </div>
+                  <h2 className="text-3xl font-bold mb-4 text-red-500">
+                    Admin Control
+                  </h2>
                   <p className="text-gray-200 text-lg">
-                    Master the auction! Start rounds, monitor bids, and control the entire arena.
+                    Master the auction! Start rounds, monitor bids, and control
+                    the entire arena.
                   </p>
                   <div className="mt-6 bg-red-900/60 rounded-lg py-3 px-4 border-2 border-red-500">
-                    <span className="text-red-300 font-semibold">⚔️ Admin Login Required</span>
+                    <span className="text-red-300 font-semibold">
+                      ⚔️ Admin Login Required
+                    </span>
                   </div>
                 </div>
               </div>
@@ -154,25 +173,34 @@ export default function Home() {
 
           {/* How It Works Section */}
           <div className="bg-black/60 backdrop-blur-md rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
-            <h3 className="text-3xl font-bold mb-8 text-center text-yellow-400">⚔️ How The Battle Works</h3>
+            <h3 className="text-3xl font-bold mb-8 text-center text-yellow-400">
+              ⚔️ How The Battle Works
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="text-center">
                 <div className="text-5xl mb-4">🥋</div>
-                <h4 className="font-bold text-xl mb-3 text-yellow-300">Round Begins</h4>
+                <h4 className="font-bold text-xl mb-3 text-yellow-300">
+                  Round Begins
+                </h4>
                 <p className="text-gray-300">
                   Admin selects a warrior and starts a 60-second bidding battle
                 </p>
               </div>
               <div className="text-center">
                 <div className="text-5xl mb-4">💰</div>
-                <h4 className="font-bold text-xl mb-3 text-yellow-300">Houses Bid</h4>
+                <h4 className="font-bold text-xl mb-3 text-yellow-300">
+                  Houses Bid
+                </h4>
                 <p className="text-gray-300">
-                  Each house places their secret bid within their remaining treasury
+                  Each house places their secret bid within their remaining
+                  treasury
                 </p>
               </div>
               <div className="text-center">
                 <div className="text-5xl mb-4">🏆</div>
-                <h4 className="font-bold text-xl mb-3 text-yellow-300">Victor Emerges</h4>
+                <h4 className="font-bold text-xl mb-3 text-yellow-300">
+                  Victor Emerges
+                </h4>
                 <p className="text-gray-300">
                   Highest bid wins! In case of tie, the first bid claims victory
                 </p>

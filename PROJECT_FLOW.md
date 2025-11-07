@@ -1,4 +1,4 @@
-# CC Bidding Project – Project Logic Logic Flow
+# CC Bidding Project – Project Logic Flow
 
 ---
 
@@ -72,12 +72,12 @@
 
 ## 4. Key Database Models
 
-| Collection     | Key Fields                                                                        |
-| -------------- | --------------------------------------------------------------------------------- |
-| `houses`       | name, totalBudget, remainingBudget                                                |
-| `participants` | name, picture?, houseId?, roundStats[]                                            |
-| `rounds`       | participantId, bids[], status, timerEnd, scheduledStart?                          |
-| `bids`         | roundId, houseId, participantId, amount, timestamp, edits?                        |
+| Collection     | Key Fields                                                                             |
+| -------------- | -------------------------------------------------------------------------------------- |
+| `houses`       | name, totalBudget, remainingBudget                                                     |
+| `participants` | name, picture?, houseId?, roundStats[]                                                 |
+| `rounds`       | participantId, bids[], status, timerEnd, scheduledStart?                               |
+| `bids`         | roundId, houseId, participantId, amount, timestamp, edits?                             |
 | `users`        | username, password, role ("admin" \| "house_captain"), houseId?, createdAt, lastLogin? |
 
 ---
@@ -92,33 +92,32 @@
 
 ---
 
-
 ## 6. API Endpoints
 
 **Role-based access (JWT required):**
 
-* **Admin-only:**
-  * Start/end rounds (`/api/rounds/:id/start`, `/api/rounds/:id/end`)
-  * Rerun rounds in case of tie
-  * Adjust house budgets (`PUT /api/houses/:id`)
-  * View all bids immediately
+- **Admin-only:**
+  - Start/end rounds (`/api/rounds/:id/start`, `/api/rounds/:id/end`)
+  - Rerun rounds in case of tie
+  - Adjust house budgets (`PUT /api/houses/:id`)
+  - View all bids immediately
 
-* **House Captain-only:**
-  * Submit bids and edit **once only** (`/api/bids`)
+- **House Captain-only:**
+  - Submit bids and edit **once only** (`/api/bids`)
 
-* **Spectators / Projector-only:**
-  * View projector display info (`/api/status`)
+- **Spectators / Projector-only:**
+  - View projector display info (`/api/status`)
 
-* **Public / Auth endpoints:**
-  * Login/logout (`/api/auth/login`, `/api/auth/logout`)
-  * Ping (`/api/ping`)
+- **Public / Auth endpoints:**
+  - Login/logout (`/api/auth/login`, `/api/auth/logout`)
+  - Ping (`/api/ping`)
 
 **Error / status behavior:**
-* 401 Unauthorized — missing or invalid JWT
-* 403 Forbidden — role not permitted
-* 409 Conflict — business rule violation (bid exceeds budget, bid edit limit, tie needing rerun)
-* JWT expiration: 1 hour (adjustable)
 
+- 401 Unauthorized — missing or invalid JWT
+- 403 Forbidden — role not permitted
+- 409 Conflict — business rule violation (bid exceeds budget, bid edit limit, tie needing rerun)
+- JWT expiration: 1 hour (adjustable)
 
 **Endpoints:**
 
@@ -127,6 +126,7 @@
 **POST /api/auth/login**
 
 **Request:**
+
 ```json
 {
   "username": "admin1",
@@ -135,6 +135,7 @@
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -144,6 +145,7 @@
 ```
 
 **Error (401 Unauthorized):**
+
 ```json
 {
   "success": false,
@@ -159,6 +161,7 @@
 **POST /api/auth/logout**
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -173,6 +176,7 @@
 **GET /api/auth/me**
 
 **Response (200 OK):**
+
 ```json
 {
   "id": "u1",
@@ -189,6 +193,7 @@
 **GET /api/rounds**
 
 **Response:**
+
 ```json
 [
   {
@@ -217,6 +222,7 @@
 **POST /api/rounds/:id/start**
 
 **Optional:**
+
 ```json
 {
   "delayOffsetMinutes": 5
@@ -224,6 +230,7 @@
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -239,6 +246,7 @@
 **POST /api/rounds/:id/end**
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -260,6 +268,7 @@
 ```
 
 **Error (409 Conflict for tie):**
+
 ```json
 {
   "success": false,
@@ -275,6 +284,7 @@
 **POST /api/bids**
 
 **Request:**
+
 ```json
 {
   "roundId": "r1",
@@ -283,6 +293,7 @@
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "success": true,
@@ -292,6 +303,7 @@
 ```
 
 **Error (409 Conflict):**
+
 ```json
 {
   "success": false,
@@ -299,6 +311,7 @@
   "message": "You have 200 credits remaining, but bid 250"
 }
 ```
+
 ```json
 {
   "success": false,
@@ -314,6 +327,7 @@
 **GET /api/houses**
 
 **Response:**
+
 ```json
 [
   {
@@ -336,6 +350,7 @@
 **GET /api/participants**
 
 **Response:**
+
 ```json
 [
   {
@@ -360,6 +375,7 @@
 **GET /api/status**
 
 **Response:**
+
 ```json
 {
   "roundId": "r1",
