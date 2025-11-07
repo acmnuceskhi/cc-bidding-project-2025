@@ -1,44 +1,35 @@
 import { config } from "dotenv";
 import path from "path";
 
-// Load environment variables from .env.local first, then .env
 config({ path: path.resolve(process.cwd(), ".env.local") });
 config({ path: path.resolve(process.cwd(), ".env") });
 
+import clientPromise from "@/lib/mongodb";
 import { Houses } from "@/lib/models/houses";
-import { Participants } from "@/lib/models/participants";
+import { Participants, Participant } from "@/lib/models/participants";
 import { Rounds } from "@/lib/models/rounds";
 import { Users } from "@/lib/models/users";
+import { Teams } from "@/lib/models/teams";
 import { hashPassword } from "@/lib/auth";
-import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 async function initializeData() {
   try {
-    console.log("Environment check:");
-    console.log("MONGODB_URI exists:", !!process.env.MONGODB_URI);
-    console.log(
-      "MONGODB_URI value:",
-      process.env.MONGODB_URI?.substring(0, 20) + "..."
-    );
-
     console.log("Connecting to MongoDB...");
-
-    // Connect to database
     const client = await clientPromise;
     const db = client.db();
+    console.log("Connected!");
 
-    console.log("Connected to MongoDB successfully!");
-
-    // Clear existing data
+    // Remove previous test data
     await db.collection("houses").deleteMany({});
     await db.collection("participants").deleteMany({});
     await db.collection("bids").deleteMany({});
     await db.collection("rounds").deleteMany({});
     await db.collection("users").deleteMany({});
+    await db.collection("teams").deleteMany({});
+    console.log("Cleared previous data.");
 
-    console.log("Cleared existing data");
-
-    // Create 4 houses with equal budget
+    // Houses
     const houses = [
       { name: "Lord Shen", totalBudget: 1000, remainingBudget: 1000 },
       { name: "Dragon Warrior", totalBudget: 1000, remainingBudget: 1000 },
@@ -46,89 +37,83 @@ async function initializeData() {
       { name: "Tai Lung", totalBudget: 1000, remainingBudget: 1000 },
     ];
 
-    const houseIds = [];
+    const houseIds: ObjectId[] = [];
     for (const house of houses) {
       const result = await Houses.create(house);
       houseIds.push(result.insertedId);
-      console.log(`Created house: ${house.name}`);
     }
 
-    // Create 48 participants
-    const participants = [];
+    // Round-1 dummy teams
+    const teamIds: ObjectId[] = [];
+    for (let i = 1; i <= 4; i++) {
+      const result = await Teams.create({
+        successfulAttempts: 0,
+        unsuccessfulAttempts: 0,
+        totalPoints: 0,
+        totalPenalty: 0,
+        timeTakenPerProblem: [],
+      });
+
+      teamIds.push(result.insertedId);
+      console.log(`Created Team ${i}`);
+    }
+
+    // Participants (48 total)
+    const participants: Omit<Participant, "_id">[] = [];
     for (let i = 1; i <= 48; i++) {
       participants.push({
         name: `Participant ${i}`,
         picture: `https://api.dicebear.com/7.x/initials/svg?seed=Participant${i}`,
+        teamId: teamIds[(i - 1) % teamIds.length],
       });
     }
 
-    const participantIds = [];
-    for (const participant of participants) {
-      const result = await Participants.create(participant);
+    const participantIds: ObjectId[] = [];
+    for (let i = 0; i < participants.length; i++) {
+      const result = await Participants.create(participants[i]);
       participantIds.push(result.insertedId);
-      console.log(`Created participant: ${participant.name}`);
     }
 
-    // Create predefined rounds for all participants
-    console.log("Creating predefined rounds...");
+    // Rounds: one scheduled for each participant
+    console.log("Creating rounds...");
     for (let i = 0; i < participantIds.length; i++) {
-      const scheduledStart = new Date(Date.now() + i * 2 * 60 * 1000); // 2 minutes apart
-      const timerEnd = new Date(scheduledStart.getTime() + 60 * 1000); // 1 minute duration
+      const scheduledStart = new Date(Date.now() + i * 2 * 60000);
+      const timerEnd = new Date(scheduledStart.getTime() + 60000);
 
-      const round = {
+      await Rounds.create({
         participantId: participantIds[i],
         bids: [],
-        status: "scheduled" as const,
-        timerEnd,
+        status: "scheduled",
         scheduledStart,
-      };
-
-      await Rounds.create(round);
-      if (i < 5) {
-        // Only log first 5 to avoid spam
-        console.log(`Created round for participant ${i + 1}`);
-      }
+        timerEnd,
+      });
     }
-    console.log(`Created ${participantIds.length} predefined rounds`);
 
-    // Create default users
-    const adminPassword = await hashPassword("admin123");
-    const adminUser = {
+    // Users (simple test credentials)
+    await Users.create({
       username: "admin",
-      password: adminPassword,
-      role: "admin" as const,
-    };
-    await Users.create(adminUser);
-    console.log("Created admin user: admin / admin123");
+      password: await hashPassword("admin123"),
+      role: "admin",
+    });
 
-    // Create house captain users
     const captainPassword = await hashPassword("captain123");
-    const houseData = await Houses.getAll();
+    const allHouses = await Houses.getAll();
 
-    for (const house of houseData) {
-      const captainUser = {
+    for (const house of allHouses) {
+      await Users.create({
         username: `captain_${house.name.toLowerCase().replace(/\s+/g, "_")}`,
         password: captainPassword,
-        role: "house_captain" as const,
+        role: "house_captain",
         houseId: house._id,
-      };
-      await Users.create(captainUser);
-      console.log(
-        `Created house captain: ${captainUser.username} / captain123`
-      );
+      });
     }
 
-    console.log("Database initialization complete!");
-    console.log(
-      `Created ${houses.length} houses, ${participants.length} participants, and ${houseData.length + 1} users`
-    );
-
+    console.log("✅ Test database seeded successfully!");
     process.exit(0);
-  } catch (error) {
-    console.error("Error initializing data:", error);
+  } catch (err) {
+    console.error("Error initializing test data:", err);
     process.exit(1);
   }
 }
 
-// Run the initialization
 initializeData();

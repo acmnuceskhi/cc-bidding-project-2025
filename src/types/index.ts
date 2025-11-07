@@ -7,7 +7,7 @@ export type { Round } from "@/lib/models/rounds";
 export type { Bid } from "@/lib/models/bids";
 
 // Additional utility types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -38,13 +38,13 @@ export interface ProjectorStatus {
 
 export interface RoundResult {
   winningBid: {
-    houseID: ObjectId;
+    houseId: ObjectId;
     houseName: string;
     amount: number;
     timestamp: Date;
   } | null;
   allBids: {
-    houseID: ObjectId;
+    houseId: ObjectId;
     amount: number;
     timestamp: Date;
   }[];
