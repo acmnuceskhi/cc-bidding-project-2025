@@ -1,10 +1,11 @@
 import clientPromise from "@/lib/mongodb";
-import { ObjectId, InsertOneResult, UpdateResult, Db } from "mongodb";
+import { ObjectId, InsertOneResult, UpdateResult } from "mongodb";
 
 // Interface representing a Participant document in MongoDB
 export interface Participant {
   _id?: ObjectId; // MongoDB document ID
   name: string; // Participant's name
+  rollNumber: string; // Participant's roll number (used to determine batch as well)
   picture?: string; // URL to participant's picture
 
   houseId?: ObjectId; // ID of the house assigned (ObjectId reference)
@@ -58,6 +59,15 @@ export const Participants = {
       throw new Error("Invalid teamId: No such team exists");
     }
 
+    // Ensure unique roll number
+    const rollExists = await db
+      .collection(collectionName)
+      .countDocuments({ rollNumber: participant.rollNumber });
+
+    if (rollExists > 0) {
+      throw new Error("Roll number already exists");
+    }
+
     return db
       .collection<Participant>(collectionName)
       .insertOne({ ...participant });
@@ -104,6 +114,17 @@ export const Participants = {
             ? new ObjectId(stat.roundId)
             : stat.roundId,
       }));
+    }
+
+    if (update.rollNumber) {
+      // Duplicate check
+      const rollExists = await db
+        .collection(collectionName)
+        .countDocuments({ rollNumber: update.rollNumber, _id: { $ne: new ObjectId(id) } });
+
+      if (rollExists > 0) {
+        throw new Error("Roll number already exists");
+      }
     }
 
     return db
