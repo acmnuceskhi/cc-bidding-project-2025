@@ -9,7 +9,6 @@ export interface Bid {
   participantId: ObjectId; // ID of the participant being bid on
   amount: number; // Bid amount
   timestamp: Date; // Time when bid was placed
-  edits?: number; // Times the bid has been edited; max 1
 }
 
 // Name of MongoDB collection
@@ -37,9 +36,6 @@ export const Bids = {
 
     // Store valid Date objects
     bid.timestamp = new Date(bid.timestamp);
-    if (bid.edits === undefined) {
-      bid.edits = 0;
-    }
 
     return client.db().collection<Bid>(collectionName).insertOne(bid);
   },

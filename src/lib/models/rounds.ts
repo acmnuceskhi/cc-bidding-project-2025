@@ -13,7 +13,6 @@ export interface Round {
     houseId: ObjectId; // ID of house placing the bid
     amount: number; // Bid amount
     timestamp: Date; // When the bid was placed
-    edits?: number; // Times the bid has been edited; max 1
   }[];
 }
 
@@ -34,15 +33,11 @@ export const Rounds = {
       round.participantId = new ObjectId(round.participantId);
     }
 
-    // Convert bids houseIds if strings
+    // Ensure all bids have correct ObjectId
     round.bids = round.bids.map((bid) => ({
       ...bid,
-      houseId:
-        typeof bid.houseId === "string"
-          ? new ObjectId(bid.houseId)
-          : bid.houseId,
-      timestamp: new Date(bid.timestamp),
-      edits: bid.edits ?? 0,
+      houseId: typeof bid.houseId === "string" ? new ObjectId(bid.houseId) : bid.houseId,
+      timestamp: bid.timestamp ? new Date(bid.timestamp) : new Date(),
     }));
 
     // Ensure timerEnd and scheduledStart are real Date object
@@ -70,16 +65,11 @@ export const Rounds = {
       update.participantId = new ObjectId(update.participantId);
     }
 
-    // Convert string -> ObjectId inside bids
     if (update.bids) {
       update.bids = update.bids.map((bid) => ({
         ...bid,
-        houseId:
-          typeof bid.houseId === "string"
-            ? new ObjectId(bid.houseId)
-            : bid.houseId,
+        houseId: typeof bid.houseId === "string" ? new ObjectId(bid.houseId) : bid.houseId,
         timestamp: bid.timestamp ? new Date(bid.timestamp) : new Date(),
-        edits: bid.edits ?? 0,
       }));
     }
 
