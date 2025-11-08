@@ -1,9 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @next/next/no-img-element, prefer-const */
+/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
 "use client";
 
 import { useState, useEffect } from "react";
 import { Participant } from "@/lib/models/participants";
 import { House } from "@/lib/models/houses";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface PlayerWithDetails extends Participant {
   status: "available" | "sold";
@@ -11,6 +12,14 @@ interface PlayerWithDetails extends Participant {
   soldToHouseName?: string;
   soldPrice?: number;
   roundNumber?: number;
+}
+
+interface Round {
+  _id: string;
+  participantId: string;
+  winningHouseId?: string;
+  winningBid?: number;
+  roundNumber: number;
 }
 
 export default function PlayersPage() {
@@ -23,72 +32,61 @@ export default function PlayersPage() {
   >("all");
 
   useEffect(() => {
-    // Mock player data
-    const mockPlayers: PlayerWithDetails[] = [
-      {
-        _id: "p1" as any,
-        name: "Master Shifu",
-        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Shifu",
-        status: "sold",
-        soldTo: "h1",
-        soldToHouseName: "Lord Shen",
-        soldPrice: 150,
-        roundNumber: 1,
-        roundStats: [],
-      },
-      {
-        _id: "p2" as any,
-        name: "Tigress",
-        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Tigress",
-        status: "sold",
-        soldTo: "h1",
-        soldToHouseName: "Lord Shen",
-        soldPrice: 100,
-        roundNumber: 3,
-        roundStats: [],
-      },
-      {
-        _id: "p3" as any,
-        name: "Po the Dragon Warrior",
-        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Po",
-        status: "sold",
-        soldTo: "h2",
-        soldToHouseName: "Dragon Warrior",
-        soldPrice: 250,
-        roundNumber: 2,
-        roundStats: [],
-      },
-      {
-        _id: "p4" as any,
-        name: "Crane",
-        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Crane",
-        status: "available",
-        roundStats: [],
-      },
-      {
-        _id: "p5" as any,
-        name: "Viper",
-        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Viper",
-        status: "available",
-        roundStats: [],
-      },
-      {
-        _id: "p6" as any,
-        name: "Mantis",
-        picture: "https://api.dicebear.com/7.x/initials/svg?seed=Mantis",
-        status: "sold",
-        soldTo: "h3",
-        soldToHouseName: "Master Oogway",
-        soldPrice: 180,
-        roundNumber: 4,
-        roundStats: [],
-      },
-    ];
-    setPlayers(mockPlayers);
+    async function fetchData() {
+      try {
+        // --- Fetch all data in parallel ---
+        const [participantsRes, roundsRes, housesRes] = await Promise.all([
+          fetchWithAuth("/api/participants", { method: "GET" }),
+          fetchWithAuth("/api/rounds", { method: "GET" }),
+          fetchWithAuth("/api/houses", { method: "GET" }),
+        ]);
+
+        const [participants, rounds, houses] = await Promise.all([
+          participantsRes.json(),
+          roundsRes.json(),
+          housesRes.json(),
+        ]);
+
+        // --- Build player data ---
+        const playersData: PlayerWithDetails[] = participants.map(
+          (participant: Participant) => {
+            const round = rounds.find(
+              (r: Round) => r.participantId === participant._id?.toString()
+            );
+
+            if (round && round.winningHouseId && round.winningBid) {
+              const house = houses.find(
+                (h: House) => h._id.toString() === round.winningHouseId
+              );
+              return {
+                ...participant,
+                status: "sold",
+                soldTo: round.winningHouseId,
+                soldToHouseName: house ? house.name : "Unknown",
+                soldPrice: round.winningBid,
+                roundNumber: round.roundNumber,
+              };
+            } else {
+              return {
+                ...participant,
+                status: "available",
+              };
+            }
+          }
+        );
+
+        setPlayers(playersData);
+      } catch (error) {
+        console.error("Failed to fetch players data:", error);
+      }
+    }
+
+    fetchData();
   }, []);
 
+  // --- Sorting + Filtering logic ---
   const getSortedPlayers = () => {
-    let filtered = players.filter((p) => {
+    const filtered = players.filter((p) => {
       if (filterStatus === "all") return true;
       return p.status === filterStatus;
     });
@@ -113,56 +111,43 @@ export default function PlayersPage() {
   const availableCount = players.filter((p) => p.status === "available").length;
   const soldCount = players.filter((p) => p.status === "sold").length;
 
+  // --- UI remains identical ---
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
-          🥋 All Warriors
-        </h1>
+        <h1 className="text-4xl font-bold text-yellow-400 mb-2">🥋 All Warriors</h1>
         <p className="text-gray-300">
           {availableCount} available • {soldCount} recruited
         </p>
       </div>
 
-      {/* Filters and Sorting */}
+      {/* Filters and sorting */}
       <div className="bg-black bg-opacity-40 rounded-xl p-6 border-2 border-yellow-600 shadow-lg">
         <div className="flex flex-wrap gap-4 items-center justify-between">
-          {/* Filter by Status */}
           <div className="flex gap-2">
-            <button
-              onClick={() => setFilterStatus("all")}
-              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                filterStatus === "all"
-                  ? "bg-yellow-600 text-black"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              }`}
-            >
-              All ({players.length})
-            </button>
-            <button
-              onClick={() => setFilterStatus("available")}
-              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                filterStatus === "available"
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              }`}
-            >
-              Available ({availableCount})
-            </button>
-            <button
-              onClick={() => setFilterStatus("sold")}
-              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                filterStatus === "sold"
-                  ? "bg-red-600 text-white"
-                  : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-              }`}
-            >
-              Recruited ({soldCount})
-            </button>
+            {["all", "available", "sold"].map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status as any)}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  filterStatus === status
+                    ? status === "sold"
+                      ? "bg-red-600 text-white"
+                      : status === "available"
+                      ? "bg-green-600 text-white"
+                      : "bg-yellow-600 text-black"
+                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                }`}
+              >
+                {status === "all"
+                  ? `All (${players.length})`
+                  : status === "available"
+                  ? `Available (${availableCount})`
+                  : `Recruited (${soldCount})`}
+              </button>
+            ))}
           </div>
 
-          {/* Sort Options */}
           <div className="flex items-center gap-3">
             <span className="text-gray-300 font-semibold">Sort by:</span>
             <select
@@ -190,7 +175,6 @@ export default function PlayersPage() {
                 : "bg-gradient-to-br from-green-700 to-green-900 border-green-500"
             }`}
           >
-            {/* Player Info */}
             <div className="flex items-center gap-4 mb-4">
               {player.picture && (
                 <img
@@ -209,7 +193,6 @@ export default function PlayersPage() {
               </div>
             </div>
 
-            {/* Status */}
             <div className="pt-4 border-t-2 border-gray-600">
               {player.status === "available" ? (
                 <div className="text-center">

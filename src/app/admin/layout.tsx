@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 export default function AdminLayout({
   children,
@@ -81,13 +82,23 @@ export default function AdminLayout({
                 </p>
               </div>
               <button
-                onClick={() => {
-                  localStorage.removeItem("token");
-                  localStorage.removeItem("role");
-                  localStorage.removeItem("houseId");
-                  window.location.href = "/login";
+                onClick={async () => {
+                  try {
+                    const data = await fetchWithAuth("/api/auth/logout", { method: "POST" });
+                    console.log("Logout response:", data);
+
+                    // Clear client-side storage
+                    localStorage.removeItem("token");
+                    localStorage.removeItem("role");
+                    localStorage.removeItem("houseId");
+
+                    // Redirect to login
+                    window.location.href = "/login";
+                  } catch (err) {
+                    console.error("Logout failed:", err);
+                  }
                 }}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition-all transform hover:scale-105"
+                className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded"
               >
                 Logout
               </button>

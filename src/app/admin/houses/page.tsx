@@ -4,9 +4,17 @@
 import { useState, useEffect } from "react";
 import { House } from "@/lib/models/houses";
 import { Participant } from "@/lib/models/participants";
+import { fetchWithAuth } from "@/lib/fetchWithAuth"; // make sure this exists
 
 interface PlayerWithPrice extends Participant {
   purchasePrice?: number;
+}
+
+interface Round {
+  _id: string;
+  participantId: string;
+  winningHouseId: string;
+  winningBid: number;
 }
 
 export default function HousesPage() {
@@ -15,82 +23,63 @@ export default function HousesPage() {
     Record<string, PlayerWithPrice[]>
   >({});
 
-  useEffect(() => {
-    // Mock data - using 'unknown' to avoid 'any' type errors
-    const mockHouses: House[] = [
-      {
-        _id: "h1" as unknown as House["_id"],
-        name: "Lord Shen",
-        totalBudget: 1000,
-        remainingBudget: 750,
-      },
-      {
-        _id: "h2" as unknown as House["_id"],
-        name: "Dragon Warrior",
-        totalBudget: 1000,
-        remainingBudget: 820,
-      },
-      {
-        _id: "h3" as unknown as House["_id"],
-        name: "Master Oogway",
-        totalBudget: 1000,
-        remainingBudget: 650,
-      },
-      {
-        _id: "h4" as unknown as House["_id"],
-        name: "Tai Lung",
-        totalBudget: 1000,
-        remainingBudget: 900,
-      },
-    ];
-    setHouses(mockHouses);
+    useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch houses
+        const housesResponse = await fetchWithAuth("/api/houses", { method: "GET" });
+        const housesData: House[] = await housesResponse.json();
+        setHouses(housesData);
 
-    // Mock players assigned to houses
-    const mockPlayers: Record<string, PlayerWithPrice[]> = {
-      h1: [
-        {
-          _id: "p1" as any,
-          name: "Master Shifu",
-          picture: "https://api.dicebear.com/7.x/initials/svg?seed=Shifu",
-          purchasePrice: 150,
-          roundStats: [],
-        },
-        {
-          _id: "p2" as any,
-          name: "Tigress",
-          picture: "https://api.dicebear.com/7.x/initials/svg?seed=Tigress",
-          purchasePrice: 100,
-          roundStats: [],
-        },
-      ],
-      h2: [
-        {
-          _id: "p3" as any,
-          name: "Po",
-          picture: "https://api.dicebear.com/7.x/initials/svg?seed=Po",
-          purchasePrice: 180,
-          roundStats: [],
-        },
-      ],
-      h3: [
-        {
-          _id: "p4" as any,
-          name: "Crane",
-          picture: "https://api.dicebear.com/7.x/initials/svg?seed=Crane",
-          purchasePrice: 120,
-          roundStats: [],
-        },
-        {
-          _id: "p5" as any,
-          name: "Viper",
-          picture: "https://api.dicebear.com/7.x/initials/svg?seed=Viper",
-          purchasePrice: 230,
-          roundStats: [],
-        },
-      ],
-      h4: [],
+        // Fetch participants
+        const participantsResponse = await fetchWithAuth("/api/participants", { method: "GET" });
+        const participantsData: Participant[] = await participantsResponse.json();
+
+        // Fetch rounds
+        const roundsResponse = await fetchWithAuth("/api/rounds", { method: "GET" });
+        const roundsData: Round[] = await roundsResponse.json();
+
+        // Create a map of participantId -> winning bid
+        const participantPriceMap: Record<string, number> = {};
+        roundsData.forEach((round) => {
+          const pid =
+            typeof round.participantId === "object"
+              ? round.participantId
+              : round.participantId;
+          if (pid) {
+            participantPriceMap[pid] = round.winningBid ?? 0; // fallback to 0 if undefined
+          }
+        });
+
+        // Group participants by houseId
+        const grouped: Record<string, PlayerWithPrice[]> = {};
+        housesData.forEach((house) => {
+          const houseId = typeof house._id === "object" ? house._id?.toString?.() : house._id;
+          if (houseId) grouped[houseId] = [];
+        });
+
+        participantsData.forEach((p) => {
+          if (p.houseId) {
+            const houseKey = typeof p.houseId === "object" ? p.houseId?.toString?.() : p.houseId;
+            if (!houseKey) return;
+
+            if (!grouped[houseKey]) grouped[houseKey] = [];
+
+            const participantId = typeof p._id === "object" ? p._id?.toString?.() : p._id;
+            grouped[houseKey].push({
+              ...p,
+              purchasePrice: participantId ? participantPriceMap[participantId] || 0 : 0,
+            });
+          }
+        });
+
+        setHousePlayers(grouped);
+      } catch (err) {
+        console.error("Failed to fetch houses, participants, or rounds", err);
+      }
     };
-    setHousePlayers(mockPlayers);
+
+    fetchData();
   }, []);
 
   const getHouseGradient = (index: number) => {
@@ -173,11 +162,13 @@ export default function HousesPage() {
                         <h3 className="text-lg font-bold text-white">
                           {player.name}
                         </h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-2xl font-bold text-yellow-400">
-                            ${player.purchasePrice}
-                          </span>
-                        </div>
+                        {player.purchasePrice && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-2xl font-bold text-yellow-400">
+                              ${player.purchasePrice}
+                            </span>
+                          </div>
+                        )}
                         <p className="text-xs text-gray-300 mt-1">
                           Acquired Warrior
                         </p>
