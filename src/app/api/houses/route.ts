@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     const filteredHouses = houses.map((house) => ({
       houseId: house._id?.toString(),
       name: house.name,
+      totalBudget: house.totalBudget,
       remainingBudget: house.remainingBudget,
     }));
 

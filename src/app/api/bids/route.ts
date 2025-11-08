@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
-import { verifyAuth, hasRole, canAccessHouse } from "@/lib/auth";
+import { verifyAuth} from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
 // POST /api/bids - Place a bid
@@ -147,16 +147,16 @@ export async function POST(request: NextRequest) {
 
     if (houseBid) {
       // Check if this is an edit attempt
-      if (houseBid.edits && houseBid.edits >= 1) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "BID_EDIT_LIMIT",
-            message: "Bid can only be edited once",
-          },
-          { status: 409 }
-        );
-      }
+      // if (houseBid.edits && houseBid.edits >= 1) {
+      //   return NextResponse.json(
+      //     {
+      //       success: false,
+      //       error: "BID_EDIT_LIMIT",
+      //       message: "Bid can only be edited once",
+      //     },
+      //     { status: 409 }
+      //   );
+      // }
 
       // This is an edit - update the existing bid
       // Note: In a real implementation, you'd want to update the existing bid

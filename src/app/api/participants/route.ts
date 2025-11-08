@@ -22,6 +22,11 @@ export async function GET(request: NextRequest) {
       name: participant.name,
       picture: participant.picture || "url",
       houseId: participant.houseId ? participant.houseId.toString() : null,
+      roundStats: participant.roundStats?.map((stat) => ({
+        roundId: stat.roundId.toString(),
+        bidAmount: stat.bidAmount,
+        winner: stat.winner,
+      })) || [],
     }));
 
     return NextResponse.json(filteredParticipants);
@@ -38,7 +43,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, picture } = body;
+    const { name, picture, teamId } = body;
 
     // Validate input
     if (!name) {
@@ -53,6 +58,8 @@ export async function POST(request: Request) {
       name,
       picture: picture || "",
       roundStats: [],
+      teamId: teamId || null,
+      rollNumber: ""
     };
 
     const result = await Participants.create(participant);

@@ -107,7 +107,6 @@ export async function GET(request: NextRequest) {
         houseId: bid.houseId.toString(),
         amount: bid.amount,
         timestamp: bid.timestamp.toISOString(),
-        edits: bid.edits || 0,
       })),
     }));
 
