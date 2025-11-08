@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { NextRequest } from "next/server";
 import { Users, User } from "./models/users";
 
+// Change session timeout duration here (in minutes)
+export const SESSION_TIMEOUT_MINUTES = 30;
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key";
 
 export interface JWTPayload {
@@ -66,6 +68,32 @@ export async function verifyAuth(
   if (!user) {
     return null;
   }
+
+  // Check if the user's active session matches the provided token
+  if (user.activeSessionToken !== token) {
+    console.warn(`Token mismatch for user ${user.username}`);
+    return null;
+  }
+
+  // Check if session has expired (30-minute inactivity)
+  if (user.lastActiveAt) {
+    const minutesSinceLastActive =
+      (Date.now() - new Date(user.lastActiveAt).getTime()) / (1000 * 60);
+    if (minutesSinceLastActive > SESSION_TIMEOUT_MINUTES) {
+      console.log(`Session expired for user ${user.username}`);
+      // Invalidate expired session
+      await Users.update(user._id!.toString(), {
+        activeSessionToken: null,
+        lastActiveAt: null,
+      });
+      return null;
+    }
+  }
+
+  // Refresh lastActiveAt to keep the session alive
+  await Users.update(user._id!.toString(), {
+    lastActiveAt: new Date(),
+  });
 
   return { user, payload };
 }

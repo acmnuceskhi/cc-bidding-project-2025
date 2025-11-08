@@ -10,6 +10,8 @@ export interface User {
   houseId?: ObjectId; // Only for house captains
   createdAt: Date;
   lastLogin?: Date;
+  activeSessionToken?: string | null;
+  lastActiveAt?: Date | null;
 }
 
 // Name of MongoDB collection
