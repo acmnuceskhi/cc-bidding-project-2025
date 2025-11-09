@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
-import { Participants } from "@/lib/models/participants";
 import { Houses } from "@/lib/models/houses";
 import { Bids } from "@/lib/models/bids";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import type { Bid } from "@/lib/models/bids";
 
 // POST /api/rounds/:id/end - End a round and determine winner (Admin only)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check authentication
@@ -29,7 +30,7 @@ export async function POST(
       );
     }
 
-    const { id } = params;
+  const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json({ error: "Missing round ID" }, { status: 400 });
@@ -41,8 +42,16 @@ export async function POST(
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
-    // Get all bids for this round's participant
-    const bids = await Bids.getByParticipant(round.participantId.toString());
+    // Prevent double completion if round is finalized (participant sold)
+    if (round.finalized) {
+      return NextResponse.json(
+        { error: "Round already finalized for this participant" },
+        { status: 400 }
+      );
+    }
+
+  // Get all bids for this specific round (not all rounds for the participant)
+  const bids = await Bids.getByRound(id);
 
     // Find the winning bid (highest amount, earliest timestamp in case of tie)
     let winningBid: Bid | null = null;
@@ -68,22 +77,64 @@ export async function POST(
       winningHouse = await Houses.getById(winningBid.houseId.toString());
     }
 
-    // Update round status to completed
-    await Rounds.update(id, {
-      status: "completed",
-    });
+    // ESCROW LOGIC with transaction:
+    // - Budgets were reserved at bid time (already deducted)
+    // - Winner keeps reserved amount (no extra deduction)
+    // - All losing bids are refunded (their reserved amounts restored)
+  const client = await clientPromise;
+  const session = client.startSession();
+  let message: string = "Round ended";
+    try {
+      await session.withTransaction(async () => {
+        const db = client.db();
 
-    // If there's a winning bid, update house budget and assign participant
-    if (winningBid && winningHouse) {
-      // Deduct bid amount from house's remaining budget
-      await Houses.update(winningHouse._id!.toString(), {
-        remainingBudget: winningHouse.remainingBudget - winningBid.amount,
-      });
+        // Refund losing bids if there was at least one winning bid
+        if (winningBid) {
+          const losingBids = bids.filter(
+            (b) => b._id?.toString() !== winningBid!._id?.toString()
+          );
+          for (const lb of losingBids) {
+            await db
+              .collection("houses")
+              .updateOne(
+                { _id: new ObjectId(lb.houseId) },
+                { $inc: { remainingBudget: lb.amount } },
+                { session }
+              );
+          }
+        }
 
-      // Assign participant to winning house
-      await Participants.update(round.participantId.toString(), {
-        houseId: winningHouse._id,
+        // Update round status (finalized only if sold)
+        await db
+          .collection("rounds")
+          .updateOne(
+            { _id: new ObjectId(id) },
+            {
+              $set: {
+                status: "completed",
+                timerEnd: new Date(),
+                finalized: !!winningHouse,
+              },
+            },
+            { session }
+          );
+
+        // Assign participant only if sold
+        if (winningHouse) {
+          await db
+            .collection("participants")
+            .updateOne(
+              { _id: new ObjectId(round.participantId) },
+              { $set: { houseId: winningHouse._id } },
+              { session }
+            );
+          message = `Participant won by ${winningHouse.name} with bid $${winningBid!.amount}`;
+        } else {
+          message = "Round ended with no bids";
+        }
       });
+    } finally {
+      await session.endSession();
     }
 
     return NextResponse.json({
@@ -101,9 +152,7 @@ export async function POST(
         amount: bid.amount,
         timestamp: bid.timestamp,
       })),
-      message: winningBid
-        ? `Participant won by ${winningHouse?.name} with bid $${winningBid.amount}`
-        : "Round ended with no bids",
+      message,
     });
   } catch (error) {
     console.error("Error ending round:", error);

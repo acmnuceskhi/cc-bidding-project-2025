@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if round has expired
-    if (new Date() > round.timerEnd) {
+    if (!round.timerEnd || new Date() > round.timerEnd) {
       return NextResponse.json(
         {
           success: false,
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get house ID from user payload
-    console.log("JWT Payload:", payload);
+    // console.log("JWT Payload:", payload);
     const houseId = payload.houseId;
     if (!houseId) {
       return NextResponse.json(
@@ -112,55 +112,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if house exists and has sufficient budget
-    const house = await Houses.getById(houseId);
-    if (!house) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "HOUSE_NOT_FOUND",
-          message: "House not found",
-        },
-        { status: 404 }
-      );
-    }
-
-    if (amount > house.remainingBudget) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "INSUFFICIENT_CREDITS",
-          message: `You have ${house.remainingBudget} credits remaining, but bid ${amount}`,
-        },
-        { status: 409 }
-      );
-    }
-
-    // Check if house has already placed a bid for this round
-    const existingBids = await Bids.getByParticipant(
-      round.participantId.toString()
+    // Prevent multiple bids from the same house in this round
+    const bidsForRound = await Bids.getByRound(roundId);
+    const existingBid = bidsForRound.find(
+      (bid) => bid.houseId.toString() === houseId
     );
-    const houseBid = existingBids.find(
-      (bid) =>
-        bid.houseId.toString() === houseId && bid.roundId.toString() === roundId
-    );
-
-    if (houseBid) {
-      // Check if this is an edit attempt
-      // if (houseBid.edits && houseBid.edits >= 1) {
-      //   return NextResponse.json(
-      //     {
-      //       success: false,
-      //       error: "BID_EDIT_LIMIT",
-      //       message: "Bid can only be edited once",
-      //     },
-      //     { status: 409 }
-      //   );
-      // }
-
-      // This is an edit - update the existing bid
-      // Note: In a real implementation, you'd want to update the existing bid
-      // For now, we'll prevent multiple bids
+    if (existingBid) {
       return NextResponse.json(
         {
           success: false,
@@ -168,6 +125,24 @@ export async function POST(request: NextRequest) {
           message: "House has already placed a bid for this round",
         },
         { status: 400 }
+      );
+    }
+
+    // Atomically reserve budget from house
+    // This prevents race conditions where multiple concurrent bids exceed budget
+    const updatedHouse = await Houses.reserveBudget(houseId, amount);
+    
+    if (!updatedHouse) {
+      // Budget reservation failed - insufficient credits
+      // Fetch current budget for error message
+      const house = await Houses.getById(houseId);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "INSUFFICIENT_CREDITS",
+          message: `You have ${house?.remainingBudget || 0} credits remaining, but bid ${amount}`,
+        },
+        { status: 409 }
       );
     }
 
@@ -181,13 +156,29 @@ export async function POST(request: NextRequest) {
       edits: 0,
     };
 
-    const result = await Bids.create(bid);
+    try {
+      const result = await Bids.create(bid);
 
-    return NextResponse.json({
-      success: true,
-      bidId: result.insertedId.toString(),
-      message: "Bid submitted successfully",
-    });
+      return NextResponse.json({
+        success: true,
+        bidId: result.insertedId.toString(),
+        remainingBudget: updatedHouse.remainingBudget,
+        message: "Bid submitted successfully",
+      });
+    } catch (bidError) {
+      // If bid creation fails, restore the budget
+      console.error("Bid creation failed, restoring budget:", bidError);
+      await Houses.restoreBudget(houseId, amount);
+      
+      return NextResponse.json(
+        {
+          success: false,
+          error: "BID_CREATION_FAILED",
+          message: "Failed to create bid. Budget has been restored.",
+        },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error("Error creating bid:", error);
     return NextResponse.json(
@@ -217,9 +208,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const participantId = searchParams.get("participantId");
     const houseId = searchParams.get("houseId");
+    const roundId = searchParams.get("roundId");
 
     let bids;
-    if (participantId) {
+    if (roundId) {
+      bids = await Bids.getByRound(roundId);
+    } else if (participantId) {
       bids = await Bids.getByParticipant(participantId);
     } else if (houseId) {
       // Check if user can access this house's bids

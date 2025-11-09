@@ -44,17 +44,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Set round timer to 1 minute from now
-    const timerEnd = new Date(Date.now() + 60000); // 1 minute
-    const scheduledStart = new Date(); // Start immediately
+    // Prevent creating new round if participant already finalized (has round.finalized = true)
+    const existingRounds = await Rounds.getByParticipant(participantId);
+    const hasFinalized = existingRounds.some((r) => r.finalized === true);
+    if (hasFinalized) {
+      return NextResponse.json(
+        { error: "Cannot create new round: participant already assigned" },
+        { status: 400 }
+      );
+    }
 
+    // Keep scheduledStart logic commented for now
+    // const scheduledStart = body.scheduledStart ? new Date(body.scheduledStart) : new Date();
+
+    const participantObjId = new ObjectId(participantId.toString());
+
+    // Full manual admin controls for now
     // Create the round
     const round = {
-      participantId: new ObjectId(participantId.toString()),
-      bids: [],
-      status: "active" as const,
-      timerEnd,
-      scheduledStart,
+      participantId: participantObjId,
+      status: "scheduled" as const, // rounds should start as scheduled
+      scheduledStart: null, // placeholder; admin will start manually
+      timerEnd: null, // timer set when round starts
     };
 
     const result = await Rounds.create(round);
@@ -100,14 +111,9 @@ export async function GET(request: NextRequest) {
       roundId: round._id?.toString(),
       participantId: round.participantId.toString(),
       status: round.status,
-      timerEnd: round.timerEnd.toISOString(),
-      scheduledStart: round.scheduledStart?.toISOString(),
-      bids: round.bids.map((bid) => ({
-        bidId: bid._id?.toString(),
-        houseId: bid.houseId.toString(),
-        amount: bid.amount,
-        timestamp: bid.timestamp.toISOString(),
-      })),
+      finalized: !!round.finalized,
+      timerEnd: round.timerEnd ? round.timerEnd.toISOString() : null,
+      scheduledStart: round.scheduledStart ? round.scheduledStart.toISOString() : null,
     }));
 
     return NextResponse.json(formattedRounds);

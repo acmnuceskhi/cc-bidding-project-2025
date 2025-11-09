@@ -1,5 +1,3 @@
-// Unlimited bids within round timer (lock at 50 seconds mark optional)
-
 import { NextRequest, NextResponse } from "next/server";
 import { Houses } from "@/lib/models/houses";
 import { verifyAuth, hasRole } from "@/lib/auth";
@@ -67,16 +65,105 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
 
-    // Update the house
-    const result = await Houses.update(id, body);
+    // Validate fields and enforce invariants
+  const update: Partial<{ name: string; totalBudget: number; remainingBudget: number }> = {};
+    const errors: string[] = [];
+
+    if (body.name !== undefined) {
+      if (typeof body.name !== "string" || body.name.trim().length === 0) {
+        errors.push("Name must be a non-empty string");
+      } else {
+        update.name = body.name.trim();
+      }
+    }
+
+    if (body.totalBudget !== undefined) {
+      if (typeof body.totalBudget !== "number" || body.totalBudget < 0) {
+        errors.push("totalBudget must be a non-negative number");
+      } else {
+        update.totalBudget = body.totalBudget;
+      }
+    }
+
+    if (body.remainingBudget !== undefined) {
+      if (typeof body.remainingBudget !== "number" || body.remainingBudget < 0) {
+        errors.push("remainingBudget must be a non-negative number");
+      } else {
+        update.remainingBudget = body.remainingBudget;
+      }
+    }
+
+    if (errors.length > 0) {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", details: errors },
+        { status: 400 }
+      );
+    }
+
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json(
+        { error: "NO_VALID_FIELDS", message: "No valid fields to update" },
+        { status: 400 }
+      );
+    }
+
+    const existing = await Houses.getById(id);
+    if (!existing) {
+      return NextResponse.json({ error: "House not found" }, { status: 404 });
+    }
+
+    // Prevent totalBudget shrinking below remainingBudget (prospective)
+    if (update.totalBudget !== undefined) {
+      const prospectiveRemaining =
+        update.remainingBudget !== undefined
+          ? update.remainingBudget
+          : existing.remainingBudget;
+      if (update.totalBudget < prospectiveRemaining) {
+        return NextResponse.json(
+          {
+            error: "INVALID_INVARIANT",
+            message:
+              "totalBudget cannot be less than remainingBudget",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Prevent remainingBudget exceeding totalBudget (effective)
+    if (update.remainingBudget !== undefined) {
+      const effectiveTotal = update.totalBudget ?? existing.totalBudget;
+      if (update.remainingBudget > effectiveTotal) {
+        return NextResponse.json(
+          {
+            error: "INVALID_INVARIANT",
+            message: "remainingBudget cannot exceed totalBudget",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Update the house with sanitized payload
+    const result = await Houses.update(id, update);
 
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: "House not found" }, { status: 404 });
     }
 
+    const updated = await Houses.getById(id);
+
     return NextResponse.json({
       success: true,
       modifiedCount: result.modifiedCount,
+      house: updated
+        ? {
+            houseId: updated._id?.toString(),
+            name: updated.name,
+            totalBudget: updated.totalBudget,
+            remainingBudget: updated.remainingBudget,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Error updating house:", error);
