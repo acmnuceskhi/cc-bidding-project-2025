@@ -112,72 +112,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prevent multiple bids from the same house in this round
-    const bidsForRound = await Bids.getByRound(roundId);
-    const existingBid = bidsForRound.find(
-      (bid) => bid.houseId.toString() === houseId
-    );
-    if (existingBid) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "BID_ALREADY_EXISTS",
-          message: "House has already placed a bid for this round",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Atomically reserve budget from house
-    // This prevents race conditions where multiple concurrent bids exceed budget
-    const updatedHouse = await Houses.reserveBudget(houseId, amount);
+    // Allow multiple bids from the same house within the 60-second window
+    // When a house places a new bid, it replaces the previous one
     
-    if (!updatedHouse) {
-      // Budget reservation failed - insufficient credits
-      // Fetch current budget for error message
-      const house = await Houses.getById(houseId);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "INSUFFICIENT_CREDITS",
-          message: `You have ${house?.remainingBudget || 0} credits remaining, but bid ${amount}`,
-        },
-        { status: 409 }
-      );
-    }
+    // First, check if there's an existing bid and get its amount
+    const { previousAmount, isNew } = await Bids.upsertBid(
+      roundId,
+      houseId,
+      round.participantId.toString(),
+      amount
+    );
 
-    // Create the bid with proper ObjectId conversion
-    const bid = {
-      roundId: new ObjectId(roundId.toString()),
-      houseId: new ObjectId(houseId.toString()),
-      participantId: new ObjectId(round.participantId.toString()),
-      amount: Number(amount),
-      timestamp: new Date(),
-      edits: 0,
-    };
+    // Calculate the budget difference
+    const budgetDifference = amount - previousAmount;
 
-    try {
-      const result = await Bids.create(bid);
+    // If the new bid is higher, we need to reserve more budget
+    // If the new bid is lower, we'll restore some budget
+    if (budgetDifference > 0) {
+      // Need to reserve additional budget
+      const updatedHouse = await Houses.reserveBudget(houseId, budgetDifference);
+      
+      if (!updatedHouse) {
+        // Budget reservation failed - insufficient credits
+        // Restore the previous bid amount
+        if (!isNew) {
+          await Bids.upsertBid(
+            roundId,
+            houseId,
+            round.participantId.toString(),
+            previousAmount
+          );
+        }
+        
+        const house = await Houses.getById(houseId);
+        return NextResponse.json(
+          {
+            success: false,
+            error: "INSUFFICIENT_CREDITS",
+            message: `You have ${house?.remainingBudget || 0} credits remaining, but need ${budgetDifference} more`,
+          },
+          { status: 409 }
+        );
+      }
 
       return NextResponse.json({
         success: true,
-        bidId: result.insertedId.toString(),
         remainingBudget: updatedHouse.remainingBudget,
-        message: "Bid submitted successfully",
+        message: isNew ? "Bid placed successfully" : "Bid updated successfully",
+        previousAmount,
+        newAmount: amount,
       });
-    } catch (bidError) {
-      // If bid creation fails, restore the budget
-      console.error("Bid creation failed, restoring budget:", bidError);
-      await Houses.restoreBudget(houseId, amount);
+    } else if (budgetDifference < 0) {
+      // New bid is lower, restore the difference
+      await Houses.restoreBudget(houseId, Math.abs(budgetDifference));
       
-      return NextResponse.json(
-        {
-          success: false,
-          error: "BID_CREATION_FAILED",
-          message: "Failed to create bid. Budget has been restored.",
-        },
-        { status: 500 }
-      );
+      const house = await Houses.getById(houseId);
+      return NextResponse.json({
+        success: true,
+        remainingBudget: house?.remainingBudget || 0,
+        message: "Bid updated successfully",
+        previousAmount,
+        newAmount: amount,
+      });
+    } else {
+      // Same amount, no budget change needed
+      const house = await Houses.getById(houseId);
+      return NextResponse.json({
+        success: true,
+        remainingBudget: house?.remainingBudget || 0,
+        message: "Bid confirmed",
+        previousAmount,
+        newAmount: amount,
+      });
     }
   } catch (error) {
     console.error("Error creating bid:", error);

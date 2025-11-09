@@ -38,7 +38,7 @@ export async function verifyPassword(
 
 // Generate JWT token
 export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" }); // 8 hours for better testing experience
 }
 
 // Verify JWT token

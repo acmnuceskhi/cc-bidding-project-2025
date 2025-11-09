@@ -9,7 +9,9 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "init-data": "npx tsx src/scripts/init-data.ts"
+    "init-data": "npx tsx src/scripts/init-data.ts",
+    "reset-auction": "npx tsx src/scripts/reset-auction.ts",
+    "full-reset": "npx tsx src/scripts/full-reset.ts"
   },
   "dependencies": {
     "babel-plugin-react-compiler": "^1.0.0",

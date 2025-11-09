@@ -125,4 +125,54 @@ export const Bids = {
     const client = await clientPromise;
     return client.db().collection<Bid>(collectionName).deleteOne({ _id: new ObjectId(id) });
   },
+
+  /**
+   * Update or create a bid for a house in a round (upsert)
+   * Returns the previous bid amount if it existed, or 0 if new
+   * @param roundId - Round ID
+   * @param houseId - House ID
+   * @param participantId - Participant ID
+   * @param amount - New bid amount
+   */
+  async upsertBid(
+    roundId: string,
+    houseId: string,
+    participantId: string,
+    amount: number
+  ): Promise<{ previousAmount: number; isNew: boolean }> {
+    const client = await clientPromise;
+    
+    // Find existing bid
+    const existingBid = await client
+      .db()
+      .collection<Bid>(collectionName)
+      .findOne({
+        roundId: new ObjectId(roundId),
+        houseId: new ObjectId(houseId),
+      });
+
+    const previousAmount = existingBid?.amount || 0;
+    const isNew = !existingBid;
+
+    // Update or insert
+    await client
+      .db()
+      .collection<Bid>(collectionName)
+      .updateOne(
+        {
+          roundId: new ObjectId(roundId),
+          houseId: new ObjectId(houseId),
+        },
+        {
+          $set: {
+            participantId: new ObjectId(participantId),
+            amount: amount,
+            timestamp: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+    return { previousAmount, isNew };
+  },
 };

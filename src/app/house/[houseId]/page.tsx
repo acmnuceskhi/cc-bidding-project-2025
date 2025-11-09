@@ -77,18 +77,11 @@ export default function HouseDashboard() {
         );
         setCurrentParticipant(matchedParticipant || null);
 
-        // ✅ Update time remaining
-        // setTimeLeft(Math.max(0, new Date(active.timerEnd).getTime() - Date.now()));
-        const interval = setInterval(() => {
-          setTimeLeft((t) => Math.max(0, new Date(active.timerEnd).getTime() - Date.now()));
-        }, 1000);
+        // ✅ Update time remaining from server time
+        setTimeLeft(Math.max(0, new Date(active.timerEnd).getTime() - Date.now()));
 
-        // ✅ Check if this house already placed a bid
-        const bidsResponse = await fetchWithAuth(`/api/bids?participantId=${active.participantId}`);
-        const bids = await bidsResponse.json();
-        setHasBid(bids.some((bid: Bid) => bid.houseId === houseId));
-
-        return () => clearInterval(interval);
+        // ✅ No longer checking for existing bids - allow multiple bids
+        setHasBid(false);
       } catch (error) {
         console.error("Error fetching data:", error);
         setHouse(null);
@@ -101,6 +94,13 @@ export default function HouseDashboard() {
 
     // ✅ Fetch once when the component mounts
     fetchData();
+    
+    // Poll every 2 seconds for real-time sync
+    const pollInterval = setInterval(() => {
+      fetchData();
+    }, 2000);
+    
+    return () => clearInterval(pollInterval);
   }, [houseId]);
 
   const placeBid = async () => {
@@ -108,21 +108,44 @@ export default function HouseDashboard() {
     setLoading(true);
 
     try {
-      await fetchWithAuth("/api/bids", {
+      const response = await fetchWithAuth("/api/bids", {
         method: "POST",
         body: JSON.stringify({
-          // houseId,
           roundId: activeRound.roundId,
           amount: bidAmount,
         }),
       });
 
-      setHasBid(true);
-      setHouse(prev =>
-        prev ? { ...prev, remainingBudget: prev.remainingBudget - bidAmount } : prev
-      );
+      const data = await response.json();
+
+      // Check if the request was successful
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to place bid");
+      }
+
+      // Update house budget with the actual remaining budget from server
+      if (typeof data.remainingBudget === 'number') {
+        setHouse(prev =>
+          prev ? { ...prev, remainingBudget: data.remainingBudget } : prev
+        );
+      } else {
+        console.error("Invalid remainingBudget in response:", data);
+        // Fallback: refetch house data
+        const housesResponse = await fetchWithAuth("/api/houses");
+        const allHouses = await housesResponse.json();
+        const updatedHouse = allHouses.find((h: HouseApiResponse) => h.houseId === houseId);
+        if (updatedHouse) {
+          setHouse(updatedHouse);
+        }
+      }
+      
       setBidAmount(0);
-      alert("✅ Bid placed successfully!");
+      
+      if (data.previousAmount && data.previousAmount > 0) {
+        alert(`✅ Bid updated from $${data.previousAmount} to $${data.newAmount}!`);
+      } else {
+        alert("✅ Bid placed successfully! You can update it anytime.");
+      }
     } catch (error: any) {
       console.error(error);
       alert(`⚠️ ${error.message || "Failed to place bid."}`);
@@ -301,7 +324,7 @@ export default function HouseDashboard() {
 
               {/* Bidding Section */}
               <div className="bg-black bg-opacity-80 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
-                {timeLeftValue > 0 && !hasBid ? (
+                {timeLeftValue > 0 ? (
                   <div className="space-y-6">
                     <h2 className="text-3xl font-bold text-yellow-400 text-center">
                       💰 PLACE YOUR BID
@@ -312,8 +335,12 @@ export default function HouseDashboard() {
                         id="bidAmount"
                         min="1"
                         max={house.remainingBudget}
-                        value={bidAmount}
-                        onChange={(e) => setBidAmount(Number(e.target.value))}
+                        value={bidAmount || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          // Only set if it's a valid number or empty string
+                          setBidAmount(val === "" ? 0 : parseInt(val, 10));
+                        }}
                         className="flex-1 bg-gray-800 border-4 border-yellow-600 rounded-xl px-6 py-4 text-white text-2xl font-bold focus:outline-none focus:ring-4 focus:ring-yellow-500"
                         placeholder="Enter bid amount"
                       />
@@ -336,13 +363,6 @@ export default function HouseDashboard() {
                         </p>
                       </div>
                     )}
-                  </div>
-                ) : hasBid ? (
-                  <div className="bg-green-900 border-4 border-green-500 rounded-xl p-6 text-center">
-                    <p className="text-green-300 font-bold text-2xl">
-                      ✅ Your bid has been placed for this warrior!
-                    </p>
-                    <p className="text-green-400 mt-2">Wait for the round to complete</p>
                   </div>
                 ) : (
                   <div className="bg-red-900 border-4 border-red-500 rounded-xl p-6 text-center">
