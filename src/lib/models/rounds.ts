@@ -9,6 +9,7 @@ export interface Round {
   timerEnd?: Date | null; // Timestamp when round ends, optional to allow manual admin control
   scheduledStart?: Date | null; // Round scheduled start time
   finalized?: boolean; // To indicate participant sold or up for next pass
+  winningBid?: number; // Final winning bid amount, if any
   // bids: Bid[]; Removed since redundant; bids.ts already present
 }
 
