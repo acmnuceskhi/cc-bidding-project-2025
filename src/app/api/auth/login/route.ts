@@ -44,29 +44,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already has an active session
-    if (user.activeSessionToken && user.lastActiveAt) {
-      const minutesSinceLastActive =
-        (Date.now() - new Date(user.lastActiveAt).getTime()) / (1000 * 60);
+    // if (user.activeSessionToken && user.lastActiveAt) {
+    //       const minutesSinceLastActive =
+    //         (Date.now() - new Date(user.lastActiveAt).getTime()) / (1000 * 60);
 
-      if (minutesSinceLastActive < SESSION_TIMEOUT_MINUTES) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "ALREADY_LOGGED_IN",
-            message: `User is already logged in elsewhere. Please wait ${Math.ceil(
-              SESSION_TIMEOUT_MINUTES - minutesSinceLastActive
-            )} minutes or log out from that device.`,
-          },
-          { status: 403 }
-        );
-      }
+    //       if (minutesSinceLastActive < SESSION_TIMEOUT_MINUTES) {
+    //         return NextResponse.json(
+    //           {
+    //             success: false,
+    //             error: "ALREADY_LOGGED_IN",
+    //             message: `User is already logged in elsewhere. Please wait ${Math.ceil(
+    //               SESSION_TIMEOUT_MINUTES - minutesSinceLastActive
+    //             )} minutes or log out from that device.`,
+    //           },
+    //           { status: 403 }
+    //         );
+    //       }
 
       // Session is stale → clear it before logging in again
-      await Users.update(user._id!.toString(), {
-        activeSessionToken: null,
-        lastActiveAt: null,
-      });
-    }
+      // await Users.update(user._id!.toString(), {
+      //         activeSessionToken: null,
+      //         lastActiveAt: null,
+      //       });
+      //     }
 
     // Generate new JWT session token
     const tokenPayload = {
