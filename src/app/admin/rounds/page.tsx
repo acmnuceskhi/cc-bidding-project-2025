@@ -3,15 +3,15 @@
 import { useState, useEffect } from "react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
-interface Bid {
-  _id?: string;
-  roundId: string;
-  houseId: string;
-  participantId: string;
-  amount: number;
-  timestamp: Date;
-  edits?: number;
-}
+// interface Bid {
+//   _id?: string;
+//   roundId: string;
+//   houseId: string;
+//   participantId: string;
+//   amount: number;
+//   timestamp: Date;
+//   edits?: number;
+// }
 
 interface House {
   houseId?: string;
@@ -39,12 +39,14 @@ interface filteredRound {
   timerEnd?: string; // string from API, parse to Date
   scheduledStart?: string; // string from API, parse to Date
   finalized?: boolean;
+  winningBid?: number;
 }
 
 interface filteredParticipant {
   participantId: string;
   name: string;
   picture?: string;
+  houseId: string
 }
 
 export default function RoundsPage() {
@@ -70,12 +72,12 @@ export default function RoundsPage() {
       const housesData: House[] = await housesRes.json();
 
       // Sort the API rounds before mapping
-      const sortedRoundsData = roundsData.sort((a, b) => {
-        // Example: sort by scheduledStart if present
-        const dateA = a.scheduledStart ? new Date(a.scheduledStart).getTime() : 0;
-        const dateB = b.scheduledStart ? new Date(b.scheduledStart).getTime() : 0;
-        return dateA - dateB;
-      });
+      // const sortedRoundsData = roundsData.sort((a, b) => {
+      //   // Example: sort by scheduledStart if present
+      //   const dateA = a.scheduledStart ? new Date(a.scheduledStart).getTime() : 0;
+      //   const dateB = b.scheduledStart ? new Date(b.scheduledStart).getTime() : 0;
+      //   return dateA - dateB;
+      // });
 
       // Map rounds to RoundWithDetails
       const mapped: RoundWithDetails[] = roundsData.map((round, index) => {
@@ -100,6 +102,10 @@ export default function RoundsPage() {
           status = "not_started";
         }
 
+        const house = housesData.find(
+          (h) => String(h.houseId) === String(participant?.houseId)
+        );
+
         return {
           _id: round._id || round.roundId,
           roundNumber: index + 1,
@@ -107,32 +113,36 @@ export default function RoundsPage() {
           participantPicture: participant?.picture,
           status,
           timerEnd: timerEndDate,
+          winningBid: round.winningBid,
+          winnerHouse: house?.name ?? "Unknown",
         };
       });
 
+      // Fetching Winning Bid and House from db above instead of manual calculation
       // After fetching winning bids for completed rounds
-      await Promise.all(
-        mapped.map(async (r) => {
-          if (r.status === "completed") {
-            try {
-              const bidsRes = await fetchWithAuth(`/api/bids?roundId=${r._id}`);
-              const bids: Bid[] = await bidsRes.json();
-              if (bids.length > 0) {
-                const topBid = bids.reduce((max, bid) =>
-                  bid.amount > max.amount ? bid : max
-                );
-                r.winningBid = topBid.amount;
-                const house = housesData.find(
-                  (h) => String(h.houseId) === String(topBid.houseId)
-                );
-                r.winnerHouse = house?.name ?? "Unknown";
-              }
-            } catch (error) {
-              console.error(`Failed to fetch bids for round ${r._id}:`, error);
-            }
-          }
-        })
-      );
+      // await Promise.all(
+      //   mapped.map(async (r) => {
+      //     if (r.status === "completed") {
+      //       // r.winningBid
+      //       try {
+      //         const bidsRes = await fetchWithAuth(`/api/bids?roundId=${r._id}`);
+      //         const bids: Bid[] = await bidsRes.json();
+      //         if (bids.length > 0) {
+      //           const topBid = bids.reduce((max, bid) =>
+      //             bid.amount > max.amount ? bid : max
+      //           );
+      //           r.winningBid = topBid.amount;
+      //           const house = housesData.find(
+      //             (h) => String(h.houseId) === String(topBid.houseId)
+      //           );
+      //           r.winnerHouse = house?.name ?? "Unknown";
+      //         }
+      //       } catch (error) {
+      //         console.error(`Failed to fetch bids for round ${r._id}:`, error);
+      //       }
+      //     }
+      //   })
+      // );
 
       // Sort rounds by roundNumber before updating state
       const sortedMapped = mapped.sort((a, b) => {
