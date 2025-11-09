@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { House } from "@/lib/models/houses";
+// import { House } from "@/lib/models/houses";
 import { Participant } from "@/lib/models/participants";
 import { fetchWithAuth } from "@/lib/fetchWithAuth"; // make sure this exists
 
@@ -15,6 +15,13 @@ interface Round {
   participantId: string;
   winningHouseId: string;
   winningBid: number;
+}
+
+interface House {
+  houseId?: string;
+  name: string;
+  totalBudget: number;
+  remainingBudget: number;
 }
 
 export default function HousesPage() {
@@ -54,7 +61,7 @@ export default function HousesPage() {
         // Group participants by houseId
         const grouped: Record<string, PlayerWithPrice[]> = {};
         housesData.forEach((house) => {
-          const houseId = typeof house._id === "object" ? house._id?.toString?.() : house._id;
+          const houseId = typeof house.houseId === "object" ? house.houseId : house.houseId;
           if (houseId) grouped[houseId] = [];
         });
 
@@ -104,13 +111,13 @@ export default function HousesPage() {
       </div>
 
       {houses.map((house, index) => {
-        const players = housePlayers[house._id?.toString() || ""] || [];
+        const players = housePlayers[house.houseId?.toString() || ""] || [];
         const totalSpent = house.totalBudget - house.remainingBudget;
         const percentage = house.totalBudget ? (house.remainingBudget / house.totalBudget) * 100 : 0;
 
         return (
           <div
-            key={house._id?.toString() || `house-${index}`}
+            key={house.houseId?.toString() || `house-${index}`}
             className={`bg-gradient-to-br ${getHouseGradient(
               index
             )} rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl`}
@@ -147,7 +154,7 @@ export default function HousesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {players.map((player, idx) => (
                   <div
-                    key={player._id?.toString() || `player-${house._id}-${idx}`}
+                    key={player._id?.toString() || `player-${house.houseId}-${idx}`}
                     className="bg-black bg-opacity-40 rounded-xl p-4 border-2 border-yellow-500 hover:border-yellow-300 transition-all transform hover:scale-105"
                   >
                     <div className="flex items-center gap-4">

@@ -3,10 +3,11 @@
 
 import { useState, useEffect } from "react";
 import { Participant } from "@/lib/models/participants";
-import { House } from "@/lib/models/houses";
+// import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface PlayerWithDetails extends Participant {
+  participantId: string;
   status: "available" | "sold";
   soldTo?: string;
   soldToHouseName?: string;
@@ -20,6 +21,13 @@ interface Round {
   winningHouseId?: string;
   winningBid?: number;
   roundNumber: number;
+}
+
+interface House {
+  houseId?: string;
+  name: string;
+  totalBudget: number;
+  remainingBudget: number;
 }
 
 export default function PlayersPage() {
@@ -49,15 +57,17 @@ export default function PlayersPage() {
 
         // --- Build player data ---
         const playersData: PlayerWithDetails[] = participants.map(
-          (participant: Participant) => {
+          (participant: PlayerWithDetails) => {
             const round = rounds.find(
-              (r: Round) => r.participantId === participant._id?.toString()
+              (r: Round) => r.participantId === participant.participantId
             );
-
-            if (round && round.winningHouseId && round.winningBid) {
+            
+            console.log("Round Participant ID", round, " participant House ID:", participant.houseId);
+            if (round && participant.houseId && round.finalized) {
               const house = houses.find(
-                (h: House) => h._id?.toString() === round.winningHouseId
+                (h: House) => h.houseId?.toString() === participant.houseId?.toString()
               );
+              // const winningBid;
               return {
                 ...participant,
                 status: "sold",

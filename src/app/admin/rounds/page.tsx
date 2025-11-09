@@ -14,7 +14,7 @@ interface Bid {
 }
 
 interface House {
-  _id?: string;
+  houseId?: string;
   name: string;
   totalBudget: number;
   remainingBudget: number;
@@ -33,10 +33,12 @@ interface RoundWithDetails {
 
 interface filteredRound {
   _id: string; // matches MongoDB _id
+  roundId: string; // matches MongoDB _id
   participantId: string;
   status: "scheduled" | "active" | "completed"; // matches schema
   timerEnd?: string; // string from API, parse to Date
   scheduledStart?: string; // string from API, parse to Date
+  finalized?: boolean;
 }
 
 interface filteredParticipant {
@@ -99,7 +101,7 @@ export default function RoundsPage() {
         }
 
         return {
-          _id: round._id,
+          _id: round._id || round.roundId,
           roundNumber: index + 1,
           participantName: participant?.name ?? "Unknown",
           participantPicture: participant?.picture,
@@ -121,7 +123,7 @@ export default function RoundsPage() {
                 );
                 r.winningBid = topBid.amount;
                 const house = housesData.find(
-                  (h) => String(h._id) === String(topBid.houseId)
+                  (h) => String(h.houseId) === String(topBid.houseId)
                 );
                 r.winnerHouse = house?.name ?? "Unknown";
               }
