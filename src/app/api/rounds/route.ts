@@ -114,6 +114,7 @@ export async function GET(request: NextRequest) {
       finalized: !!round.finalized,
       timerEnd: round.timerEnd ? round.timerEnd.toISOString() : null,
       scheduledStart: round.scheduledStart ? round.scheduledStart.toISOString() : null,
+      winningBid: round.winningBid || null,
     }));
 
     return NextResponse.json(formattedRounds);

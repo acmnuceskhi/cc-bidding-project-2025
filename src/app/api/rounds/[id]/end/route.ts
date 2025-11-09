@@ -114,6 +114,7 @@ export async function POST(
                 status: "completed",
                 timerEnd: new Date(),
                 finalized: !!winningHouse,
+                winningBid: winningBid ? winningBid.amount : null,
               },
             },
             { session }
