@@ -3,211 +3,126 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-export default function Home() {
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+type Phase = "before" | "active" | "after";
+
+export default function LandingPage() {
+  const [phase, setPhase] = useState<Phase>("before");
+  const [timeLeft, setTimeLeft] = useState(0);//fetched from backend, but hardcoded rn
+
+  // //fetching phase and countdown from backend
+  // useEffect(() => {
+  //   async function fetchPhase() {
+  //     try {
+  //       const res = await fetch("/api/"); //unsure about this rn
+  //       const data = await res.json();
+  //       setPhase(data.phase); //before/active/after
+  //       setTimeLeft(data.timeLeft); 
+  //     } catch (err) {
+  //       console.error("Failed to fetch landing status", err);
+  //     }
+  //   }
+  //   fetchPhase();
+  //   const interval = setInterval(fetchPhase, 1000); // refreshing every second
+  //   return () => clearInterval(interval);
+  // }, []);
 
   useEffect(() => {
-    // checkAuthentication(); // disabled for UI testing
-    setIsAuthenticated(true);
-    setLoading(false);
+    const updatePhase = () => {
+      const now = new Date();
+      const beforeEnd = new Date("2025-11-18T10:00:00"); // before
+      const activeEnd = new Date("2025-11-18T12:00:00"); // active 
+
+      if (now < beforeEnd) {
+        setPhase("before");
+        setTimeLeft(Math.floor((beforeEnd.getTime() - now.getTime()) / 1000));
+      } else if (now >= beforeEnd && now < activeEnd) {
+        setPhase("active");
+        setTimeLeft(Math.floor((activeEnd.getTime() - now.getTime()) / 1000));
+      } else {
+        setPhase("after");
+        setTimeLeft(0);
+      }
+    };
+
+    updatePhase(); //initial run
+    const interval = setInterval(updatePhase, 1000); //updates every second
+    return () => clearInterval(interval);
   }, []);
 
-  const checkAuthentication = async () => {
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-    const houseId = localStorage.getItem("houseId");
 
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    // Verify token and redirect based on role
-    try {
-      const response = await fetch("/api/auth/me", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const userData = await response.json();
-
-        // Redirect based on role
-        if (userData.role === "admin") {
-          window.location.href = "/admin";
-        } else if (userData.role === "house_captain" && userData.houseId) {
-          window.location.href = `/house/${userData.houseId}`;
-        } else {
-          // Show home page for other cases
-          setIsAuthenticated(true);
-          fetchHouses();
-        }
-      } else {
-        localStorage.removeItem("token");
-        localStorage.removeItem("role");
-        localStorage.removeItem("houseId");
-        window.location.href = "/login";
-      }
-    } catch (error) {
-      console.error("Auth check failed:", error);
-      window.location.href = "/login";
-    }
-  };
-
-  const fetchHouses = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/houses", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setHouses(Array.isArray(data) ? data : []);
-      }
-    } catch (error) {
-      console.error("Error fetching houses:", error);
-      setHouses([]);
-    } finally {
-      setLoading(false);
-    }
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
   return (
     <div
-      className="min-h-screen bg-cover bg-center bg-fixed relative"
-      style={{
-        backgroundImage: "url('/arena-background.jpg')",
-      }}
+      className="min-h-screen bg-cover bg-center flex flex-col items-center justify-center text-center relative"
+      style={{ backgroundImage: "url('/arena-background.jpg')" }}
     >
-      {/* Dark overlay for text visibility */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
 
       {/* Content */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-16">
-        <div className="max-w-6xl w-full">
-          {/* Header */}
-          <div className="text-center mb-16">
-            <h1 className="text-7xl font-bold mb-4 text-yellow-400 drop-shadow-2xl">
-              🏆 CODERS CUP 2025
-            </h1>
-            <p className="text-3xl text-gray-200 font-semibold">
-              Kung Fu Panda Bidding Arena
+      <div className="relative z-10 px-6">
+        {/* Title */}
+        <h1 className="text-6xl md:text-8xl font-extrabold mb-4 text-[#FFD700] drop-shadow-[0_0_20px_#B22222] tracking-wide">
+          🏆 CODERS CUP 2025
+        </h1>
+        <p className="text-2xl md:text-3xl text-[#FFB800] mb-12 drop-shadow-[0_0_10px_#FF0000] font-semibold">
+          Kung Fu Panda Bidding Arena
+        </p>
+
+        {/* Phase-dependent stuff */}
+        {phase === "before" && (
+          <div>
+            <h2 className="text-4xl text-white mb-6 drop-shadow-[0_0_15px_#FFD700]">
+              Bidding begins in
+            </h2>
+            <div className="text-7xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_20px_#FF0000]">
+              {formatTime(timeLeft)}
+            </div>
+            <p className="text-lg text-gray-300 italic">
+              Get ready, warriors are assembling...
             </p>
           </div>
+        )}
 
-          {/* Main Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            {/* House Captain Card */}
-            <Link href="/login">
-              <div className="bg-gradient-to-br from-red-800 to-orange-800 rounded-2xl p-8 hover:scale-105 transition-all duration-300 cursor-pointer border-4 border-yellow-600 shadow-2xl group">
-                <div className="text-center">
-                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">
-                    🏯
-                  </div>
-                  <h2 className="text-3xl font-bold mb-4 text-yellow-400">
-                    House Captain
-                  </h2>
-                  <p className="text-gray-200 text-lg">
-                    Lead your house to victory! Place strategic bids to recruit
-                    the best warriors.
-                  </p>
-                  <div className="mt-6 bg-black/40 rounded-lg py-3 px-4">
-                    <span className="text-yellow-300 font-semibold">
-                      🔒 Login Required
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* Projector Card */}
-            <Link href="/projector">
-              <div className="bg-gradient-to-br from-yellow-600 to-orange-700 rounded-2xl p-8 hover:scale-105 transition-all duration-300 cursor-pointer border-4 border-yellow-400 shadow-2xl group">
-                <div className="text-center">
-                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">
-                    📺
-                  </div>
-                  <h2 className="text-3xl font-bold mb-4 text-black">
-                    Projector Display
-                  </h2>
-                  <p className="text-black text-lg font-medium">
-                    Watch the auction live! See which warriors are up for
-                    bidding in real-time.
-                  </p>
-                  <div className="mt-6 bg-black/40 rounded-lg py-3 px-4">
-                    <span className="text-yellow-200 font-semibold">
-                      ✨ Public Access
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-
-            {/* Admin Card */}
-            <Link href="/login">
-              <div className="bg-gradient-to-br from-black to-gray-900 rounded-2xl p-8 hover:scale-105 transition-all duration-300 cursor-pointer border-4 border-red-600 shadow-2xl group">
-                <div className="text-center">
-                  <div className="text-6xl mb-4 group-hover:scale-110 transition-transform">
-                    👑
-                  </div>
-                  <h2 className="text-3xl font-bold mb-4 text-red-500">
-                    Admin Control
-                  </h2>
-                  <p className="text-gray-200 text-lg">
-                    Master the auction! Start rounds, monitor bids, and control
-                    the entire arena.
-                  </p>
-                  <div className="mt-6 bg-red-900/60 rounded-lg py-3 px-4 border-2 border-red-500">
-                    <span className="text-red-300 font-semibold">
-                      ⚔️ Admin Login Required
-                    </span>
-                  </div>
-                </div>
-              </div>
+        {phase === "active" && (
+          <div>
+            <h2 className="text-5xl text-[#00FF88] mb-8 font-bold drop-shadow-[0_0_15px_#FFD700]">
+              The Bidding Has Begun!
+            </h2>
+            <Link
+              href="/projector"
+              className="inline-block px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#FF4500] text-black font-bold text-xl rounded-full hover:scale-105 transition-transform shadow-[0_0_25px_rgba(255,215,0,0.6)]"
+            >
+              ⚔️ Watch Live Projector
             </Link>
           </div>
+        )}
 
-          {/* How It Works Section */}
-          <div className="bg-black/60 backdrop-blur-md rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
-            <h3 className="text-3xl font-bold mb-8 text-center text-yellow-400">
-              ⚔️ How The Battle Works
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="text-center">
-                <div className="text-5xl mb-4">🥋</div>
-                <h4 className="font-bold text-xl mb-3 text-yellow-300">
-                  Round Begins
-                </h4>
-                <p className="text-gray-300">
-                  Admin selects a warrior and starts a 60-second bidding battle
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="text-5xl mb-4">💰</div>
-                <h4 className="font-bold text-xl mb-3 text-yellow-300">
-                  Houses Bid
-                </h4>
-                <p className="text-gray-300">
-                  Each house places their secret bid within their remaining
-                  treasury
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="text-5xl mb-4">🏆</div>
-                <h4 className="font-bold text-xl mb-3 text-yellow-300">
-                  Victor Emerges
-                </h4>
-                <p className="text-gray-300">
-                  Highest bid wins! In case of tie, the first bid claims victory
-                </p>
-              </div>
-            </div>
+        {phase === "after" && (
+          <div>
+            <h2 className="text-5xl text-[#FF4444] mb-8 font-bold drop-shadow-[0_0_15px_#FFD700]">
+              The Bidding Has Ended!
+            </h2>
+            <Link
+              href="/results"
+              className="inline-block px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#B22222] text-black font-bold text-xl rounded-full hover:scale-105 transition-transform shadow-[0_0_25px_rgba(255,215,0,0.6)]"
+            >
+              🏁 View Final Results
+            </Link>
           </div>
-        </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="absolute bottom-6 text-gray-400 text-sm">
+        Powered by <span className="text-[#FFD700] font-semibold">CC Tech Team</span>
       </div>
     </div>
   );
