@@ -31,10 +31,10 @@ export async function GET() {
 
     // Calculate remaining time in seconds
     const now = Date.now();
-    const timerRemaining = Math.max(
-      0,
-      Math.floor((activeRound.timerEnd.getTime() - now) / 1000)
-    );
+    const timerEnd = activeRound.timerEnd?.getTime();
+    const timerRemaining = timerEnd
+      ? Math.max(0, Math.floor((timerEnd - now) / 1000))
+      : 0;
 
     // Collect houses that have placed bids (no amounts)
     const bidsPlaced = roundBids.map((bid) => ({
