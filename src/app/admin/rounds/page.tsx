@@ -1,33 +1,48 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+
+interface Bid {
+  _id?: string;
+  roundId: string;
+  houseId: string;
+  participantId: string;
+  amount: number;
+  timestamp: Date;
+  edits?: number;
+}
+
+interface House {
+  _id?: string;
+  name: string;
+  totalBudget: number;
+  remainingBudget: number;
+}
 
 interface RoundWithDetails {
   _id: string;
-  roundNumber: number;
+  roundNumber: number; // can be indexed or derived
   participantName: string;
   participantPicture?: string;
-  status: "not_started" | "active" | "completed";
+  status: "not_started" | "active" | "completed"; // UI-friendly status
   winnerHouse?: string;
   winningBid?: number;
   timerEnd?: Date;
 }
 
 interface filteredRound {
-  roundId: string;
+  _id: string; // matches MongoDB _id
   participantId: string;
-  status: "not_started" | "active" | "completed";
-  timerEnd: string;
-  scheduledStart: string | undefined;
-  bids: {
-    bidId: string;
-    houseId: string;
-    amount: number;
-    timestamp: string;
-    edits: number;
-  }[];
+  status: "scheduled" | "active" | "completed"; // matches schema
+  timerEnd?: string; // string from API, parse to Date
+  scheduledStart?: string; // string from API, parse to Date
+}
+
+interface filteredParticipant {
+  participantId: string;
+  name: string;
+  picture?: string;
 }
 
 export default function RoundsPage() {
@@ -52,51 +67,78 @@ export default function RoundsPage() {
       const participantsData: filteredParticipant[] = await participantsRes.json();
       const housesData: House[] = await housesRes.json();
 
+      // Sort the API rounds before mapping
+      const sortedRoundsData = roundsData.sort((a, b) => {
+        // Example: sort by scheduledStart if present
+        const dateA = a.scheduledStart ? new Date(a.scheduledStart).getTime() : 0;
+        const dateB = b.scheduledStart ? new Date(b.scheduledStart).getTime() : 0;
+        return dateA - dateB;
+      });
+
       // Map rounds to RoundWithDetails
-      const mapped: RoundWithDetails[] = roundsData.map((round: filteredRound) => {
-        const participant = participantsData.find(
-          (p) => p.participantId === round.participantId?.toString()
-        );
+      const mapped: RoundWithDetails[] = roundsData.map((round, index) => {
+        const participant = participantsData.find(p => p.participantId === round.participantId);
 
         const now = new Date();
         let status: "not_started" | "active" | "completed" = "not_started";
-        const timerEndDate = round.timerEnd ? new Date(round.timerEnd) : undefined;
-        const scheduledStartDate = round.scheduledStart
-          ? new Date(round.scheduledStart)
-          : undefined;
+        const timerEndDate =
+          round.timerEnd && !isNaN(new Date(round.timerEnd).getTime())
+            ? new Date(round.timerEnd)
+            : undefined;
+        // const scheduledStartDate = round.scheduledStart ? new Date(round.scheduledStart) : undefined;
 
-        if (round.status === "active") status = "active";
-        else if (round.status === "completed" || (timerEndDate && timerEndDate < now))
+        // Map schema status to UI-friendly status
+        // Respect DB status first, only use time checks as fallback for active rounds
+        if (round.status === "completed") {
           status = "completed";
-        else if (round.status === "scheduled" || (scheduledStartDate && scheduledStartDate > now))
+        } else if (round.status === "active") {
+          // For active rounds, check if timer has expired
+          status = timerEndDate && timerEndDate < now ? "completed" : "active";
+        } else if (round.status === "scheduled") {
           status = "not_started";
-
-        let winningBid: number | undefined;
-        let winnerHouse: string | undefined;
-
-        if (round.bids && round.bids.length > 0 && status === "completed") {
-          const topBid = round.bids.reduce((maxBid, bid) =>
-            (bid.amount ?? 0) > (maxBid.amount ?? 0) ? bid : maxBid
-          );
-
-          winningBid = topBid.amount;
-          const house = housesData.find((h) => String(h._id) === String(topBid.houseId));
-          winnerHouse = house?.name ?? "Unknown";
         }
 
         return {
-          _id: String(round.roundId),
-          roundNumber: Number(round.roundNumber) || 0,
+          _id: round._id,
+          roundNumber: index + 1,
           participantName: participant?.name ?? "Unknown",
           participantPicture: participant?.picture,
           status,
-          winnerHouse,
-          winningBid,
           timerEnd: timerEndDate,
         };
       });
 
-      setRounds(mapped);
+      // After fetching winning bids for completed rounds
+      await Promise.all(
+        mapped.map(async (r) => {
+          if (r.status === "completed") {
+            try {
+              const bidsRes = await fetchWithAuth(`/api/bids?roundId=${r._id}`);
+              const bids: Bid[] = await bidsRes.json();
+              if (bids.length > 0) {
+                const topBid = bids.reduce((max, bid) =>
+                  bid.amount > max.amount ? bid : max
+                );
+                r.winningBid = topBid.amount;
+                const house = housesData.find(
+                  (h) => String(h._id) === String(topBid.houseId)
+                );
+                r.winnerHouse = house?.name ?? "Unknown";
+              }
+            } catch (error) {
+              console.error(`Failed to fetch bids for round ${r._id}:`, error);
+            }
+          }
+        })
+      );
+
+      // Sort rounds by roundNumber before updating state
+      const sortedMapped = mapped.sort((a, b) => {
+        if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
+        return (a.timerEnd?.getTime() || 0) - (b.timerEnd?.getTime() || 0);
+      });
+
+      setRounds(sortedMapped);
     } catch (err) {
       console.error("Error fetching rounds:", err);
     } finally {
@@ -158,9 +200,9 @@ export default function RoundsPage() {
       {loading && <div className="text-center text-yellow-400 text-lg">Loading...</div>}
 
       <div className="space-y-4">
-        {rounds.map((round) => (
+        {rounds.map((round, index) => (
           <div
-            key={round._id}
+            key={round._id || `round-${index}`}
             className={`rounded-xl p-6 border-4 shadow-lg transition-all ${
               round.status === "active"
                 ? "bg-gradient-to-r from-yellow-700 to-orange-700 border-yellow-400 animate-pulse"
@@ -256,11 +298,13 @@ export default function RoundsPage() {
                 <strong>Winner House:</strong> {selectedRound.winnerHouse}
               </p>
             )}
-            {selectedRound.winningBid !== undefined && (
+            {selectedRound.winningBid !== undefined ? (
               <p className="mb-2">
                 <strong>Winning Bid:</strong> ${selectedRound.winningBid}
               </p>
-            )}
+            ) : selectedRound.status === "completed" ? (
+              <p className="mb-2 text-gray-400">No bids placed</p>
+            ) : null}
             <p className="mb-2">
               <strong>Status:</strong> {getStatusText(selectedRound.status)}
             </p>

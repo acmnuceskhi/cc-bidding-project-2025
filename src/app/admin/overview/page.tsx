@@ -173,7 +173,7 @@ export default function OverviewPage() {
       <div className="bg-black bg-opacity-40 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
         <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">🏯 House Treasuries</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {houses.map((house) => {
+          {houses.map((house, index) => {
             const percentage = (house.remainingBudget / house.totalBudget) * 100;
             const getColor = () => {
               if (percentage > 70) return "from-green-600 to-green-800";
@@ -183,7 +183,7 @@ export default function OverviewPage() {
 
             return (
               <div
-                key={house._id?.toString()}
+                key={house._id?.toString() || `house-${index}`}
                 className={`bg-gradient-to-br ${getColor()} rounded-xl p-6 border-2 border-yellow-600 shadow-lg transform hover:scale-105 transition-all`}
               >
                 <h3 className="text-2xl font-bold text-white mb-3 text-center">{house.name}</h3>

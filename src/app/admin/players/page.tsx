@@ -56,7 +56,7 @@ export default function PlayersPage() {
 
             if (round && round.winningHouseId && round.winningBid) {
               const house = houses.find(
-                (h: House) => h._id.toString() === round.winningHouseId
+                (h: House) => h._id?.toString() === round.winningHouseId
               );
               return {
                 ...participant,
@@ -166,9 +166,9 @@ export default function PlayersPage() {
 
       {/* Players Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedPlayers.map((player) => (
+        {sortedPlayers.map((player, index) => (
           <div
-            key={player._id?.toString()}
+            key={player._id?.toString() || `player-${index}`}
             className={`rounded-xl p-6 border-4 shadow-lg transform hover:scale-105 transition-all ${
               player.status === "available"
                 ? "bg-gradient-to-br from-gray-700 to-gray-900 border-gray-500"

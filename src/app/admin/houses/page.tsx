@@ -106,11 +106,11 @@ export default function HousesPage() {
       {houses.map((house, index) => {
         const players = housePlayers[house._id?.toString() || ""] || [];
         const totalSpent = house.totalBudget - house.remainingBudget;
-        const percentage = (house.remainingBudget / house.totalBudget) * 100;
+        const percentage = house.totalBudget ? (house.remainingBudget / house.totalBudget) * 100 : 0;
 
         return (
           <div
-            key={house._id?.toString()}
+            key={house._id?.toString() || `house-${index}`}
             className={`bg-gradient-to-br ${getHouseGradient(
               index
             )} rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl`}
@@ -145,9 +145,9 @@ export default function HousesPage() {
             {/* Players Grid */}
             {players.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {players.map((player) => (
+                {players.map((player, idx) => (
                   <div
-                    key={player._id?.toString()}
+                    key={player._id?.toString() || `player-${house._id}-${idx}`}
                     className="bg-black bg-opacity-40 rounded-xl p-4 border-2 border-yellow-500 hover:border-yellow-300 transition-all transform hover:scale-105"
                   >
                     <div className="flex items-center gap-4">
