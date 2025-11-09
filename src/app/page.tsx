@@ -50,12 +50,22 @@ export default function LandingPage() {
   }, []);
 
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
+  // Convert total seconds into days, hours, minutes, seconds (all padded to 2 digits)
+  const getDHMS = (totalSeconds: number) => {
+    const s = Math.max(0, Math.floor(totalSeconds));
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const seconds = s % 60;
+
+    const pad = (n: number) => n.toString().padStart(2, "0");
+
+    return {
+      days: days.toString().padStart(2, "0"),
+      hours: pad(hours),
+      minutes: pad(minutes),
+      seconds: pad(seconds),
+    };
   };
 
   return (
@@ -82,9 +92,31 @@ export default function LandingPage() {
             <h2 className="text-4xl text-white mb-6 drop-shadow-[0_0_15px_#FFD700]">
               Bidding begins in
             </h2>
-            <div className="text-7xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_20px_#FF0000]">
-              {formatTime(timeLeft)}
+
+            {/* Days:Hours:Minutes:Seconds display with labels */}
+            <div className="flex items-center justify-center gap-6 mb-6">
+              {(() => {
+                const t = getDHMS(timeLeft);
+                const parts = [
+                  { label: "DAYS", value: t.days },
+                  { label: "HOURS", value: t.hours },
+                  { label: "MINUTES", value: t.minutes },
+                  { label: "SECONDS", value: t.seconds },
+                ];
+
+                return parts.map((p) => (
+                  <div key={p.label} className="flex flex-col items-center">
+                    <div className="text-xs text-gray-300 uppercase mb-2 tracking-widest">
+                      {p.label}
+                    </div>
+                    <div className="text-7xl font-bold text-[#FFD700] mb-0 drop-shadow-[0_0_20px_#FF0000]">
+                      {p.value}
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
+
             <p className="text-lg text-gray-300 italic">
               Get ready, warriors are assembling...
             </p>
@@ -98,9 +130,9 @@ export default function LandingPage() {
             </h2>
             <Link
               href="/projector"
-              className="inline-block px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#FF4500] text-black font-bold text-xl rounded-full hover:scale-105 transition-transform shadow-[0_0_25px_rgba(255,215,0,0.6)]"
+              className="inline-block px-8 py-4 bg-linear-to-r from-[#FFD700] to-[#FF4500] text-black font-bold text-xl rounded-full hover:scale-105 transition-transform shadow-[0_0_25px_rgba(255,215,0,0.6)]"
             >
-              ⚔️ Watch Live Projector
+              ⚔️ Watch Live Bidding
             </Link>
           </div>
         )}
@@ -112,7 +144,7 @@ export default function LandingPage() {
             </h2>
             <Link
               href="/results"
-              className="inline-block px-8 py-4 bg-gradient-to-r from-[#FFD700] to-[#B22222] text-black font-bold text-xl rounded-full hover:scale-105 transition-transform shadow-[0_0_25px_rgba(255,215,0,0.6)]"
+              className="inline-block px-8 py-4 bg-linear-to-r from-[#FFD700] to-[#B22222] text-black font-bold text-xl rounded-full hover:scale-105 transition-transform shadow-[0_0_25px_rgba(255,215,0,0.6)]"
             >
               🏁 View Final Results
             </Link>
