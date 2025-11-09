@@ -10,6 +10,14 @@ interface PlayerWithPrice extends Participant {
   purchasePrice?: number;
 }
 
+interface filteredParticipant{
+  participantId: string;
+  name: string;
+  picture?: string;
+  houseId: string
+  purchasePrice?: number;
+}
+
 interface Round {
   _id: string;
   participantId: string;
@@ -27,7 +35,7 @@ interface House {
 export default function HousesPage() {
   const [houses, setHouses] = useState<House[]>([]);
   const [housePlayers, setHousePlayers] = useState<
-    Record<string, PlayerWithPrice[]>
+    Record<string, filteredParticipant[]>
   >({});
 
     useEffect(() => {
@@ -40,7 +48,7 @@ export default function HousesPage() {
 
         // Fetch participants
         const participantsResponse = await fetchWithAuth("/api/participants", { method: "GET" });
-        const participantsData: Participant[] = await participantsResponse.json();
+        const participantsData: filteredParticipant[] = await participantsResponse.json();
 
         // Fetch rounds
         const roundsResponse = await fetchWithAuth("/api/rounds", { method: "GET" });
@@ -59,7 +67,7 @@ export default function HousesPage() {
         });
 
         // Group participants by houseId
-        const grouped: Record<string, PlayerWithPrice[]> = {};
+        const grouped: Record<string, filteredParticipant[]> = {};
         housesData.forEach((house) => {
           const houseId = typeof house.houseId === "object" ? house.houseId : house.houseId;
           if (houseId) grouped[houseId] = [];
@@ -67,12 +75,12 @@ export default function HousesPage() {
 
         participantsData.forEach((p) => {
           if (p.houseId) {
-            const houseKey = typeof p.houseId === "object" ? p.houseId?.toString?.() : p.houseId;
+            const houseKey = typeof p.houseId === "object" ? p.houseId : p.houseId;
             if (!houseKey) return;
 
             if (!grouped[houseKey]) grouped[houseKey] = [];
 
-            const participantId = typeof p._id === "object" ? p._id?.toString?.() : p._id;
+            const participantId = typeof p.participantId === "object" ? p.participantId : p.participantId;
             grouped[houseKey].push({
               ...p,
               purchasePrice: participantId ? participantPriceMap[participantId] || 0 : 0,
@@ -154,7 +162,7 @@ export default function HousesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {players.map((player, idx) => (
                   <div
-                    key={player._id?.toString() || `player-${house.houseId}-${idx}`}
+                    key={player.participantId || `player-${house.houseId}-${idx}`}
                     className="bg-black bg-opacity-40 rounded-xl p-4 border-2 border-yellow-500 hover:border-yellow-300 transition-all transform hover:scale-105"
                   >
                     <div className="flex items-center gap-4">
