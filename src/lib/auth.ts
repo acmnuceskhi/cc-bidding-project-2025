@@ -5,6 +5,15 @@ import { Users, User } from "./models/users";
 
 // Change session timeout duration here (in minutes)
 export const SESSION_TIMEOUT_MINUTES = 30;
+
+// const JWT_SECRET = process.env.JWT_SECRET;
+// if (!JWT_SECRET) {
+//   throw new Error(
+//     "JWT_SECRET is not defined in environment variables. Please set it in .env or .env.local"
+//   );
+// }
+
+// Fallback for development/testing (DO NOT USE IN PRODUCTION)
 const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret-key";
 
 export interface JWTPayload {
@@ -36,7 +45,7 @@ export function generateToken(payload: JWTPayload): string {
 export function verifyToken(token: string): JWTPayload | null {
   try {
     return jwt.verify(token, JWT_SECRET) as JWTPayload;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -90,10 +99,21 @@ export async function verifyAuth(
     }
   }
 
-  // Refresh lastActiveAt to keep the session alive
-  await Users.update(user._id!.toString(), {
-    lastActiveAt: new Date(),
-  });
+  // Throttle lastActiveAt updates to reduce write load (e.g. update if >=60s since last activity)
+  const THROTTLE_MS = 60_000;
+  let shouldUpdate = false;
+  if (!user.lastActiveAt) {
+    shouldUpdate = true;
+  } else {
+    const elapsed = Date.now() - new Date(user.lastActiveAt).getTime();
+    if (elapsed >= THROTTLE_MS) shouldUpdate = true;
+  }
+
+  if (shouldUpdate) {
+    await Users.update(user._id!.toString(), {
+      lastActiveAt: new Date(),
+    });
+  }
 
   return { user, payload };
 }

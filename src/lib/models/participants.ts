@@ -22,6 +22,28 @@ export interface Participant {
 // Name of MongoDB collection
 const collectionName = "participants";
 
+// Ensure indexes on startup
+async function ensureIndexes() {
+  try {
+    const client = await clientPromise;
+    const collection = client.db().collection<Participant>(collectionName);
+    
+    // Unique index on rollNumber
+    await collection.createIndex({ rollNumber: 1 }, { unique: true });
+    
+    // Index on teamId for foreign key queries
+    await collection.createIndex({ teamId: 1 });
+    
+    // Index on houseId for filtering by house (sparse since optional)
+    await collection.createIndex({ houseId: 1 }, { sparse: true });
+    
+    console.log("Participants indexes created successfully");
+  } catch (err) {
+    console.error("Failed to create indexes on participants:", err);
+  }
+}
+ensureIndexes();
+
 // Participant object containing CRUD operations
 export const Participants = {
   // Fetch all participants from the database

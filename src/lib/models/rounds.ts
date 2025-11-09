@@ -6,18 +6,36 @@ export interface Round {
   _id?: ObjectId; // MongoDB document ID
   participantId: ObjectId; // ID of the participant up for bidding
   status: "scheduled" | "active" | "completed"; // Round status flag
-  timerEnd: Date; // Timestamp when round ends
-  scheduledStart?: Date; // Round scheduled start time
-  bids: {
-    _id?: ObjectId; // MongoDB document ID
-    houseId: ObjectId; // ID of house placing the bid
-    amount: number; // Bid amount
-    timestamp: Date; // When the bid was placed
-  }[];
+  timerEnd?: Date | null; // Timestamp when round ends, optional to allow manual admin control
+  scheduledStart?: Date | null; // Round scheduled start time
+  finalized?: boolean; // To indicate participant sold or up for next pass
+  // bids: Bid[]; Removed since redundant; bids.ts already present
 }
 
 // Name of MongoDB collection
 const collectionName = "rounds";
+
+// Ensure indexes on startup
+async function ensureIndexes() {
+  try {
+    const client = await clientPromise;
+    const collection = client.db().collection<Round>(collectionName);
+    
+    // Index on participantId for frequent lookups
+    await collection.createIndex({ participantId: 1 });
+    
+    // Index on status for filtering active rounds
+    await collection.createIndex({ status: 1 });
+    
+    // Compound index for status and timerEnd queries
+    await collection.createIndex({ status: 1, timerEnd: 1 });
+    
+    console.log("Rounds indexes created successfully");
+  } catch (err) {
+    console.error("Failed to create indexes on rounds:", err);
+  }
+}
+ensureIndexes();
 
 // Rounds object containing CRUD operations
 export const Rounds = {
@@ -33,15 +51,10 @@ export const Rounds = {
       round.participantId = new ObjectId(round.participantId);
     }
 
-    // Ensure all bids have correct ObjectId
-    round.bids = round.bids.map((bid) => ({
-      ...bid,
-      houseId: typeof bid.houseId === "string" ? new ObjectId(bid.houseId) : bid.houseId,
-      timestamp: bid.timestamp ? new Date(bid.timestamp) : new Date(),
-    }));
-
     // Ensure timerEnd and scheduledStart are real Date object
-    round.timerEnd = new Date(round.timerEnd);
+    if (round.timerEnd) {
+      round.timerEnd = new Date(round.timerEnd);
+    }    
     if (round.scheduledStart) {
       round.scheduledStart = new Date(round.scheduledStart);
     }
@@ -63,14 +76,6 @@ export const Rounds = {
     // Convert participantId if passed
     if (update.participantId && typeof update.participantId === "string") {
       update.participantId = new ObjectId(update.participantId);
-    }
-
-    if (update.bids) {
-      update.bids = update.bids.map((bid) => ({
-        ...bid,
-        houseId: typeof bid.houseId === "string" ? new ObjectId(bid.houseId) : bid.houseId,
-        timestamp: bid.timestamp ? new Date(bid.timestamp) : new Date(),
-      }));
     }
 
     // If updating time, ensure Date type
@@ -135,16 +140,17 @@ export const Rounds = {
       .toArray();
   },
 
+  // Depreciated since round.bids not stored here
   // Fetch all rounds for a specific house
-  async getByHouse(houseId: string): Promise<Round[]> {
-    const client = await clientPromise;
-    return client
-      .db()
-      .collection<Round>(collectionName)
-      .find({ "bids.houseId": new ObjectId(houseId) })
-      .sort({ timerEnd: -1 })
-      .toArray();
-  },
+  // async getByHouse(houseId: string): Promise<Round[]> {
+  //     const client = await clientPromise;
+  //     return client
+  //       .db()
+  //       .collection<Round>(collectionName)
+  //       .find({ "bids.houseId": new ObjectId(houseId) })
+  //       .sort({ timerEnd: -1 })
+  //       .toArray();
+  // },
 
   // Delete a round by ID
   async delete(id: string): Promise<DeleteResult> {

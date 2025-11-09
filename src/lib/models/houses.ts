@@ -1,5 +1,5 @@
 import clientPromise from "@/lib/mongodb";
-import { ObjectId, InsertOneResult, UpdateResult, DeleteResult } from "mongodb";
+import { ObjectId, InsertOneResult, UpdateResult, DeleteResult, Document } from "mongodb";
 
 // Interface representing a House document in MongoDB
 export interface House {
@@ -40,6 +40,60 @@ export const Houses = {
       .db()
       .collection<House>(collectionName)
       .updateOne({ _id: new ObjectId(id) }, { $set: update });
+  },
+
+  // Atomic update (not used most likely)
+  updateWithOperator: async (id: string, update: Document): Promise<UpdateResult<House>> => {
+    const client = await clientPromise;
+    return client
+      .db()
+      .collection<House>(collectionName)
+      .updateOne({ _id: new ObjectId(id) }, update);
+  },
+
+  /**
+   * Atomically reserve budget for a bid
+   * Returns the updated house if successful, null if insufficient budget
+   * @param id - MongoDB ObjectId as string
+   * @param amount - Amount to reserve from remaining budget
+   */
+  async reserveBudget(id: string, amount: number): Promise<House | null> {
+    const client = await clientPromise;
+    // In current MongoDB driver typings, findOneAndUpdate returns the updated doc (or null)
+    const updatedDoc = await client
+      .db()
+      .collection<House>(collectionName)
+      .findOneAndUpdate(
+        {
+          _id: new ObjectId(id),
+          remainingBudget: { $gte: amount }, // ensure budget is sufficient
+        },
+        {
+          $inc: { remainingBudget: -amount },
+        },
+        {
+          returnDocument: "after",
+        }
+      );
+
+    return updatedDoc ?? null;
+  },
+
+  /**
+   * Atomically restore budget (e.g., when bid is cancelled or round restarted)
+   * @param id - MongoDB ObjectId as string
+   * @param amount - Amount to restore to remaining budget
+   */
+  async restoreBudget(id: string, amount: number): Promise<UpdateResult<House>> {
+    const client = await clientPromise;
+    
+    return client
+      .db()
+      .collection<House>(collectionName)
+      .updateOne(
+        { _id: new ObjectId(id) },
+        { $inc: { remainingBudget: amount } }
+      );
   },
 
   /**
