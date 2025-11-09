@@ -53,6 +53,22 @@ export async function POST(
   // Get all bids for this specific round (not all rounds for the participant)
   const bids = await Bids.getByRound(id);
 
+  // 🚫 No bids case — do not mark completed
+    if (bids.length === 0) {
+      await Rounds.update(id, {
+        status: "scheduled",
+        timerEnd: new Date(),
+        finalized: false,
+      });
+
+      return NextResponse.json({
+        success: true,
+        winningBid: null,
+        allBids: [],
+        message: "Round ended — no bids were placed. Not marked as completed.",
+      });
+    }
+
     // Find the winning bid (highest amount, earliest timestamp in case of tie)
     let winningBid: Bid | null = null;
     let winningHouse = null;

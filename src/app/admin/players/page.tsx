@@ -62,7 +62,6 @@ export default function PlayersPage() {
               (r: Round) => r.participantId === participant.participantId
             );
             
-            console.log("Round Participant ID", round, " participant House ID:", participant.houseId);
             if (round && participant.houseId && round.finalized) {
               const house = houses.find(
                 (h: House) => h.houseId?.toString() === participant.houseId?.toString()
