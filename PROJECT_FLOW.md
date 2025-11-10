@@ -8,12 +8,13 @@
   - Starts and ends rounds only
   - Can view bids immediately when placed
   - Adjusts remaining points if needed
-  - **Does not create rounds**; rounds are from a predefined participant list
+  - **Does not create rounds**; rounds are from a predefined participant list (stored in database)
   - Can rerun rounds in case of ties with identical timestamps
+  - Can pause/resume rounds
 
 - **House Captain**
   - Places bids from remaining house points
-  - Can edit placed bid **once only** before timer ends
+  - Can edit placed bid **unlimited times** before timer ends
 
 - **Spectators**
   - Only view projector display
@@ -26,14 +27,14 @@
 
 ### A. Admin Workflow
 
-1. Start predefined round → status active (manual or scheduled)
+1. Start predefined round → status active (manual for now; scheduled tentative)
 2. Timer runs for the round
-3. Admin can end round manually or let timer expire
+3. Admin can end/pause round manually or let timer expire
 4. At round end:
    - Determine highest bid
    - Tie → earlier bid timestamp wins
    - Tie with identical timestamps → Admin can rerun round
-   - Deduct bid from winning house's remainingBudget atomically
+   - Deduct bid from winning house's remainingBudget
    - Assign participant to winning house
    - Display **winning and losing bid amounts with timestamps** on projector
 5. Display results automatically on projector
@@ -45,15 +46,15 @@
 - Place bid within remaining budget
 - Bids visible only to Admin during round; visible to all when round ends
 - Cannot exceed total budget
-- Bid edits tracked with `edits` field; attempts beyond 1 return `409 Conflict`
+- Bid edits not tracked, just bids.amount updated
 
 ### C. Spectator / Projector Display
 
 - Current participant info (name, picture, round stats)
-- Round number
+- Round number (derived from participantId)
 - Houses that placed a bid (without showing amounts during round)
 - Winning house and **winning/losing bid amounts/timestamp** when round ends
-- Live updates via **SSE or WebSocket** recommended (polling optional)
+- Live updates via **WebSocket** through socket.io
 
 ---
 
@@ -61,31 +62,32 @@
 
 - Rounds are sequential only
 - Round auto-closes at timer end or manually by Admin
-- Round timer can be extended by Admin
+- Round timer can be extended by Admin (tentative)
 - Tie → earlier bid timestamp decides winner
 - Tie with identical timestamps → Admin can rerun round
 - Scheduled rounds: each round can have a pre-defined start time; Admin may apply a **delay offset** to shift all subsequent rounds accordingly
 
-**Note:** Bid submission and budget deduction occur atomically on the server to prevent overspending. Scheduled round offsets are also applied atomically.
+**Note:** Bid submission and budget deduction occur atomically on the server to prevent overspending. Scheduled round offsets are also applied atomically. (tentative)
 
 ---
 
 ## 4. Key Database Models
 
-| Collection     | Key Fields                                                                             |
-| -------------- | -------------------------------------------------------------------------------------- |
-| `houses`       | name, totalBudget, remainingBudget                                                     |
-| `participants` | name, picture?, houseId?, roundStats[]                                                 |
-| `rounds`       | participantId, bids[], status, timerEnd, scheduledStart?                               |
-| `bids`         | roundId, houseId, participantId, amount, timestamp, edits?                             |
-| `users`        | username, password, role ("admin" \| "house_captain"), houseId?, createdAt, lastLogin? |
+| Collection     | Key Fields                                                                               |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `houses`       | name, totalBudget, remainingBudget                                                       |
+| `participants` | name, picture?, houseId?, roundStats[]                                                   |
+| `rounds`       | participantId, status, timerEnd, scheduledStart?                                         |
+| `bids`         | roundId, houseId, participantId, amount, timestamp                                       |
+| `users`        | username, password, role ("admin" \| "house_captain"), houseId?, createdAt, lastLogin?   |
+| `teams`        | successfulAttempts, unsuccessfulAttempts, totalPoints, totalPenalty, timeTakenPerProblem |
 
 ---
 
 ## 5. Budget & Rules
 
 - 4 teams per house (enforcement outside scope)
-- Each team: 2–3 members
+- Each team: 3 members
 - Fixed budget per house
 - Only winning bid deducts budget
 - Participant assignment via auction only
@@ -103,7 +105,7 @@
   - View all bids immediately
 
 - **House Captain-only:**
-  - Submit bids and edit **once only** (`/api/bids`)
+  - Submit bids and edit **unlimited times** (`/api/bids`)
 
 - **Spectators / Projector-only:**
   - View projector display info (`/api/status`)

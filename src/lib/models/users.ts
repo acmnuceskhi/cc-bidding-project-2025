@@ -22,19 +22,19 @@ async function ensureIndexes() {
   try {
     const client = await clientPromise;
     const collection = client.db().collection<User>(collectionName);
-    
+
     // Unique index on username for login queries
     await collection.createIndex({ username: 1 }, { unique: true });
-    
+
     // Index on activeSessionToken for session validation (sparse since optional)
     await collection.createIndex({ activeSessionToken: 1 }, { sparse: true });
-    
+
     // Index on role for role-based queries
     await collection.createIndex({ role: 1 });
-    
+
     // Index on houseId for house captain lookups (sparse since optional)
     await collection.createIndex({ houseId: 1 }, { sparse: true });
-    
+
     console.log("Users indexes created successfully");
   } catch (err) {
     console.error("Failed to create indexes on users:", err);

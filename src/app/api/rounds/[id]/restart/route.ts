@@ -28,7 +28,7 @@ export async function POST(
       );
     }
 
-  const { id } = await context.params;
+    const { id } = await context.params;
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json(
         { error: "Invalid or missing round ID" },
@@ -93,19 +93,17 @@ export async function POST(
         }
 
         // Reset round status & timer
-        await db
-          .collection("rounds")
-          .updateOne(
-            { _id: new ObjectId(id) },
-            {
-              $set: {
-                status: "scheduled",
-                timerEnd: null,
-              },
-              $unset: { finalized: "" }, // ensure finalized removed if present
+        await db.collection("rounds").updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              status: "scheduled",
+              timerEnd: null,
             },
-            { session }
-          );
+            $unset: { finalized: "" }, // ensure finalized removed if present
+          },
+          { session }
+        );
       });
     } finally {
       await session.endSession();

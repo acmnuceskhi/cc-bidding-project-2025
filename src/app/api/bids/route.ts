@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
-import { verifyAuth} from "@/lib/auth";
+import { verifyAuth } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
 // POST /api/bids - Place a bid
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 
     // Allow multiple bids from the same house within the 60-second window
     // When a house places a new bid, it replaces the previous one
-    
+
     // First, check if there's an existing bid and get its amount
     const { previousAmount, isNew } = await Bids.upsertBid(
       roundId,
@@ -130,8 +130,11 @@ export async function POST(request: NextRequest) {
     // If the new bid is lower, we'll restore some budget
     if (budgetDifference > 0) {
       // Need to reserve additional budget
-      const updatedHouse = await Houses.reserveBudget(houseId, budgetDifference);
-      
+      const updatedHouse = await Houses.reserveBudget(
+        houseId,
+        budgetDifference
+      );
+
       if (!updatedHouse) {
         // Budget reservation failed - insufficient credits
         // Restore the previous bid amount
@@ -143,7 +146,7 @@ export async function POST(request: NextRequest) {
             previousAmount
           );
         }
-        
+
         const house = await Houses.getById(houseId);
         return NextResponse.json(
           {
@@ -165,7 +168,7 @@ export async function POST(request: NextRequest) {
     } else if (budgetDifference < 0) {
       // New bid is lower, restore the difference
       await Houses.restoreBudget(houseId, Math.abs(budgetDifference));
-      
+
       const house = await Houses.getById(houseId);
       return NextResponse.json({
         success: true,

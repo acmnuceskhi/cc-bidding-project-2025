@@ -10,11 +10,11 @@ interface PlayerWithPrice extends Participant {
   purchasePrice?: number;
 }
 
-interface filteredParticipant{
+interface filteredParticipant {
   participantId: string;
   name: string;
   picture?: string;
-  houseId: string
+  houseId: string;
   purchasePrice?: number;
 }
 
@@ -38,20 +38,27 @@ export default function HousesPage() {
     Record<string, filteredParticipant[]>
   >({});
 
-    useEffect(() => {
+  useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch houses
-        const housesResponse = await fetchWithAuth("/api/houses", { method: "GET" });
+        const housesResponse = await fetchWithAuth("/api/houses", {
+          method: "GET",
+        });
         const housesData: House[] = await housesResponse.json();
         setHouses(housesData);
 
         // Fetch participants
-        const participantsResponse = await fetchWithAuth("/api/participants", { method: "GET" });
-        const participantsData: filteredParticipant[] = await participantsResponse.json();
+        const participantsResponse = await fetchWithAuth("/api/participants", {
+          method: "GET",
+        });
+        const participantsData: filteredParticipant[] =
+          await participantsResponse.json();
 
         // Fetch rounds
-        const roundsResponse = await fetchWithAuth("/api/rounds", { method: "GET" });
+        const roundsResponse = await fetchWithAuth("/api/rounds", {
+          method: "GET",
+        });
         const roundsData: Round[] = await roundsResponse.json();
 
         // Create a map of participantId -> winning bid
@@ -69,21 +76,28 @@ export default function HousesPage() {
         // Group participants by houseId
         const grouped: Record<string, filteredParticipant[]> = {};
         housesData.forEach((house) => {
-          const houseId = typeof house.houseId === "object" ? house.houseId : house.houseId;
+          const houseId =
+            typeof house.houseId === "object" ? house.houseId : house.houseId;
           if (houseId) grouped[houseId] = [];
         });
 
         participantsData.forEach((p) => {
           if (p.houseId) {
-            const houseKey = typeof p.houseId === "object" ? p.houseId : p.houseId;
+            const houseKey =
+              typeof p.houseId === "object" ? p.houseId : p.houseId;
             if (!houseKey) return;
 
             if (!grouped[houseKey]) grouped[houseKey] = [];
 
-            const participantId = typeof p.participantId === "object" ? p.participantId : p.participantId;
+            const participantId =
+              typeof p.participantId === "object"
+                ? p.participantId
+                : p.participantId;
             grouped[houseKey].push({
               ...p,
-              purchasePrice: participantId ? participantPriceMap[participantId] || 0 : 0,
+              purchasePrice: participantId
+                ? participantPriceMap[participantId] || 0
+                : 0,
             });
           }
         });
@@ -121,7 +135,9 @@ export default function HousesPage() {
       {houses.map((house, index) => {
         const players = housePlayers[house.houseId?.toString() || ""] || [];
         const totalSpent = house.totalBudget - house.remainingBudget;
-        const percentage = house.totalBudget ? (house.remainingBudget / house.totalBudget) * 100 : 0;
+        const percentage = house.totalBudget
+          ? (house.remainingBudget / house.totalBudget) * 100
+          : 0;
 
         return (
           <div
@@ -162,7 +178,9 @@ export default function HousesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {players.map((player, idx) => (
                   <div
-                    key={player.participantId || `player-${house.houseId}-${idx}`}
+                    key={
+                      player.participantId || `player-${house.houseId}-${idx}`
+                    }
                     className="bg-black bg-opacity-40 rounded-xl p-4 border-2 border-yellow-500 hover:border-yellow-300 transition-all transform hover:scale-105"
                   >
                     <div className="flex items-center gap-4">

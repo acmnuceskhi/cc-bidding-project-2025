@@ -30,7 +30,7 @@ export async function POST(
       );
     }
 
-  const { id } = await context.params;
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json({ error: "Missing round ID" }, { status: 400 });
@@ -50,10 +50,10 @@ export async function POST(
       );
     }
 
-  // Get all bids for this specific round (not all rounds for the participant)
-  const bids = await Bids.getByRound(id);
+    // Get all bids for this specific round (not all rounds for the participant)
+    const bids = await Bids.getByRound(id);
 
-  // 🚫 No bids case — do not mark completed
+    // 🚫 No bids case — do not mark completed
     if (bids.length === 0) {
       await Rounds.update(id, {
         status: "scheduled",
@@ -97,9 +97,9 @@ export async function POST(
     // - Budgets were reserved at bid time (already deducted)
     // - Winner keeps reserved amount (no extra deduction)
     // - All losing bids are refunded (their reserved amounts restored)
-  const client = await clientPromise;
-  const session = client.startSession();
-  let message: string = "Round ended";
+    const client = await clientPromise;
+    const session = client.startSession();
+    let message: string = "Round ended";
     try {
       await session.withTransaction(async () => {
         const db = client.db();
@@ -121,20 +121,18 @@ export async function POST(
         }
 
         // Update round status (finalized only if sold)
-        await db
-          .collection("rounds")
-          .updateOne(
-            { _id: new ObjectId(id) },
-            {
-              $set: {
-                status: "completed",
-                timerEnd: new Date(),
-                finalized: !!winningHouse,
-                winningBid: winningBid ? winningBid.amount : null,
-              },
+        await db.collection("rounds").updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              status: "completed",
+              timerEnd: new Date(),
+              finalized: !!winningHouse,
+              winningBid: winningBid ? winningBid.amount : null,
             },
-            { session }
-          );
+          },
+          { session }
+        );
 
         // Assign participant only if sold
         if (winningHouse) {

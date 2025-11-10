@@ -84,7 +84,9 @@ export default function AdminLayout({
               <button
                 onClick={async () => {
                   try {
-                    const data = await fetchWithAuth("/api/auth/logout", { method: "POST" });
+                    const data = await fetchWithAuth("/api/auth/logout", {
+                      method: "POST",
+                    });
                     console.log("Logout response:", data);
 
                     // Clear client-side storage

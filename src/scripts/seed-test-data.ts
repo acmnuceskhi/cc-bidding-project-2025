@@ -54,9 +54,11 @@ async function initializeData() {
       const avgPointsPerProblem = 10;
 
       const totalPenalty = unsuccessfulAttempts * penaltyPerProblem;
-      const totalPoints = successfulAttempts * avgPointsPerProblem - totalPenalty;
-      const timeTakenPerProblem = Array.from({ length: 5 }, () =>
-        Math.floor(Math.random() * (300 - 30 + 1)) + 30 // 30-300s per problem
+      const totalPoints =
+        successfulAttempts * avgPointsPerProblem - totalPenalty;
+      const timeTakenPerProblem = Array.from(
+        { length: 5 },
+        () => Math.floor(Math.random() * (300 - 30 + 1)) + 30 // 30-300s per problem
       );
 
       const result = await Teams.create({
@@ -96,7 +98,9 @@ async function initializeData() {
         let rollNumber: string;
         do {
           const c = letters[Math.floor(Math.random() * letters.length)];
-          const xxxx = Math.floor(Math.random() * 9999 + 1).toString().padStart(4, "0");
+          const xxxx = Math.floor(Math.random() * 9999 + 1)
+            .toString()
+            .padStart(4, "0");
           rollNumber = `${xy}${c}-${xxxx}`;
         } while (rollNumbersSet.has(rollNumber));
 

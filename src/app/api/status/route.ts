@@ -24,53 +24,64 @@ export async function GET() {
     // SERVER-SIDE AUTO-END: Check if round has expired
     const now = Date.now();
     const timerEnd = activeRound.timerEnd?.getTime();
-    
+
     if (timerEnd && now >= timerEnd) {
-      console.log("⏰ Round expired - auto-ending on server side:", activeRound._id?.toString());
-      
+      console.log(
+        "⏰ Round expired - auto-ending on server side:",
+        activeRound._id?.toString()
+      );
+
       // Import the end round logic
       const { Houses } = await import("@/lib/models/houses");
       const clientPromise = (await import("@/lib/mongodb")).default;
       const { ObjectId } = await import("mongodb");
-      
+
       try {
         // Get all bids for this round
         const bids = await Bids.getByRound(activeRound._id!.toString());
-        
+
         // Find the winning bid
         let winningBid = null;
         let winningHouse = null;
-        
+
         if (bids.length > 0) {
           winningBid = bids.reduce((winner, current) => {
             if (current.amount > winner.amount) return current;
-            if (current.amount === winner.amount && current.timestamp < winner.timestamp) return current;
+            if (
+              current.amount === winner.amount &&
+              current.timestamp < winner.timestamp
+            )
+              return current;
             return winner;
           });
-          
+
           winningHouse = await Houses.getById(winningBid.houseId.toString());
         }
-        
+
         // Use transaction to end the round
         const client = await clientPromise;
         const session = client.startSession();
-        
+
         try {
           await session.withTransaction(async () => {
             const db = client.db();
-            
+
             // Refund losing bids
             if (winningBid) {
-              const losingBids = bids.filter(b => b._id?.toString() !== winningBid!._id?.toString());
+              const losingBids = bids.filter(
+                (b) => b._id?.toString() !== winningBid!._id?.toString()
+              );
               for (const lb of losingBids) {
-                await db.collection("houses").updateOne(
-                  { _id: new ObjectId(lb.houseId) },
-                  { $inc: { remainingBudget: lb.amount } },
-                  { session }
-                );
+                await db
+                  .collection("houses")
+                  .updateOne(
+                    { _id: new ObjectId(lb.houseId) },
+                    { $inc: { remainingBudget: lb.amount } },
+                    { session }
+                  );
               }
             }
-            
+
             // Update round status
             await db.collection("rounds").updateOne(
               { _id: new ObjectId(activeRound._id!) },
@@ -84,37 +95,44 @@ export async function GET() {
               },
               { session }
             );
-            
+
             // Assign participant if sold
             if (winningHouse) {
-              await db.collection("participants").updateOne(
-                { _id: new ObjectId(activeRound.participantId) },
-                { $set: { houseId: winningHouse._id } },
-                { session }
-              );
+              await db
+                .collection("participants")
+                .updateOne(
+                  { _id: new ObjectId(activeRound.participantId) },
+                  { $set: { houseId: winningHouse._id } },
+                  { session }
+                );
             }
           });
-          
+
           console.log("✅ Round auto-ended successfully");
-        
-        // Emit socket event for real-time updates
-        try {
-          const { getIO } = await import("@/lib/socket-server");
-          const io = getIO();
-          io.emit("round-ended", {
-            roundId: activeRound._id?.toString(),
-            winner: winningHouse ? {
-              houseName: winningHouse.name,
-              amount: winningBid!.amount,
-            } : null,
-          });
-        } catch (socketError) {
-          console.log("Socket.IO not available or error emitting event:", socketError);
-        }
+
+          // Emit socket event for real-time updates
+          try {
+            const { getIO } = await import("@/lib/socket-server");
+            const io = getIO();
+            io.emit("round-ended", {
+              roundId: activeRound._id?.toString(),
+              winner: winningHouse
+                ? {
+                    houseName: winningHouse.name,
+                    amount: winningBid!.amount,
+                  }
+                : null,
+            });
+          } catch (socketError) {
+            console.log(
+              "Socket.IO not available or error emitting event:",
+              socketError
+            );
+          }
         } finally {
           await session.endSession();
         }
-        
+
         // Return status showing round ended
         return NextResponse.json({
           roundId: null,
@@ -123,10 +141,12 @@ export async function GET() {
           timerRemaining: 0,
           bidsPlaced: [],
           roundEnded: true,
-          winner: winningHouse ? {
-            houseName: winningHouse.name,
-            amount: winningBid!.amount,
-          } : null,
+          winner: winningHouse
+            ? {
+                houseName: winningHouse.name,
+                amount: winningBid!.amount,
+              }
+            : null,
         });
       } catch (autoEndError) {
         console.error("❌ Error auto-ending round:", autoEndError);

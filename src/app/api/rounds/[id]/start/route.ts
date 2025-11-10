@@ -91,7 +91,9 @@ export async function POST(
     // Define timer durations
     const BIDDING_DURATION_MS = 40000;
     const RESULT_DURATION_MS = 10000;
-    const timerEnd = new Date(Date.now() + BIDDING_DURATION_MS + RESULT_DURATION_MS);
+    const timerEnd = new Date(
+      Date.now() + BIDDING_DURATION_MS + RESULT_DURATION_MS
+    );
 
     // Update the round
     const result = await Rounds.update(targetRoundId, {

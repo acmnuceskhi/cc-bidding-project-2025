@@ -21,16 +21,16 @@ async function ensureIndexes() {
   try {
     const client = await clientPromise;
     const collection = client.db().collection<Round>(collectionName);
-    
+
     // Index on participantId for frequent lookups
     await collection.createIndex({ participantId: 1 });
-    
+
     // Index on status for filtering active rounds
     await collection.createIndex({ status: 1 });
-    
+
     // Compound index for status and timerEnd queries
     await collection.createIndex({ status: 1, timerEnd: 1 });
-    
+
     console.log("Rounds indexes created successfully");
   } catch (err) {
     console.error("Failed to create indexes on rounds:", err);
@@ -55,7 +55,7 @@ export const Rounds = {
     // Ensure timerEnd and scheduledStart are real Date object
     if (round.timerEnd) {
       round.timerEnd = new Date(round.timerEnd);
-    }    
+    }
     if (round.scheduledStart) {
       round.scheduledStart = new Date(round.scheduledStart);
     }

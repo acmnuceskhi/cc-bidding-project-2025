@@ -24,12 +24,12 @@ export default function ProjectorDisplay() {
 
   useEffect(() => {
     fetchData();
-    
+
     // Poll every 2 seconds for real-time sync
     const pollInterval = setInterval(() => {
       fetchData();
     }, 2000);
-    
+
     return () => clearInterval(pollInterval);
   }, []);
 
@@ -39,44 +39,54 @@ export default function ProjectorDisplay() {
       const roundsRes = await fetch("/api/rounds");
       if (roundsRes.ok) {
         const rounds = await roundsRes.json();
-        const completedRounds = rounds.filter((r: any) => r.status === "completed");
-        
+        const completedRounds = rounds.filter(
+          (r: any) => r.status === "completed"
+        );
+
         if (completedRounds.length > 0) {
           const lastRound = completedRounds[0]; // Most recent
-          
+
           if (lastRound.winningBid) {
             // Fetch participant
             const participantRes = await fetch("/api/participants");
             if (participantRes.ok) {
               const participants = await participantRes.json();
-              const roundParticipant = participants.find((p: any) => p.participantId === lastRound.participantId);
-              
+              const roundParticipant = participants.find(
+                (p: any) => p.participantId === lastRound.participantId
+              );
+
               if (roundParticipant) {
                 setParticipant(roundParticipant);
               }
             }
-            
+
             // Fetch bids to get winner house name
-            const bidsRes = await fetch(`/api/bids?roundId=${lastRound.roundId}`);
+            const bidsRes = await fetch(
+              `/api/bids?roundId=${lastRound.roundId}`
+            );
             if (bidsRes.ok) {
               const bids = await bidsRes.json();
-              const winningBid = bids.find((b: any) => b.amount === lastRound.winningBid);
-              
+              const winningBid = bids.find(
+                (b: any) => b.amount === lastRound.winningBid
+              );
+
               if (winningBid) {
                 // Try to get house name (might fail without auth, but try anyway)
                 try {
                   const housesRes = await fetch("/api/houses");
                   if (housesRes.ok) {
                     const housesData = await housesRes.json();
-                    const winningHouse = housesData.find((h: any) => h.houseId === winningBid.houseId.toString());
-                    
+                    const winningHouse = housesData.find(
+                      (h: any) => h.houseId === winningBid.houseId.toString()
+                    );
+
                     if (winningHouse) {
                       setWinnerData({
                         houseName: winningHouse.name,
                         amount: lastRound.winningBid,
                       });
                       setShowWinner(true);
-                      
+
                       setTimeout(() => {
                         setShowWinner(false);
                         setWinnerData(null);
@@ -122,7 +132,9 @@ export default function ProjectorDisplay() {
       if (statusData.roundStatus === "active" && statusData.participant) {
         setParticipant(statusData.participant);
         setLastRoundId(statusData.roundId);
-        const serverTimerEnd = statusData.timerEnd ? new Date(statusData.timerEnd) : new Date(Date.now() + statusData.timerRemaining * 1000);
+        const serverTimerEnd = statusData.timerEnd
+          ? new Date(statusData.timerEnd)
+          : new Date(Date.now() + statusData.timerRemaining * 1000);
         setTimeLeft(Math.max(0, serverTimerEnd.getTime() - Date.now()));
       } else {
         setTimeLeft(0);
@@ -135,7 +147,7 @@ export default function ProjectorDisplay() {
         setWinnerData(statusData.winner);
         setShowWinner(true);
         setLastRoundId(null); // Reset for next round
-        
+
         // Auto-hide after 10 seconds
         setTimeout(() => {
           console.log("⏰ Hiding winner modal");
@@ -143,11 +155,22 @@ export default function ProjectorDisplay() {
           setWinnerData(null);
         }, 10000);
       } else {
-        console.log("📊 Status:", statusData.roundStatus, "RoundEnded:", statusData.roundEnded, "Winner:", statusData.winner);
+        console.log(
+          "📊 Status:",
+          statusData.roundStatus,
+          "RoundEnded:",
+          statusData.roundEnded,
+          "Winner:",
+          statusData.winner
+        );
       }
-      
+
       // Also detect round end by checking if we had an active round that's now gone
-      if (lastRoundId && !statusData.roundId && statusData.roundStatus !== "active") {
+      if (
+        lastRoundId &&
+        !statusData.roundId &&
+        statusData.roundStatus !== "active"
+      ) {
         console.log("🏆 Round ended, fetching winner info...");
         // Fetch the last completed round to get winner
         fetchLastRoundWinner();
@@ -168,7 +191,9 @@ export default function ProjectorDisplay() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-500 via-orange-500 to-red-600 text-white flex items-center justify-center">
         <div className="text-center max-w-5xl mx-auto p-8 animate-pulse">
-          <h1 className="text-9xl font-bold mb-12 drop-shadow-lg">🏆 SOLD! 🏆</h1>
+          <h1 className="text-9xl font-bold mb-12 drop-shadow-lg">
+            🏆 SOLD! 🏆
+          </h1>
 
           {participant?.picture && (
             <img
@@ -177,7 +202,7 @@ export default function ProjectorDisplay() {
               className="w-64 h-64 object-cover rounded-full mx-auto mb-8 border-8 border-yellow-400 shadow-2xl"
             />
           )}
-          
+
           <h2 className="text-7xl font-bold mb-8 text-black drop-shadow-lg">
             {participant?.name || "Participant"}
           </h2>
@@ -223,8 +248,12 @@ export default function ProjectorDisplay() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-5xl font-bold">CC Bidding System</h1>
           <div className="text-right">
-            <div className="text-3xl font-bold text-green-400">🔴 LIVE BIDDING</div>
-            <div className="text-2xl text-gray-300">Round {status.roundNumber || "?"}</div>
+            <div className="text-3xl font-bold text-green-400">
+              🔴 LIVE BIDDING
+            </div>
+            <div className="text-2xl text-gray-300">
+              Round {status.roundNumber || "?"}
+            </div>
           </div>
         </div>
       </div>
@@ -289,23 +318,26 @@ export default function ProjectorDisplay() {
 
               {bidsPlaced.length > 0 ? (
                 <div className="grid grid-cols-2 gap-6">
-                  {Array.isArray(houses) && houses
-                    .filter((house) =>
-                      bidsPlaced.some((bid: any) => bid.houseId === house._id?.toString())
-                    )
-                    .map((house) => (
-                      <div
-                        key={house._id?.toString()}
-                        className="bg-green-500 bg-opacity-30 rounded-xl p-8 text-center border-4 border-green-400 transform hover:scale-105 transition-all"
-                      >
-                        <div className="text-3xl font-bold mb-2">
-                          {house.name}
+                  {Array.isArray(houses) &&
+                    houses
+                      .filter((house) =>
+                        bidsPlaced.some(
+                          (bid: any) => bid.houseId === house._id?.toString()
+                        )
+                      )
+                      .map((house) => (
+                        <div
+                          key={house._id?.toString()}
+                          className="bg-green-500 bg-opacity-30 rounded-xl p-8 text-center border-4 border-green-400 transform hover:scale-105 transition-all"
+                        >
+                          <div className="text-3xl font-bold mb-2">
+                            {house.name}
+                          </div>
+                          <div className="text-2xl text-green-200">
+                            ✓ Bid Placed
+                          </div>
                         </div>
-                        <div className="text-2xl text-green-200">
-                          ✓ Bid Placed
-                        </div>
-                      </div>
-                    ))}
+                      ))}
                 </div>
               ) : (
                 <div className="text-center text-gray-300 text-3xl py-12">
@@ -323,7 +355,9 @@ export default function ProjectorDisplay() {
                     {houses
                       .filter(
                         (house) =>
-                          !bidsPlaced.some((bid: any) => bid.houseId === house._id?.toString())
+                          !bidsPlaced.some(
+                            (bid: any) => bid.houseId === house._id?.toString()
+                          )
                       )
                       .map((house) => (
                         <div

@@ -1,5 +1,11 @@
 import clientPromise from "@/lib/mongodb";
-import { ObjectId, InsertOneResult, UpdateResult, DeleteResult, Document } from "mongodb";
+import {
+  ObjectId,
+  InsertOneResult,
+  UpdateResult,
+  DeleteResult,
+  Document,
+} from "mongodb";
 
 // Interface representing a House document in MongoDB
 export interface House {
@@ -43,7 +49,10 @@ export const Houses = {
   },
 
   // Atomic update (not used most likely)
-  updateWithOperator: async (id: string, update: Document): Promise<UpdateResult<House>> => {
+  updateWithOperator: async (
+    id: string,
+    update: Document
+  ): Promise<UpdateResult<House>> => {
     const client = await clientPromise;
     return client
       .db()
@@ -84,9 +93,12 @@ export const Houses = {
    * @param id - MongoDB ObjectId as string
    * @param amount - Amount to restore to remaining budget
    */
-  async restoreBudget(id: string, amount: number): Promise<UpdateResult<House>> {
+  async restoreBudget(
+    id: string,
+    amount: number
+  ): Promise<UpdateResult<House>> {
     const client = await clientPromise;
-    
+
     return client
       .db()
       .collection<House>(collectionName)

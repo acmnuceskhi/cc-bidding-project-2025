@@ -48,12 +48,14 @@ export default function FinalTeamsPage() {
           await Promise.all([housesRes.json(), participantsRes.json()]);
 
         // Assign participants to their respective houses
-        const housesWithPlayers: HouseWithPlayers[] = housesData.map((house) => ({
-          ...house,
-          players: participantsData.filter(
-            (p) => p.houseId && String(p.houseId) === String(house.houseId)
-          ),
-        }));
+        const housesWithPlayers: HouseWithPlayers[] = housesData.map(
+          (house) => ({
+            ...house,
+            players: participantsData.filter(
+              (p) => p.houseId && String(p.houseId) === String(house.houseId)
+            ),
+          })
+        );
 
         setHouses(housesWithPlayers);
       } catch (error) {
@@ -100,7 +102,10 @@ export default function FinalTeamsPage() {
                   <div className="grid grid-cols-1 gap-2 text-sm text-gray-200">
                     {house.players.map((player, pIndex) => (
                       <div
-                        key={player.participantId || `player-${player.name}-${pIndex}`}
+                        key={
+                          player.participantId ||
+                          `player-${player.name}-${pIndex}`
+                        }
                         className="p-2 bg-black/30 rounded-md border border-white/10 hover:bg-black/50 transition-all"
                       >
                         {player.picture ? (

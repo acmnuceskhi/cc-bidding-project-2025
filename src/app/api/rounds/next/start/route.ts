@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     for (const round of scheduledRounds) {
       const p = await Participants.getById(round.participantId.toString());
-      
+
       if (!p) {
         console.log("Participant not found for round:", round._id?.toString());
         continue;
@@ -64,14 +64,24 @@ export async function POST(request: NextRequest) {
 
       // Check if participant already has a house (already sold)
       if (p.houseId) {
-        console.log("Skipping participant", p.name, "- already assigned to house:", p.houseId.toString());
+        console.log(
+          "Skipping participant",
+          p.name,
+          "- already assigned to house:",
+          p.houseId.toString()
+        );
         continue;
       }
 
       // Found an unsold participant
       nextRound = round;
       participant = p;
-      console.log("Starting next scheduled round:", round._id?.toString(), "for participant:", p.name);
+      console.log(
+        "Starting next scheduled round:",
+        round._id?.toString(),
+        "for participant:",
+        p.name
+      );
       break;
     }
 
@@ -104,7 +114,10 @@ export async function POST(request: NextRequest) {
         timerEnd: timerEnd.toISOString(),
       });
     } catch (socketError) {
-      console.log("Socket.IO not available or error emitting event:", socketError);
+      console.log(
+        "Socket.IO not available or error emitting event:",
+        socketError
+      );
     }
 
     return NextResponse.json({

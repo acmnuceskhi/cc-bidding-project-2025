@@ -22,11 +22,12 @@ export async function GET(request: NextRequest) {
       name: participant.name,
       picture: participant.picture || "url",
       houseId: participant.houseId ? participant.houseId.toString() : null,
-      roundStats: participant.roundStats?.map((stat) => ({
-        roundId: stat.roundId.toString(),
-        bidAmount: stat.bidAmount,
-        winner: stat.winner,
-      })) || [],
+      roundStats:
+        participant.roundStats?.map((stat) => ({
+          roundId: stat.roundId.toString(),
+          bidAmount: stat.bidAmount,
+          winner: stat.winner,
+        })) || [],
     }));
 
     return NextResponse.json(filteredParticipants);
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       picture: picture || "",
       roundStats: [],
       teamId: teamId || null,
-      rollNumber: ""
+      rollNumber: "",
     };
 
     const result = await Participants.create(participant);

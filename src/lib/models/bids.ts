@@ -15,10 +15,13 @@ export interface Bid {
 const collectionName = "bids";
 
 // Ensure index (run once on startup)
- async function ensureIndexes() {
+async function ensureIndexes() {
   try {
     const client = await clientPromise;
-    await client.db().collection<Bid>(collectionName).createIndex({ roundId: 1, houseId: 1 }, { unique: true });
+    await client
+      .db()
+      .collection<Bid>(collectionName)
+      .createIndex({ roundId: 1, houseId: 1 }, { unique: true });
   } catch (err) {
     console.error("Failed to create indexes on bids:", err);
   }
@@ -113,7 +116,10 @@ export const Bids = {
       .toArray();
   },
 
-  async updateWithOperator(id: string, update: Document): Promise<UpdateResult<Bid>> {
+  async updateWithOperator(
+    id: string,
+    update: Document
+  ): Promise<UpdateResult<Bid>> {
     const client = await clientPromise;
     return client
       .db()
@@ -123,7 +129,10 @@ export const Bids = {
 
   async delete(id: string) {
     const client = await clientPromise;
-    return client.db().collection<Bid>(collectionName).deleteOne({ _id: new ObjectId(id) });
+    return client
+      .db()
+      .collection<Bid>(collectionName)
+      .deleteOne({ _id: new ObjectId(id) });
   },
 
   /**
@@ -141,7 +150,7 @@ export const Bids = {
     amount: number
   ): Promise<{ previousAmount: number; isNew: boolean }> {
     const client = await clientPromise;
-    
+
     // Find existing bid
     const existingBid = await client
       .db()

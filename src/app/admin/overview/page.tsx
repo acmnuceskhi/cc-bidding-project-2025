@@ -17,17 +17,18 @@ interface WinnerData {
 export default function OverviewPage() {
   const [houses, setHouses] = useState<House[]>([]);
   const [activeRound, setActiveRound] = useState<Round | null>(null);
-  const [currentParticipant, setCurrentParticipant] = useState<Participant | null>(null);
+  const [currentParticipant, setCurrentParticipant] =
+    useState<Participant | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [roundNumber, setRoundNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [showWinnerModal, setShowWinnerModal] = useState<boolean>(false);
   const [winnerData, setWinnerData] = useState<WinnerData | null>(null);
   const [isStartingRound, setIsStartingRound] = useState<boolean>(false);
-  
+
   // Use ref to capture current participant without causing re-renders
   const currentParticipantRef = useRef<Participant | null>(null);
-  
+
   // Update ref when currentParticipant changes
   useEffect(() => {
     currentParticipantRef.current = currentParticipant;
@@ -40,17 +41,24 @@ export default function OverviewPage() {
         setLoading(true);
       }
 
-      const statusRes = await fetchWithAuth("/api/status", { cache: "no-store" });
+      const statusRes = await fetchWithAuth("/api/status", {
+        cache: "no-store",
+      });
       const statusData = await statusRes.json();
 
-      const housesRes = await fetchWithAuth("/api/houses", { cache: "no-store" });
+      const housesRes = await fetchWithAuth("/api/houses", {
+        cache: "no-store",
+      });
       const housesData = await housesRes.json();
 
       setHouses(housesData || []);
 
       // Check if round just ended (server-side auto-end)
       if (statusData.roundEnded && statusData.winner) {
-        console.log("🏆 Server detected round end with winner:", statusData.winner);
+        console.log(
+          "🏆 Server detected round end with winner:",
+          statusData.winner
+        );
         const participant = currentParticipantRef.current;
         setWinnerData({
           participantName: participant?.name || "Unknown",
@@ -59,7 +67,7 @@ export default function OverviewPage() {
           amount: statusData.winner.amount,
         });
         setShowWinnerModal(true);
-        
+
         // Auto-close after 10 seconds
         setTimeout(() => {
           setShowWinnerModal(false);
@@ -68,10 +76,16 @@ export default function OverviewPage() {
       }
 
       // Only set active round if status is "active", not "completed"
-      if (statusData && statusData.roundId && statusData.roundStatus === "active") {
+      if (
+        statusData &&
+        statusData.roundId &&
+        statusData.roundStatus === "active"
+      ) {
         // Use server's timerEnd for accurate sync across tabs
-        const serverTimerEnd = statusData.timerEnd ? new Date(statusData.timerEnd) : new Date(Date.now() + statusData.timerRemaining * 1000);
-        
+        const serverTimerEnd = statusData.timerEnd
+          ? new Date(statusData.timerEnd)
+          : new Date(Date.now() + statusData.timerRemaining * 1000);
+
         setActiveRound({
           _id: statusData.roundId,
           participantId: statusData.participant.participantId,
@@ -100,12 +114,12 @@ export default function OverviewPage() {
   useEffect(() => {
     // Initial load with loading screen
     fetchOverviewData(true);
-    
+
     // Poll status every 2 seconds for real-time sync (without loading screen)
     const pollInterval = setInterval(() => {
       fetchOverviewData(false);
     }, 2000);
-    
+
     return () => clearInterval(pollInterval);
   }, []);
 
@@ -116,7 +130,9 @@ export default function OverviewPage() {
   const formatTime = (ms: number) => {
     if (ms <= 0) return "00:00";
     const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+    const minutes = Math.floor(totalSeconds / 60)
+      .toString()
+      .padStart(2, "0");
     const seconds = (totalSeconds % 60).toString().padStart(2, "0");
     return `${minutes}:${seconds}`;
   };
@@ -130,23 +146,25 @@ export default function OverviewPage() {
   // ✅ Quick Action Handlers
   const handleStartNextRound = async () => {
     if (isStartingRound) return; // Prevent double-click
-    
+
     setIsStartingRound(true);
     try {
       console.log("🚀 Starting next round...");
       console.log("📝 Token exists:", !!localStorage.getItem("token"));
       console.log("👤 Role:", localStorage.getItem("role"));
-      
-      const response = await fetchWithAuth("/api/rounds/next/start", { method: "POST" });
+
+      const response = await fetchWithAuth("/api/rounds/next/start", {
+        method: "POST",
+      });
       console.log("📡 Response status:", response.status);
-      
+
       const result = await response.json();
       console.log("📦 Response data:", result);
-      
+
       if (!response.ok) {
         console.error("❌ Failed to start next round:", result);
         console.error("❌ Status code:", response.status);
-        
+
         // Handle authentication errors
         if (response.status === 401 || response.status === 403) {
           alert(`Session expired (${response.status}). Please login again.`);
@@ -155,12 +173,14 @@ export default function OverviewPage() {
           window.location.href = "/login";
           return;
         }
-        
-        alert(`Failed to start next round: ${result.error || result.message || "Unknown error"}`);
+
+        alert(
+          `Failed to start next round: ${result.error || result.message || "Unknown error"}`
+        );
         setIsStartingRound(false);
         return;
       }
-      
+
       console.log("✅ Next round started:", result);
       await fetchOverviewData();
       setIsStartingRound(false);
@@ -173,24 +193,30 @@ export default function OverviewPage() {
 
   const handleEndCurrentRound = async () => {
     if (!activeRound?._id) return;
-    
+
     // Only allow ending if round is active
     if (activeRound.status !== "active") {
       alert("Can only end an active round");
       return;
     }
-    
+
     try {
-      const response = await fetchWithAuth(`/api/rounds/${activeRound._id}/end`, { method: "POST" });
+      const response = await fetchWithAuth(
+        `/api/rounds/${activeRound._id}/end`,
+        { method: "POST" }
+      );
       const result = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(result.message || "Failed to end round");
       }
-      
+
       // Show winner announcement if there was a winning bid (BEFORE clearing state)
       if (result.winningBid && result.winningBid.houseName) {
-        console.log("Manual end - showing winner modal for:", result.winningBid);
+        console.log(
+          "Manual end - showing winner modal for:",
+          result.winningBid
+        );
         const participant = currentParticipantRef.current;
         setWinnerData({
           participantName: participant?.name || "Unknown",
@@ -199,7 +225,7 @@ export default function OverviewPage() {
           amount: result.winningBid.amount,
         });
         setShowWinnerModal(true);
-        
+
         // Auto-close after 10 seconds
         setTimeout(() => {
           setShowWinnerModal(false);
@@ -208,12 +234,12 @@ export default function OverviewPage() {
       } else {
         alert(result.message || "Round ended with no bids");
       }
-      
+
       // Clear active round after setting winner data
       setActiveRound(null);
       setCurrentParticipant(null);
       setTimeLeft(0);
-      
+
       // Refresh data after a short delay to ensure DB is updated
       setTimeout(async () => {
         await fetchOverviewData();
@@ -248,7 +274,9 @@ export default function OverviewPage() {
                 ⚔️ Round {roundNumber ?? "?"}
               </h2>
               <p className="text-gray-300 text-lg">
-                {activeRound.status === "active" ? "Battle in Progress" : "No Active Round"}
+                {activeRound.status === "active"
+                  ? "Battle in Progress"
+                  : "No Active Round"}
               </p>
             </div>
 
@@ -259,7 +287,11 @@ export default function OverviewPage() {
               <div className="w-full max-w-2xl mx-auto bg-gray-800 rounded-full h-6 overflow-hidden border-2 border-yellow-600">
                 <div
                   className={`h-full transition-all duration-1000 ${
-                    timeLeft > 30000 ? "bg-green-500" : timeLeft > 10000 ? "bg-yellow-500" : "bg-red-500"
+                    timeLeft > 30000
+                      ? "bg-green-500"
+                      : timeLeft > 10000
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
                   }`}
                   style={{ width: `${(timeLeft / 60000) * 100}%` }}
                 ></div>
@@ -268,7 +300,9 @@ export default function OverviewPage() {
 
             {currentParticipant && (
               <div className="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-xl p-6 text-center">
-                <h3 className="text-2xl font-bold text-black mb-4">🥋 Current Warrior</h3>
+                <h3 className="text-2xl font-bold text-black mb-4">
+                  🥋 Current Warrior
+                </h3>
                 <div className="flex items-center justify-center gap-6">
                   {currentParticipant.picture && (
                     <img
@@ -278,8 +312,12 @@ export default function OverviewPage() {
                     />
                   )}
                   <div className="text-left">
-                    <p className="text-3xl font-bold text-black">{currentParticipant.name}</p>
-                    <p className="text-black text-opacity-80">Awaiting house bids...</p>
+                    <p className="text-3xl font-bold text-black">
+                      {currentParticipant.name}
+                    </p>
+                    <p className="text-black text-opacity-80">
+                      Awaiting house bids...
+                    </p>
                   </div>
                 </div>
               </div>
@@ -294,10 +332,13 @@ export default function OverviewPage() {
 
       {/* 🏯 House Treasuries */}
       <div className="bg-black bg-opacity-40 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
-        <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">🏯 House Treasuries</h2>
+        <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">
+          🏯 House Treasuries
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {houses.map((house, index) => {
-            const percentage = (house.remainingBudget / house.totalBudget) * 100;
+            const percentage =
+              (house.remainingBudget / house.totalBudget) * 100;
             const getColor = () => {
               if (percentage > 70) return "from-green-600 to-green-800";
               if (percentage > 40) return "from-yellow-600 to-orange-700";
@@ -309,15 +350,26 @@ export default function OverviewPage() {
                 key={house._id?.toString() || `house-${index}`}
                 className={`bg-gradient-to-br ${getColor()} rounded-xl p-6 border-2 border-yellow-600 shadow-lg transform hover:scale-105 transition-all`}
               >
-                <h3 className="text-2xl font-bold text-white mb-3 text-center">{house.name}</h3>
+                <h3 className="text-2xl font-bold text-white mb-3 text-center">
+                  {house.name}
+                </h3>
                 <div className="text-center mb-4">
-                  <div className="text-4xl font-bold text-yellow-300">${house.remainingBudget}</div>
-                  <div className="text-sm text-gray-200">of ${house.totalBudget}</div>
+                  <div className="text-4xl font-bold text-yellow-300">
+                    ${house.remainingBudget}
+                  </div>
+                  <div className="text-sm text-gray-200">
+                    of ${house.totalBudget}
+                  </div>
                 </div>
                 <div className="w-full bg-black bg-opacity-40 rounded-full h-4 overflow-hidden">
-                  <div className="bg-yellow-400 h-full rounded-full transition-all" style={{ width: `${percentage}%` }}></div>
+                  <div
+                    className="bg-yellow-400 h-full rounded-full transition-all"
+                    style={{ width: `${percentage}%` }}
+                  ></div>
                 </div>
-                <div className="text-center mt-2 text-sm text-gray-200">{percentage.toFixed(0)}% remaining</div>
+                <div className="text-center mt-2 text-sm text-gray-200">
+                  {percentage.toFixed(0)}% remaining
+                </div>
               </div>
             );
           })}
@@ -326,7 +378,9 @@ export default function OverviewPage() {
 
       {/* ⚡ Quick Actions */}
       <div className="bg-black bg-opacity-40 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
-        <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">⚡ Quick Actions</h2>
+        <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">
+          ⚡ Quick Actions
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
             onClick={handleStartNextRound}
@@ -359,7 +413,7 @@ export default function OverviewPage() {
               <h1 className="text-7xl font-bold text-black mb-8 drop-shadow-lg">
                 🏆 SOLD! 🏆
               </h1>
-              
+
               {/* Participant Info */}
               <div className="bg-black bg-opacity-40 rounded-2xl p-8 mb-8">
                 {winnerData.participantPicture && (

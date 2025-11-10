@@ -1,12 +1,12 @@
 /**
  * Reset Auction Script
- * 
+ *
  * This script resets the auction system to its initial state:
  * - Resets all rounds to "scheduled" status
  * - Clears all bids
  * - Resets house budgets to their original amounts
  * - Clears participant house assignments
- * 
+ *
  * Usage: npx tsx src/scripts/reset-auction.ts
  */
 
@@ -32,7 +32,9 @@ async function resetAuction() {
         },
       }
     );
-    console.log(`   ✅ Reset ${roundsResult.modifiedCount} rounds to scheduled status\n`);
+    console.log(
+      `   ✅ Reset ${roundsResult.modifiedCount} rounds to scheduled status\n`
+    );
 
     // 2. Delete all bids
     console.log("💰 Clearing bids...");
@@ -43,7 +45,7 @@ async function resetAuction() {
     console.log("🏯 Resetting house budgets...");
     const houses = await db.collection("houses").find({}).toArray();
     let housesUpdated = 0;
-    
+
     for (const house of houses) {
       await db.collection("houses").updateOne(
         { _id: house._id },
@@ -68,7 +70,9 @@ async function resetAuction() {
         },
       }
     );
-    console.log(`   ✅ Cleared ${participantsResult.modifiedCount} participant assignments\n`);
+    console.log(
+      `   ✅ Cleared ${participantsResult.modifiedCount} participant assignments\n`
+    );
 
     // Summary
     console.log("✨ Auction reset complete!\n");
@@ -76,7 +80,9 @@ async function resetAuction() {
     console.log(`  - ${roundsResult.modifiedCount} rounds reset to scheduled`);
     console.log(`  - ${bidsResult.deletedCount} bids cleared`);
     console.log(`  - ${housesUpdated} house budgets restored`);
-    console.log(`  - ${participantsResult.modifiedCount} participant assignments cleared`);
+    console.log(
+      `  - ${participantsResult.modifiedCount} participant assignments cleared`
+    );
     console.log("\n🎯 Ready for a fresh auction!\n");
 
     process.exit(0);

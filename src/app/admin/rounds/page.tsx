@@ -46,13 +46,15 @@ interface filteredParticipant {
   participantId: string;
   name: string;
   picture?: string;
-  houseId: string
+  houseId: string;
 }
 
 export default function RoundsPage() {
   const [rounds, setRounds] = useState<RoundWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedRound, setSelectedRound] = useState<RoundWithDetails | null>(null);
+  const [selectedRound, setSelectedRound] = useState<RoundWithDetails | null>(
+    null
+  );
 
   const fetchRounds = async () => {
     try {
@@ -68,7 +70,8 @@ export default function RoundsPage() {
         fetchWithAuth("/api/houses"),
       ]);
 
-      const participantsData: filteredParticipant[] = await participantsRes.json();
+      const participantsData: filteredParticipant[] =
+        await participantsRes.json();
       const housesData: House[] = await housesRes.json();
 
       // Sort the API rounds before mapping
@@ -81,7 +84,9 @@ export default function RoundsPage() {
 
       // Map rounds to RoundWithDetails
       const mapped: RoundWithDetails[] = roundsData.map((round, index) => {
-        const participant = participantsData.find(p => p.participantId === round.participantId);
+        const participant = participantsData.find(
+          (p) => p.participantId === round.participantId
+        );
 
         const now = new Date();
         let status: "not_started" | "active" | "completed" = "not_started";
@@ -146,7 +151,8 @@ export default function RoundsPage() {
 
       // Sort rounds by roundNumber before updating state
       const sortedMapped = mapped.sort((a, b) => {
-        if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
+        if (a.roundNumber !== b.roundNumber)
+          return a.roundNumber - b.roundNumber;
         return (a.timerEnd?.getTime() || 0) - (b.timerEnd?.getTime() || 0);
       });
 
@@ -205,11 +211,15 @@ export default function RoundsPage() {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">⏱️ Bidding Rounds</h1>
+        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          ⏱️ Bidding Rounds
+        </h1>
         <p className="text-gray-300">Complete history of all auction rounds</p>
       </div>
 
-      {loading && <div className="text-center text-yellow-400 text-lg">Loading...</div>}
+      {loading && (
+        <div className="text-center text-yellow-400 text-lg">Loading...</div>
+      )}
 
       <div className="space-y-4">
         {rounds.map((round, index) => (
@@ -219,14 +229,16 @@ export default function RoundsPage() {
               round.status === "active"
                 ? "bg-gradient-to-r from-yellow-700 to-orange-700 border-yellow-400 animate-pulse"
                 : round.status === "completed"
-                ? "bg-gradient-to-r from-green-700 to-green-900 border-green-500"
-                : "bg-gradient-to-r from-gray-700 to-gray-900 border-gray-500"
+                  ? "bg-gradient-to-r from-green-700 to-green-900 border-green-500"
+                  : "bg-gradient-to-r from-gray-700 to-gray-900 border-gray-500"
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-6">
                 <div className="text-center">
-                  <div className="text-5xl font-bold text-yellow-400 mb-1">{round.roundNumber}</div>
+                  <div className="text-5xl font-bold text-yellow-400 mb-1">
+                    {round.roundNumber}
+                  </div>
                   <span
                     className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${getStatusBadge(
                       round.status
@@ -245,18 +257,29 @@ export default function RoundsPage() {
                 )}
 
                 <div>
-                  <h3 className="text-2xl font-bold text-white mb-1">{round.participantName}</h3>
+                  <h3 className="text-2xl font-bold text-white mb-1">
+                    {round.participantName}
+                  </h3>
                   {round.status === "completed" && round.winnerHouse && (
                     <p className="text-lg text-gray-200">
                       Sold to{" "}
-                      <span className="text-yellow-400 font-bold">{round.winnerHouse}</span> for{" "}
-                      <span className="text-green-400 font-bold text-2xl">${round.winningBid}</span>
+                      <span className="text-yellow-400 font-bold">
+                        {round.winnerHouse}
+                      </span>{" "}
+                      for{" "}
+                      <span className="text-green-400 font-bold text-2xl">
+                        ${round.winningBid}
+                      </span>
                     </p>
                   )}
                   {round.status === "active" && (
-                    <p className="text-yellow-300 font-semibold animate-pulse">Bidding in progress...</p>
+                    <p className="text-yellow-300 font-semibold animate-pulse">
+                      Bidding in progress...
+                    </p>
                   )}
-                  {round.status === "not_started" && <p className="text-gray-400">Awaiting start</p>}
+                  {round.status === "not_started" && (
+                    <p className="text-gray-400">Awaiting start</p>
+                  )}
                 </div>
               </div>
 
@@ -301,7 +324,9 @@ export default function RoundsPage() {
             >
               ✖
             </button>
-            <h2 className="text-3xl font-bold mb-4">Round {selectedRound.roundNumber} Details</h2>
+            <h2 className="text-3xl font-bold mb-4">
+              Round {selectedRound.roundNumber} Details
+            </h2>
             <p className="mb-2">
               <strong>Participant:</strong> {selectedRound.participantName}
             </p>
@@ -322,7 +347,8 @@ export default function RoundsPage() {
             </p>
             {selectedRound.timerEnd && (
               <p className="mb-2">
-                <strong>Timer End:</strong> {selectedRound.timerEnd.toLocaleString()}
+                <strong>Timer End:</strong>{" "}
+                {selectedRound.timerEnd.toLocaleString()}
               </p>
             )}
           </div>

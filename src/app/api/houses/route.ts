@@ -66,7 +66,11 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
 
     // Validate fields and enforce invariants
-  const update: Partial<{ name: string; totalBudget: number; remainingBudget: number }> = {};
+    const update: Partial<{
+      name: string;
+      totalBudget: number;
+      remainingBudget: number;
+    }> = {};
     const errors: string[] = [];
 
     if (body.name !== undefined) {
@@ -86,7 +90,10 @@ export async function PUT(request: NextRequest) {
     }
 
     if (body.remainingBudget !== undefined) {
-      if (typeof body.remainingBudget !== "number" || body.remainingBudget < 0) {
+      if (
+        typeof body.remainingBudget !== "number" ||
+        body.remainingBudget < 0
+      ) {
         errors.push("remainingBudget must be a non-negative number");
       } else {
         update.remainingBudget = body.remainingBudget;
@@ -122,8 +129,7 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json(
           {
             error: "INVALID_INVARIANT",
-            message:
-              "totalBudget cannot be less than remainingBudget",
+            message: "totalBudget cannot be less than remainingBudget",
           },
           { status: 400 }
         );

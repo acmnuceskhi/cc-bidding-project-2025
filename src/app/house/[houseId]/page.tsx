@@ -36,8 +36,11 @@ export default function HouseDashboard() {
   const houseId = params.houseId as string;
 
   const [house, setHouse] = useState<House | null>(null);
-  const [activeRound, setActiveRound] = useState<(filteredRound & { roundNumber?: number }) | null>(null);
-  const [currentParticipant, setCurrentParticipant] = useState<ParticipantWithDetails | null>(null);
+  const [activeRound, setActiveRound] = useState<
+    (filteredRound & { roundNumber?: number }) | null
+  >(null);
+  const [currentParticipant, setCurrentParticipant] =
+    useState<ParticipantWithDetails | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
@@ -49,7 +52,9 @@ export default function HouseDashboard() {
         // ✅ Fetch all houses and find the one matching the URL param
         const housesResponse = await fetchWithAuth("/api/houses");
         const allHouses = await housesResponse.json();
-        const selectedHouse = allHouses.find((h: HouseApiResponse) => h.houseId === houseId);
+        const selectedHouse = allHouses.find(
+          (h: HouseApiResponse) => h.houseId === houseId
+        );
         if (!selectedHouse) {
           console.warn("No house found with ID:", houseId);
           setHouse(null);
@@ -78,7 +83,9 @@ export default function HouseDashboard() {
         setCurrentParticipant(matchedParticipant || null);
 
         // ✅ Update time remaining from server time
-        setTimeLeft(Math.max(0, new Date(active.timerEnd).getTime() - Date.now()));
+        setTimeLeft(
+          Math.max(0, new Date(active.timerEnd).getTime() - Date.now())
+        );
 
         // ✅ No longer checking for existing bids - allow multiple bids
         setHasBid(false);
@@ -94,12 +101,12 @@ export default function HouseDashboard() {
 
     // ✅ Fetch once when the component mounts
     fetchData();
-    
+
     // Poll every 2 seconds for real-time sync
     const pollInterval = setInterval(() => {
       fetchData();
     }, 2000);
-    
+
     return () => clearInterval(pollInterval);
   }, [houseId]);
 
@@ -124,8 +131,8 @@ export default function HouseDashboard() {
       }
 
       // Update house budget with the actual remaining budget from server
-      if (typeof data.remainingBudget === 'number') {
-        setHouse(prev =>
+      if (typeof data.remainingBudget === "number") {
+        setHouse((prev) =>
           prev ? { ...prev, remainingBudget: data.remainingBudget } : prev
         );
       } else {
@@ -133,16 +140,20 @@ export default function HouseDashboard() {
         // Fallback: refetch house data
         const housesResponse = await fetchWithAuth("/api/houses");
         const allHouses = await housesResponse.json();
-        const updatedHouse = allHouses.find((h: HouseApiResponse) => h.houseId === houseId);
+        const updatedHouse = allHouses.find(
+          (h: HouseApiResponse) => h.houseId === houseId
+        );
         if (updatedHouse) {
           setHouse(updatedHouse);
         }
       }
-      
+
       setBidAmount(0);
-      
+
       if (data.previousAmount && data.previousAmount > 0) {
-        alert(`✅ Bid updated from $${data.previousAmount} to $${data.newAmount}!`);
+        alert(
+          `✅ Bid updated from $${data.previousAmount} to $${data.newAmount}!`
+        );
       } else {
         alert("✅ Bid placed successfully! You can update it anytime.");
       }
@@ -168,9 +179,8 @@ export default function HouseDashboard() {
   const isTimeRunningOut = timeLeftValue < 10000;
   const budgetPercentage = (house.remainingBudget / house.totalBudget) * 100;
 
-
   return (
-    <div 
+    <div
       className="min-h-screen bg-cover bg-center bg-fixed relative"
       style={{
         backgroundImage: "url('/arena-background.jpg')",
@@ -194,7 +204,9 @@ export default function HouseDashboard() {
               <button
                 onClick={async () => {
                   try {
-                    const data = await fetchWithAuth("/api/auth/logout", { method: "POST" });
+                    const data = await fetchWithAuth("/api/auth/logout", {
+                      method: "POST",
+                    });
                     console.log("Logout response:", data);
 
                     // Clear client-side storage
@@ -238,7 +250,11 @@ export default function HouseDashboard() {
               <div className="w-full bg-black bg-opacity-60 rounded-full h-4 border-2 border-yellow-600">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    budgetPercentage > 50 ? "bg-green-500" : budgetPercentage > 25 ? "bg-yellow-500" : "bg-red-500"
+                    budgetPercentage > 50
+                      ? "bg-green-500"
+                      : budgetPercentage > 25
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
                   }`}
                   style={{ width: `${budgetPercentage}%` }}
                 ></div>
@@ -255,10 +271,14 @@ export default function HouseDashboard() {
                     ⚔️ ROUND {activeRound.roundNumber || "?"}
                   </h2>
                   <div className="text-center">
-                    <div className={`text-6xl font-bold ${isTimeRunningOut ? "text-red-600 animate-pulse" : "text-black"}`}>
+                    <div
+                      className={`text-6xl font-bold ${isTimeRunningOut ? "text-red-600 animate-pulse" : "text-black"}`}
+                    >
                       {formatTime(timeLeftValue)}
                     </div>
-                    <div className="text-sm text-black font-semibold mt-1">Time Left</div>
+                    <div className="text-sm text-black font-semibold mt-1">
+                      Time Left
+                    </div>
                   </div>
                 </div>
 
@@ -296,7 +316,9 @@ export default function HouseDashboard() {
                     )}
                     {currentParticipant.batch && (
                       <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-6 py-2 rounded-full border-4 border-yellow-400">
-                        <span className="text-yellow-400 font-bold text-lg">{currentParticipant.batch}</span>
+                        <span className="text-yellow-400 font-bold text-lg">
+                          {currentParticipant.batch}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -315,7 +337,10 @@ export default function HouseDashboard() {
                     )}
                     {currentParticipant.batch && (
                       <div className="text-xl text-gray-300">
-                        📚 Year: <span className="text-yellow-400 font-semibold">{currentParticipant.batch}</span>
+                        📚 Year:{" "}
+                        <span className="text-yellow-400 font-semibold">
+                          {currentParticipant.batch}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -346,9 +371,15 @@ export default function HouseDashboard() {
                       />
                       <button
                         onClick={placeBid}
-                        disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
+                        disabled={
+                          loading ||
+                          bidAmount <= 0 ||
+                          bidAmount > house.remainingBudget
+                        }
                         className={`px-8 py-4 rounded-xl text-2xl font-bold transition-all transform ${
-                          loading || bidAmount <= 0 || bidAmount > house.remainingBudget
+                          loading ||
+                          bidAmount <= 0 ||
+                          bidAmount > house.remainingBudget
                             ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                             : "bg-green-600 hover:bg-green-700 text-white hover:scale-105 shadow-lg"
                         }`}
@@ -376,9 +407,15 @@ export default function HouseDashboard() {
           ) : (
             <div className="bg-black bg-opacity-80 rounded-2xl p-12 border-4 border-yellow-600 shadow-2xl">
               <div className="text-center">
-                <h2 className="text-4xl font-bold text-yellow-400 mb-4">⏸️ No Active Round</h2>
-                <p className="text-xl text-gray-300">Waiting for the next battle to begin...</p>
-                <p className="text-gray-400 mt-4">The admin will start the next round soon</p>
+                <h2 className="text-4xl font-bold text-yellow-400 mb-4">
+                  ⏸️ No Active Round
+                </h2>
+                <p className="text-xl text-gray-300">
+                  Waiting for the next battle to begin...
+                </p>
+                <p className="text-gray-400 mt-4">
+                  The admin will start the next round soon
+                </p>
               </div>
             </div>
           )}

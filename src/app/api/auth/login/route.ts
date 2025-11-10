@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Users } from "@/lib/models/users";
-import { verifyPassword, generateToken, SESSION_TIMEOUT_MINUTES } from "@/lib/auth";
+import {
+  verifyPassword,
+  generateToken,
+  SESSION_TIMEOUT_MINUTES,
+} from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,12 +65,12 @@ export async function POST(request: NextRequest) {
     //         );
     //       }
 
-      // Session is stale → clear it before logging in again
-      // await Users.update(user._id!.toString(), {
-      //         activeSessionToken: null,
-      //         lastActiveAt: null,
-      //       });
-      //     }
+    // Session is stale → clear it before logging in again
+    // await Users.update(user._id!.toString(), {
+    //         activeSessionToken: null,
+    //         lastActiveAt: null,
+    //       });
+    //     }
 
     // Generate new JWT session token
     const tokenPayload = {

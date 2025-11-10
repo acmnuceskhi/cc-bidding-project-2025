@@ -7,7 +7,7 @@ type Phase = "before" | "active" | "after";
 
 export default function LandingPage() {
   const [phase, setPhase] = useState<Phase>("before");
-  const [timeLeft, setTimeLeft] = useState(0);//fetched from backend, but hardcoded rn
+  const [timeLeft, setTimeLeft] = useState(0); //fetched from backend, but hardcoded rn
 
   // //fetching phase and countdown from backend
   // useEffect(() => {
@@ -16,7 +16,7 @@ export default function LandingPage() {
   //       const res = await fetch("/api/"); //unsure about this rn
   //       const data = await res.json();
   //       setPhase(data.phase); //before/active/after
-  //       setTimeLeft(data.timeLeft); 
+  //       setTimeLeft(data.timeLeft);
   //     } catch (err) {
   //       console.error("Failed to fetch landing status", err);
   //     }
@@ -30,7 +30,7 @@ export default function LandingPage() {
     const updatePhase = () => {
       const now = new Date();
       const beforeEnd = new Date("2025-11-18T10:00:00"); // before
-      const activeEnd = new Date("2025-11-18T12:00:00"); // active 
+      const activeEnd = new Date("2025-11-18T12:00:00"); // active
 
       if (now < beforeEnd) {
         setPhase("before");
@@ -48,7 +48,6 @@ export default function LandingPage() {
     const interval = setInterval(updatePhase, 1000); //updates every second
     return () => clearInterval(interval);
   }, []);
-
 
   // Convert total seconds into days, hours, minutes, seconds (all padded to 2 digits)
   const getDHMS = (totalSeconds: number) => {
@@ -154,7 +153,8 @@ export default function LandingPage() {
 
       {/* Footer */}
       <div className="absolute bottom-6 text-gray-400 text-sm">
-        Powered by <span className="text-[#FFD700] font-semibold">CC Tech Team</span>
+        Powered by{" "}
+        <span className="text-[#FFD700] font-semibold">CC Tech Team</span>
       </div>
     </div>
   );

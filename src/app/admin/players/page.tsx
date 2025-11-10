@@ -61,10 +61,11 @@ export default function PlayersPage() {
             const round = rounds.find(
               (r: Round) => r.participantId === participant.participantId
             );
-            
+
             if (round && participant.houseId && round.finalized) {
               const house = houses.find(
-                (h: House) => h.houseId?.toString() === participant.houseId?.toString()
+                (h: House) =>
+                  h.houseId?.toString() === participant.houseId?.toString()
               );
               // const winningBid;
               return {
@@ -124,7 +125,9 @@ export default function PlayersPage() {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">🥋 All Warriors</h1>
+        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+          🥋 All Warriors
+        </h1>
         <p className="text-gray-300">
           {availableCount} available • {soldCount} recruited
         </p>
@@ -143,16 +146,16 @@ export default function PlayersPage() {
                     ? status === "sold"
                       ? "bg-red-600 text-white"
                       : status === "available"
-                      ? "bg-green-600 text-white"
-                      : "bg-yellow-600 text-black"
+                        ? "bg-green-600 text-white"
+                        : "bg-yellow-600 text-black"
                     : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                 }`}
               >
                 {status === "all"
                   ? `All (${players.length})`
                   : status === "available"
-                  ? `Available (${availableCount})`
-                  : `Recruited (${soldCount})`}
+                    ? `Available (${availableCount})`
+                    : `Recruited (${soldCount})`}
               </button>
             ))}
           </div>

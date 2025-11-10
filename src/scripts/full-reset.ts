@@ -1,11 +1,11 @@
 /**
  * Full Reset Script
- * 
+ *
  * This script performs a complete reset and re-initialization:
  * 1. Drops all collections
  * 2. Re-seeds houses, participants, users
  * 3. Creates fresh scheduled rounds for all participants
- * 
+ *
  * Usage: npx tsx src/scripts/full-reset.ts
  */
 
@@ -51,14 +51,16 @@ async function fullReset() {
         picture: null,
       });
     }
-    const participantsResult = await db.collection("participants").insertMany(participants);
+    const participantsResult = await db
+      .collection("participants")
+      .insertMany(participants);
     const participantIds = Object.values(participantsResult.insertedIds);
     console.log(`   ✅ Created ${participantIds.length} participants\n`);
 
     // 4. Create users (admin + house captains)
     console.log("🔐 Creating users...");
     const hashedPassword = await bcrypt.hash("password123", 10);
-    
+
     const users: any[] = [
       {
         username: "admin",
@@ -78,7 +80,9 @@ async function fullReset() {
     }
 
     await db.collection("users").insertMany(users);
-    console.log(`   ✅ Created ${users.length} users (1 admin + ${houseIds.length} captains)\n`);
+    console.log(
+      `   ✅ Created ${users.length} users (1 admin + ${houseIds.length} captains)\n`
+    );
 
     // 5. Create scheduled rounds for all participants
     console.log("📋 Creating scheduled rounds...");
@@ -106,7 +110,9 @@ async function fullReset() {
     console.log("\n  House Captains:");
     houses.forEach((house) => {
       console.log(`    ${house.name}:`);
-      console.log(`      Username: ${house.name.toLowerCase().replace(/\s+/g, "")}`);
+      console.log(
+        `      Username: ${house.name.toLowerCase().replace(/\s+/g, "")}`
+      );
       console.log(`      Password: password123`);
     });
     console.log("\n🎯 System ready for testing!\n");
