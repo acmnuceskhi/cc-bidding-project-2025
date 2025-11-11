@@ -140,12 +140,10 @@ export const Participants = {
 
     if (update.rollNumber) {
       // Duplicate check
-      const rollExists = await db
-        .collection(collectionName)
-        .countDocuments({
-          rollNumber: update.rollNumber,
-          _id: { $ne: new ObjectId(id) },
-        });
+      const rollExists = await db.collection(collectionName).countDocuments({
+        rollNumber: update.rollNumber,
+        _id: { $ne: new ObjectId(id) },
+      });
 
       if (rollExists > 0) {
         throw new Error("Roll number already exists");

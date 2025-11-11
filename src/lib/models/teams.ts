@@ -9,6 +9,7 @@ export interface Team {
   _id?: ObjectId;
 
   // Round 1 stats (awaiting final format)
+  rank: number; // team position; 1 = best
   successfulAttempts: number; // Successful problem attempts
   unsuccessfulAttempts: number; // Unsuccessful problem attempts
   totalPoints: number; // Total points earned
@@ -19,6 +20,16 @@ export interface Team {
 const collectionName = "teams";
 
 export const Teams = {
+  // Ensure indexes useful for queries/sorting
+  async ensureIndexes() {
+    try {
+      const client = await clientPromise;
+      const collection = client.db().collection<Team>(collectionName);
+      await collection.createIndex({ rank: 1 });
+    } catch (err) {
+      console.error("Failed to create index on teams:", err);
+    }
+  },
   // Fetch all team documents
   async getAll(): Promise<Team[]> {
     const client = await clientPromise;
@@ -37,6 +48,12 @@ export const Teams = {
         totalPoints: team.totalPoints ?? 0,
         totalPenalty: team.totalPenalty ?? 0,
         timeTakenPerProblem: team.timeTakenPerProblem ?? [],
+        rank:
+          typeof team.rank === "number"
+            ? team.rank
+            : (() => {
+                throw new Error("rank is required when creating a Team");
+              })(),
       } as Team);
   },
 

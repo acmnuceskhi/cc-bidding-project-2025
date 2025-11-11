@@ -14,14 +14,22 @@ export interface Bid {
 // Name of MongoDB collection
 const collectionName = "bids";
 
-// Ensure index (run once on startup)
+// Ensure indexes (run once on startup) - non-unique to allow full bid history per house per round
 async function ensureIndexes() {
   try {
     const client = await clientPromise;
-    await client
-      .db()
-      .collection<Bid>(collectionName)
-      .createIndex({ roundId: 1, houseId: 1 }, { unique: true });
+    const col = client.db().collection<Bid>(collectionName);
+    // Drop legacy unique index if it exists to allow multiple bids per (roundId, houseId)
+    try {
+      await col.dropIndex("roundId_1_houseId_1");
+    } catch {
+      // ignore if not found
+    }
+    await col.createIndex({ roundId: 1 });
+    await col.createIndex({ houseId: 1 });
+    await col.createIndex({ participantId: 1 });
+    // Compound index to efficiently fetch latest bid per house in a round
+    await col.createIndex({ roundId: 1, houseId: 1, timestamp: -1 });
   } catch (err) {
     console.error("Failed to create indexes on bids:", err);
   }
@@ -105,6 +113,23 @@ export const Bids = {
       .toArray();
   },
 
+  /**
+   * Get the latest (most recent) bid placed by a house in a round.
+   */
+  async getLatestByHouseInRound(
+    roundId: string,
+    houseId: string
+  ): Promise<Bid | null> {
+    const client = await clientPromise;
+    return client
+      .db()
+      .collection<Bid>(collectionName)
+      .find({ roundId: new ObjectId(roundId), houseId: new ObjectId(houseId) })
+      .sort({ timestamp: -1 })
+      .limit(1)
+      .next();
+  },
+
   // Fetch all bids from the database
   async getAll(): Promise<Bid[]> {
     const client = await clientPromise;
@@ -151,36 +176,22 @@ export const Bids = {
   ): Promise<{ previousAmount: number; isNew: boolean }> {
     const client = await clientPromise;
 
-    // Find existing bid
-    const existingBid = await client
-      .db()
-      .collection<Bid>(collectionName)
-      .findOne({
-        roundId: new ObjectId(roundId),
-        houseId: new ObjectId(houseId),
-      });
-
+    // Get latest existing bid for this house in this round (if any)
+    const existingBid = await this.getLatestByHouseInRound(roundId, houseId);
     const previousAmount = existingBid?.amount || 0;
     const isNew = !existingBid;
 
-    // Update or insert
+    // Insert a new bid log entry (append-only)
     await client
       .db()
       .collection<Bid>(collectionName)
-      .updateOne(
-        {
-          roundId: new ObjectId(roundId),
-          houseId: new ObjectId(houseId),
-        },
-        {
-          $set: {
-            participantId: new ObjectId(participantId),
-            amount: amount,
-            timestamp: new Date(),
-          },
-        },
-        { upsert: true }
-      );
+      .insertOne({
+        roundId: new ObjectId(roundId),
+        houseId: new ObjectId(houseId),
+        participantId: new ObjectId(participantId),
+        amount,
+        timestamp: new Date(),
+      });
 
     return { previousAmount, isNew };
   },
