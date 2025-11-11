@@ -3,6 +3,7 @@ import { Outfit } from "next/font/google";
 import "./globals.css";
 // import NavigationLoader from "@/components/NavigationLoader";
 import TopLoadingBar from "@/components/TopLoadingBar";
+import { ToastProvider } from "@/components/ToastProvider";
 
 // Optional full screen loader implemented by NavigationLoader
 
@@ -29,9 +30,11 @@ export default function RootLayout({
         className={`${outfit.variable} font-sans antialiased`}
         suppressHydrationWarning={true}
       >
-        {/* <NavigationLoader /> */}
-        <TopLoadingBar />
-        {children}
+        <ToastProvider>
+          {/* <NavigationLoader /> */}
+          <TopLoadingBar />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );
