@@ -22,7 +22,7 @@ const ParticipantCard: React.FC<ParticipantCardProps> = ({
         <h3 className="text-lg font-semibold">{participant.name}</h3>
         {isActive && timeLeft !== undefined && (
           <span className="bg-red-500 text-white rounded-full px-2 py-1 text-sm">
-            {Math.ceil(timeLeft / 1000)}s
+            {Math.floor(timeLeft / 1000)}s
           </span>
         )}
       </div>

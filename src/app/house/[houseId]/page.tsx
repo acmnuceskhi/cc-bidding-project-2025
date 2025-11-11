@@ -5,9 +5,9 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { House } from "@/lib/models/houses";
 import { Participant } from "@/lib/models/participants";
-import { Round } from "@/lib/models/rounds";
-import { Bid } from "@/lib/models/bids";
 import { fetchWithAuth } from "@/lib/fetchWithAuth"; // ✅ your global helper
+import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
+import { useToast } from "@/components/ToastProvider";
 
 interface ParticipantWithDetails extends Participant {
   batch?: string;
@@ -44,13 +44,17 @@ export default function HouseDashboard() {
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [hasBid, setHasBid] = useState(false);
+  // removed unused hasBid state after allowing multiple bids
+
+  // Server time handled via synchronized countdown hook
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // ✅ Fetch all houses and find the one matching the URL param
-        const housesResponse = await fetchWithAuth("/api/houses");
+        const housesResponse = await fetchWithAuth("/api/houses", {
+          cache: "no-store",
+        });
         const allHouses = await housesResponse.json();
         const selectedHouse = allHouses.find(
           (h: HouseApiResponse) => h.houseId === houseId
@@ -62,57 +66,98 @@ export default function HouseDashboard() {
         }
         setHouse(selectedHouse);
 
-        // ✅ Fetch active round
-        const roundsResponse = await fetchWithAuth("/api/rounds?active=only");
-        const active = (await roundsResponse.json())[0] || null;
-        setActiveRound(active);
+        // ✅ Fetch status (includes round number)
+        const statusRes = await fetchWithAuth("/api/status", {
+          cache: "no-store",
+        });
+        const statusData = await statusRes.json();
 
-        if (!active) {
+        // Build active round from status data
+        if (
+          statusData &&
+          statusData.roundId &&
+          statusData.roundStatus === "active"
+        ) {
+          const serverTimerEnd = statusData.timerEnd
+            ? new Date(statusData.timerEnd)
+            : null;
+
+          if (serverTimerEnd) {
+            setActiveRound({
+              _id: statusData.roundId,
+              roundId: statusData.roundId,
+              participantId: statusData.participant?.participantId || "",
+              status: statusData.roundStatus,
+              timerEnd: serverTimerEnd.toISOString(),
+              roundNumber: statusData.roundNumber,
+            });
+          } else {
+            setActiveRound(null);
+          }
+        } else {
+          setActiveRound(null);
+        }
+
+        if (!statusData || !statusData.roundId) {
           setCurrentParticipant(null);
           setTimeLeft(0);
-          setHasBid(false);
           return;
         }
 
         // ✅ Fetch participant for active round
-        const participantResponse = await fetchWithAuth(`/api/participants`);
+        const participantResponse = await fetchWithAuth(`/api/participants`, {
+          cache: "no-store",
+        });
         const participants = await participantResponse.json();
         const matchedParticipant = participants.find(
-          (p: any) => p.participantId === active.participantId
+          (p: any) => p.participantId === statusData.participant?.participantId
         );
         setCurrentParticipant(matchedParticipant || null);
 
-        // ✅ Update time remaining from server time
-        setTimeLeft(
-          Math.max(0, new Date(active.timerEnd).getTime() - Date.now())
-        );
-
-        // ✅ No longer checking for existing bids - allow multiple bids
-        setHasBid(false);
+        // Time will be driven by synchronized countdown hook
       } catch (error) {
         console.error("Error fetching data:", error);
         setHouse(null);
         setActiveRound(null);
         setCurrentParticipant(null);
         setTimeLeft(0);
-        setHasBid(false);
+        // No-op
       }
     };
 
     // ✅ Fetch once when the component mounts
     fetchData();
 
-    // Poll every 2 seconds for real-time sync
+    // Poll every 3 seconds (reduced from 2s to ease compositor load during screen recording)
     const pollInterval = setInterval(() => {
       fetchData();
-    }, 2000);
+    }, 3000);
 
     return () => clearInterval(pollInterval);
   }, [houseId]);
 
+  // Synced countdown via server time (rAF-based)
+  const { remainingMs: houseRemaining } = useSynchronizedCountdown(
+    activeRound?.timerEnd ?? null
+  );
+  useEffect(() => {
+    setTimeLeft(houseRemaining);
+  }, [houseRemaining]);
+
+  // Toast API
+  const toast = useToast();
+
   const placeBid = async () => {
     if (!activeRound || !currentParticipant || !house || bidAmount <= 0) return;
     setLoading(true);
+    const { remainingBudget } = house;
+    // Optimistic budget update (temporary) - will reconcile with server
+    const optimisticBudget = Math.max(0, remainingBudget - bidAmount);
+    setHouse((prev) =>
+      prev ? { ...prev, remainingBudget: optimisticBudget } : prev
+    );
+
+    const toastId = toast.show("Placing bid…", { type: "info" });
 
     try {
       const response = await fetchWithAuth("/api/bids", {
@@ -123,49 +168,83 @@ export default function HouseDashboard() {
         }),
       });
 
-      const data = await response.json();
-
-      // Check if the request was successful
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Failed to place bid");
+      // Fast path: immediate feedback after headers, before body parse
+      if (!response.ok) {
+        let message = "Failed to place bid.";
+        try {
+          const errJson = await response.json();
+          message = errJson.message || message;
+        } catch {}
+        // Revert optimistic budget on failure
+        setHouse((prev) => (prev ? { ...prev, remainingBudget } : prev));
+        toast.update(toastId, `Bid failed: ${message}`, {
+          type: "error",
+          duration: 3000,
+        });
+        setLoading(false);
+        return;
       }
 
-      // Update house budget with the actual remaining budget from server
-      if (typeof data.remainingBudget === "number") {
-        setHouse((prev) =>
-          prev ? { ...prev, remainingBudget: data.remainingBudget } : prev
-        );
-      } else {
-        console.error("Invalid remainingBudget in response:", data);
-        // Fallback: refetch house data
-        const housesResponse = await fetchWithAuth("/api/houses");
-        const allHouses = await housesResponse.json();
-        const updatedHouse = allHouses.find(
-          (h: HouseApiResponse) => h.houseId === houseId
-        );
-        if (updatedHouse) {
-          setHouse(updatedHouse);
-        }
-      }
+      // Immediate success feedback (non-blocking)
+      toast.update(toastId, "Bid placed — confirming…", { type: "success" });
 
-      setBidAmount(0);
-
-      if (data.previousAmount && data.previousAmount > 0) {
-        alert(
-          `✅ Bid updated from $${data.previousAmount} to $${data.newAmount}!`
-        );
-      } else {
-        alert("✅ Bid placed successfully! You can update it anytime.");
-      }
+      // Background parse and UI reconciliation
+      response
+        .json()
+        .then((data) => {
+          if (data.success) {
+            const finalMsg = data.newAmount
+              ? `Bid confirmed: $${data.newAmount}`
+              : "Bid confirmed";
+            toast.update(toastId, finalMsg, {
+              type: "success",
+              duration: 2500,
+            });
+            setBidAmount(0);
+            if (typeof data.remainingBudget === "number") {
+              setHouse((prev) =>
+                prev ? { ...prev, remainingBudget: data.remainingBudget } : prev
+              );
+            } else {
+              fetchWithAuth("/api/houses")
+                .then((res) => res.json())
+                .then((allHouses) => {
+                  const updatedHouse = allHouses.find(
+                    (h: HouseApiResponse) => h.houseId === houseId
+                  );
+                  if (updatedHouse) setHouse(updatedHouse);
+                })
+                .catch((e) =>
+                  console.warn("House refetch failed (non-critical):", e)
+                );
+            }
+          } else {
+            // Revert optimistic change if server rejects
+            setHouse((prev) => (prev ? { ...prev, remainingBudget } : prev));
+            toast.update(
+              toastId,
+              `Bid rejected: ${data.message || "Could not be confirmed."}`,
+              { type: "error", duration: 3000 }
+            );
+          }
+        })
+        .catch((e) => console.warn("Parsing bid response failed:", e))
+        .finally(() => setLoading(false));
     } catch (error: any) {
       console.error(error);
-      alert(`⚠️ ${error.message || "Failed to place bid."}`);
-    } finally {
+      // Revert optimistic budget
+      setHouse((prev) => (prev ? { ...prev, remainingBudget } : prev));
+      toast.update(
+        toastId,
+        `${error.message || "Network error placing bid."}`,
+        { type: "error", duration: 3500 }
+      );
       setLoading(false);
     }
   };
 
-  const formatTime = (ms: number) => `${Math.ceil(ms / 1000)}s`;
+  // Use floor to avoid displaying one second ahead of authoritative remaining time
+  const formatTime = (ms: number) => `${Math.floor(ms / 1000)}s`;
 
   if (!house) {
     return (

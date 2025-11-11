@@ -16,6 +16,7 @@ export async function GET() {
         roundStatus: "idle",
         timerRemaining: 0,
         bidsPlaced: [],
+        serverTime: Date.now(),
       });
     }
 
@@ -195,6 +196,7 @@ export async function GET() {
       timerRemaining,
       timerEnd: activeRound.timerEnd?.toISOString(), // Add actual end time
       bidsPlaced,
+      serverTime: Date.now(),
     });
   } catch (error) {
     console.error("Error fetching status:", error);

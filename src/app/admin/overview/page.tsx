@@ -1,11 +1,12 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { House } from "@/lib/models/houses";
 import { Participant } from "@/lib/models/participants";
 import { Round } from "@/lib/models/rounds";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 
 interface WinnerData {
   participantName: string;
@@ -17,6 +18,8 @@ interface WinnerData {
 export default function OverviewPage() {
   const [houses, setHouses] = useState<House[]>([]);
   const [activeRound, setActiveRound] = useState<Round | null>(null);
+  // Track last active round ID to detect silent transitions
+  const lastActiveRoundIdRef = useRef<string | null>(null);
   const [currentParticipant, setCurrentParticipant] =
     useState<Participant | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -25,9 +28,13 @@ export default function OverviewPage() {
   const [showWinnerModal, setShowWinnerModal] = useState<boolean>(false);
   const [winnerData, setWinnerData] = useState<WinnerData | null>(null);
   const [isStartingRound, setIsStartingRound] = useState<boolean>(false);
+  // Prevent repeatedly showing the winner modal across polling cycles
+  const winnerShownRef = useRef<boolean>(false);
 
   // Use ref to capture current participant without causing re-renders
   const currentParticipantRef = useRef<Participant | null>(null);
+
+  // Server time hook not needed directly; countdown uses its own
 
   // Update ref when currentParticipant changes
   useEffect(() => {
@@ -35,7 +42,7 @@ export default function OverviewPage() {
   }, [currentParticipant]);
 
   // ⏱️ Fetch all overview data
-  async function fetchOverviewData(showLoadingScreen = false) {
+  const fetchOverviewData = useCallback(async (showLoadingScreen = false) => {
     try {
       if (showLoadingScreen) {
         setLoading(true);
@@ -54,12 +61,26 @@ export default function OverviewPage() {
       setHouses(housesData || []);
 
       // Check if round just ended (server-side auto-end)
-      if (statusData.roundEnded && statusData.winner) {
+      console.log("🔍 Status check:", {
+        roundEnded: statusData.roundEnded,
+        winner: statusData.winner,
+        alreadyShown: winnerShownRef.current,
+      });
+
+      if (
+        statusData.roundEnded &&
+        statusData.winner &&
+        !winnerShownRef.current
+      ) {
         console.log(
           "🏆 Server detected round end with winner:",
           statusData.winner
         );
-        const participant = currentParticipantRef.current;
+        // Use participant from current state ref OR from status data
+        const participant =
+          currentParticipantRef.current || statusData.participant;
+        console.log("📝 Using participant for winner modal:", participant);
+
         setWinnerData({
           participantName: participant?.name || "Unknown",
           participantPicture: participant?.picture,
@@ -67,6 +88,7 @@ export default function OverviewPage() {
           amount: statusData.winner.amount,
         });
         setShowWinnerModal(true);
+        winnerShownRef.current = true;
 
         // Auto-close after 10 seconds
         setTimeout(() => {
@@ -81,27 +103,133 @@ export default function OverviewPage() {
         statusData.roundId &&
         statusData.roundStatus === "active"
       ) {
-        // Use server's timerEnd for accurate sync across tabs
         const serverTimerEnd = statusData.timerEnd
           ? new Date(statusData.timerEnd)
-          : new Date(Date.now() + statusData.timerRemaining * 1000);
+          : null;
 
-        setActiveRound({
-          _id: statusData.roundId,
-          participantId: statusData.participant.participantId,
-          status: statusData.roundStatus,
-          timerEnd: serverTimerEnd,
-          bids: [],
-        } as any);
+        if (serverTimerEnd) {
+          setActiveRound({
+            _id: statusData.roundId,
+            participantId: statusData.participant.participantId,
+            status: statusData.roundStatus,
+            timerEnd: serverTimerEnd,
+            bids: [],
+          } as any);
+          lastActiveRoundIdRef.current = statusData.roundId; // remember current active round
 
-        setCurrentParticipant(statusData.participant || null);
-        // Calculate time left from server's end time
-        setTimeLeft(Math.max(0, serverTimerEnd.getTime() - Date.now()));
-        setRoundNumber(statusData.roundNumber || null);
+          setCurrentParticipant(statusData.participant || null);
+          // timeLeft driven by synchronized countdown hook; round number still from API
+          setRoundNumber(statusData.roundNumber || null);
+          // New round is active; allow showing a winner again when this ends
+          winnerShownRef.current = false;
+        } else {
+          // If no valid timer, reset everything
+          setActiveRound(null);
+          setCurrentParticipant(null);
+          setRoundNumber(null);
+        }
       } else {
+        // No active round reported.
+        // If we previously had an active round and did NOT get roundEnded/winner payload (missed auto-end response), attempt fallback winner reconstruction.
+        if (
+          lastActiveRoundIdRef.current &&
+          !winnerShownRef.current &&
+          !statusData.roundEnded &&
+          !statusData.winner
+        ) {
+          console.log(
+            "⚠️ Possible missed auto-end response. Attempting fallback winner fetch."
+          );
+          try {
+            // Fetch all rounds
+            const roundsResp = await fetchWithAuth("/api/rounds", {
+              cache: "no-store",
+            });
+            if (roundsResp.ok) {
+              const allRounds = await roundsResp.json();
+              // Find the last completed round whose id matches previous active or most recent completed
+              const completedRounds = allRounds.filter(
+                (r: any) => r.status === "completed"
+              );
+              const targetRound =
+                completedRounds.find(
+                  (r: any) => r.roundId === lastActiveRoundIdRef.current
+                ) || completedRounds[0];
+              if (targetRound && targetRound.winningBid) {
+                console.log(
+                  "✅ Fallback found winning bid for round",
+                  targetRound.roundId
+                );
+                // Fetch bids for that round to identify winning house
+                const bidsResp = await fetchWithAuth(
+                  `/api/bids?roundId=${targetRound.roundId}`,
+                  { cache: "no-store" }
+                );
+                let houseName = "Unknown House";
+                if (bidsResp.ok) {
+                  const bids = await bidsResp.json();
+                  const winningBidObj = bids.find(
+                    (b: any) => b.amount === targetRound.winningBid
+                  );
+                  if (winningBidObj) {
+                    // Fetch houses to map name
+                    const housesResp2 = await fetchWithAuth("/api/houses", {
+                      cache: "no-store",
+                    });
+                    if (housesResp2.ok) {
+                      const housesList = await housesResp2.json();
+                      const house = housesList.find(
+                        (h: any) => h.houseId === winningBidObj.houseId
+                      );
+                      if (house) houseName = house.name;
+                    }
+                  }
+                }
+                // Fetch participants to get participant name
+                const participantsResp = await fetchWithAuth(
+                  "/api/participants",
+                  { cache: "no-store" }
+                );
+                let participantName = "Unknown";
+                let participantPicture: string | undefined = undefined;
+                if (participantsResp.ok) {
+                  const participantsList = await participantsResp.json();
+                  const pMatch = participantsList.find(
+                    (p: any) => p.participantId === targetRound.participantId
+                  );
+                  if (pMatch) {
+                    participantName = pMatch.name;
+                    participantPicture = pMatch.picture;
+                  }
+                }
+                setWinnerData({
+                  participantName,
+                  participantPicture,
+                  houseName,
+                  amount: targetRound.winningBid,
+                });
+                setShowWinnerModal(true);
+                winnerShownRef.current = true;
+                // Auto-close after 10s
+                setTimeout(() => {
+                  setShowWinnerModal(false);
+                  setWinnerData(null);
+                }, 10000);
+              } else {
+                console.log(
+                  "ℹ️ Fallback: No completed round with winning bid found."
+                );
+              }
+            }
+          } catch (fallbackErr) {
+            console.warn("Fallback winner fetch failed:", fallbackErr);
+          } finally {
+            // Clear last active round reference regardless
+            lastActiveRoundIdRef.current = null;
+          }
+        }
         setActiveRound(null);
         setCurrentParticipant(null);
-        setTimeLeft(0);
         setRoundNumber(null);
       }
     } catch (error) {
@@ -109,84 +237,42 @@ export default function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     // Initial load with loading screen
     fetchOverviewData(true);
-
-    // Poll status every 2 seconds for real-time sync (without loading screen)
-    const pollInterval = setInterval(() => {
-      fetchOverviewData(false);
-    }, 2000);
-
+    // Poll more frequently (2s) to reduce chance of missing the single auto-end response
+    const pollInterval = setInterval(() => fetchOverviewData(false), 2000);
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [fetchOverviewData]);
 
-  // Server polling handles everything, no need for special timer=0 logic
+  // Millisecond-synced countdown via server time
+  const { remainingMs: syncedRemainingMs } = useSynchronizedCountdown(
+    activeRound?.timerEnd ? activeRound.timerEnd.toISOString() : null
+  );
+  useEffect(() => {
+    setTimeLeft(syncedRemainingMs);
+  }, [syncedRemainingMs]);
 
-  // Timer updates from server polling, no need for client-side countdown
-
-  const formatTime = (ms: number) => {
-    if (ms <= 0) return "00:00";
-    const totalSeconds = Math.floor(ms / 1000);
-    const minutes = Math.floor(totalSeconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-    return `${minutes}:${seconds}`;
-  };
-
-  const getTimerColor = () => {
-    if (timeLeft > 30000) return "text-green-400";
-    if (timeLeft > 10000) return "text-yellow-400";
-    return "text-red-500 animate-pulse";
-  };
-
-  // ✅ Quick Action Handlers
   const handleStartNextRound = async () => {
-    if (isStartingRound) return; // Prevent double-click
-
+    if (isStartingRound) return;
     setIsStartingRound(true);
     try {
-      console.log("🚀 Starting next round...");
-      console.log("📝 Token exists:", !!localStorage.getItem("token"));
-      console.log("👤 Role:", localStorage.getItem("role"));
-
       const response = await fetchWithAuth("/api/rounds/next/start", {
         method: "POST",
       });
-      console.log("📡 Response status:", response.status);
-
       const result = await response.json();
-      console.log("📦 Response data:", result);
-
       if (!response.ok) {
-        console.error("❌ Failed to start next round:", result);
-        console.error("❌ Status code:", response.status);
-
-        // Handle authentication errors
-        if (response.status === 401 || response.status === 403) {
-          alert(`Session expired (${response.status}). Please login again.`);
-          localStorage.removeItem("token");
-          localStorage.removeItem("role");
-          window.location.href = "/login";
-          return;
-        }
-
-        alert(
-          `Failed to start next round: ${result.error || result.message || "Unknown error"}`
-        );
         setIsStartingRound(false);
+        alert(result.error || result.message || "Failed to start round");
         return;
       }
-
-      console.log("✅ Next round started:", result);
       await fetchOverviewData();
       setIsStartingRound(false);
-    } catch (err: any) {
-      console.error("❌ Error starting next round:", err);
-      alert(`Error: ${err.message || "Failed to start next round"}`);
+    } catch (e: any) {
+      console.error(e);
+      alert(e.message || "Failed to start round");
       setIsStartingRound(false);
     }
   };
@@ -225,6 +311,7 @@ export default function OverviewPage() {
           amount: result.winningBid.amount,
         });
         setShowWinnerModal(true);
+        winnerShownRef.current = true; // Mark as shown for manual end too
 
         // Auto-close after 10 seconds
         setTimeout(() => {
@@ -281,8 +368,10 @@ export default function OverviewPage() {
             </div>
 
             <div className="text-center mb-8">
-              <div className={`text-7xl font-bold ${getTimerColor()} mb-4`}>
-                {formatTime(timeLeft)}
+              <div
+                className={`text-7xl font-bold mb-4 transition-colors duration-300 ${timeLeft > 30000 ? "text-green-400" : timeLeft > 10000 ? "text-yellow-400" : "text-red-500"}`}
+              >
+                {`${Math.floor(timeLeft / 1000)}s`}
               </div>
               <div className="w-full max-w-2xl mx-auto bg-gray-800 rounded-full h-6 overflow-hidden border-2 border-yellow-600">
                 <div
@@ -407,8 +496,8 @@ export default function OverviewPage() {
 
       {/* 🏆 Winner Announcement Modal */}
       {showWinnerModal && winnerData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm">
-          <div className="bg-gradient-to-br from-yellow-500 via-orange-500 to-red-600 rounded-3xl p-12 border-8 border-yellow-400 shadow-2xl max-w-4xl w-full mx-4 animate-pulse">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm will-change-transform">
+          <div className="bg-gradient-to-br from-yellow-500 via-orange-500 to-red-600 rounded-3xl p-12 border-8 border-yellow-400 shadow-2xl max-w-4xl w-full mx-4">
             <div className="text-center">
               <h1 className="text-7xl font-bold text-black mb-8 drop-shadow-lg">
                 🏆 SOLD! 🏆

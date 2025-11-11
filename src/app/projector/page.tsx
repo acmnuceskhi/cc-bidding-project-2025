@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 
 interface Participant {
   participantId: string;
@@ -13,25 +14,48 @@ interface WinnerData {
   amount: number;
 }
 
+interface House {
+  _id: string;
+  houseId: string;
+  name: string;
+}
+
+interface Bid {
+  houseId: string;
+  amount: number;
+}
+
+interface Status {
+  roundStatus: "active" | "idle";
+  roundId?: string;
+  roundNumber?: number;
+  participant?: Participant;
+  timerEnd?: string;
+  bidsPlaced?: Bid[];
+  roundEnded?: boolean;
+  winner?: WinnerData;
+}
+
 export default function ProjectorDisplay() {
-  const [status, setStatus] = useState<any>(null);
-  const [houses, setHouses] = useState<any[]>([]);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [houses, setHouses] = useState<House[]>([]);
   const [timeLeft, setTimeLeft] = useState(0);
   const [showWinner, setShowWinner] = useState(false);
   const [winnerData, setWinnerData] = useState<WinnerData | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [lastRoundId, setLastRoundId] = useState<string | null>(null);
 
+  // Server time hook not required directly; countdown uses hook
+
+  // Synced countdown derived from server time
+  const { remainingMs: projRemaining } = useSynchronizedCountdown(
+    status?.roundStatus === "active" && status?.timerEnd
+      ? status.timerEnd
+      : null
+  );
   useEffect(() => {
-    fetchData();
-
-    // Poll every 2 seconds for real-time sync
-    const pollInterval = setInterval(() => {
-      fetchData();
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
-  }, []);
+    setTimeLeft(projRemaining);
+  }, [projRemaining]);
 
   const fetchLastRoundWinner = async () => {
     try {
@@ -40,7 +64,7 @@ export default function ProjectorDisplay() {
       if (roundsRes.ok) {
         const rounds = await roundsRes.json();
         const completedRounds = rounds.filter(
-          (r: any) => r.status === "completed"
+          (r: { status: string }) => r.status === "completed"
         );
 
         if (completedRounds.length > 0) {
@@ -52,7 +76,7 @@ export default function ProjectorDisplay() {
             if (participantRes.ok) {
               const participants = await participantRes.json();
               const roundParticipant = participants.find(
-                (p: any) => p.participantId === lastRound.participantId
+                (p: Participant) => p.participantId === lastRound.participantId
               );
 
               if (roundParticipant) {
@@ -67,7 +91,8 @@ export default function ProjectorDisplay() {
             if (bidsRes.ok) {
               const bids = await bidsRes.json();
               const winningBid = bids.find(
-                (b: any) => b.amount === lastRound.winningBid
+                (b: Bid & { amount: number }) =>
+                  b.amount === lastRound.winningBid
               );
 
               if (winningBid) {
@@ -75,18 +100,16 @@ export default function ProjectorDisplay() {
                 try {
                   const housesRes = await fetch("/api/houses");
                   if (housesRes.ok) {
-                    const housesData = await housesRes.json();
+                    const housesData: House[] = await housesRes.json();
                     const winningHouse = housesData.find(
-                      (h: any) => h.houseId === winningBid.houseId.toString()
+                      (h) => h.houseId === winningBid.houseId.toString()
                     );
-
                     if (winningHouse) {
                       setWinnerData({
                         houseName: winningHouse.name,
                         amount: lastRound.winningBid,
                       });
                       setShowWinner(true);
-
                       setTimeout(() => {
                         setShowWinner(false);
                         setWinnerData(null);
@@ -110,14 +133,14 @@ export default function ProjectorDisplay() {
     try {
       // Fetch status
       const statusRes = await fetch("/api/status", { cache: "no-store" });
-      const statusData = await statusRes.json();
+      const statusData: Status = await statusRes.json();
       setStatus(statusData);
 
       // Fetch houses (handle 401 gracefully for projector)
       try {
         const housesRes = await fetch("/api/houses", { cache: "no-store" });
         if (housesRes.ok) {
-          const housesData = await housesRes.json();
+          const housesData: House[] = await housesRes.json();
           setHouses(Array.isArray(housesData) ? housesData : []);
         } else {
           // If auth fails, use empty array (projector doesn't need house details)
@@ -131,11 +154,8 @@ export default function ProjectorDisplay() {
       // Update participant and timer
       if (statusData.roundStatus === "active" && statusData.participant) {
         setParticipant(statusData.participant);
-        setLastRoundId(statusData.roundId);
-        const serverTimerEnd = statusData.timerEnd
-          ? new Date(statusData.timerEnd)
-          : new Date(Date.now() + statusData.timerRemaining * 1000);
-        setTimeLeft(Math.max(0, serverTimerEnd.getTime() - Date.now()));
+        setLastRoundId(statusData.roundId || null);
+        // timeLeft is driven by synchronized countdown hook
       } else {
         setTimeLeft(0);
       }
@@ -181,8 +201,22 @@ export default function ProjectorDisplay() {
     }
   };
 
+  // Poll for data updates
+  useEffect(() => {
+    fetchData();
+
+    const pollInterval = setInterval(() => {
+      fetchData();
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Legacy boundary ticker removed; rAF-based hook handles countdown
+
   const formatTime = (milliseconds: number) => {
-    const seconds = Math.ceil(milliseconds / 1000);
+    const seconds = Math.floor(milliseconds / 1000);
     return `${seconds}`;
   };
 
@@ -322,7 +356,7 @@ export default function ProjectorDisplay() {
                     houses
                       .filter((house) =>
                         bidsPlaced.some(
-                          (bid: any) => bid.houseId === house._id?.toString()
+                          (bid) => bid.houseId === house._id?.toString()
                         )
                       )
                       .map((house) => (
@@ -356,7 +390,7 @@ export default function ProjectorDisplay() {
                       .filter(
                         (house) =>
                           !bidsPlaced.some(
-                            (bid: any) => bid.houseId === house._id?.toString()
+                            (bid) => bid.houseId === house._id?.toString()
                           )
                       )
                       .map((house) => (

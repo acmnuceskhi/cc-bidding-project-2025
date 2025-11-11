@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useServerTime } from "@/hooks/useServerTime";
 
 type Phase = "before" | "active" | "after";
 
 export default function LandingPage() {
   const [phase, setPhase] = useState<Phase>("before");
   const [timeLeft, setTimeLeft] = useState(0); //fetched from backend, but hardcoded rn
+
+  // Server time hook for synchronized countdown
+  const { serverNow } = useServerTime();
 
   // //fetching phase and countdown from backend
   // useEffect(() => {
@@ -28,16 +32,16 @@ export default function LandingPage() {
 
   useEffect(() => {
     const updatePhase = () => {
-      const now = new Date();
+      const now = new Date(serverNow()); // Use server time instead of local time
       const beforeEnd = new Date("2025-11-18T10:00:00"); // before
       const activeEnd = new Date("2025-11-18T12:00:00"); // active
 
       if (now < beforeEnd) {
         setPhase("before");
-        setTimeLeft(Math.floor((beforeEnd.getTime() - now.getTime()) / 1000));
+        setTimeLeft(Math.floor((beforeEnd.getTime() - serverNow()) / 1000));
       } else if (now >= beforeEnd && now < activeEnd) {
         setPhase("active");
-        setTimeLeft(Math.floor((activeEnd.getTime() - now.getTime()) / 1000));
+        setTimeLeft(Math.floor((activeEnd.getTime() - serverNow()) / 1000));
       } else {
         setPhase("after");
         setTimeLeft(0);
@@ -47,7 +51,7 @@ export default function LandingPage() {
     updatePhase(); //initial run
     const interval = setInterval(updatePhase, 1000); //updates every second
     return () => clearInterval(interval);
-  }, []);
+  }, [serverNow]);
 
   // Convert total seconds into days, hours, minutes, seconds (all padded to 2 digits)
   const getDHMS = (totalSeconds: number) => {

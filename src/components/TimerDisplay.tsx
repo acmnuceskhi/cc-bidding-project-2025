@@ -18,7 +18,7 @@ const TimerDisplay: React.FC<TimerDisplayProps> = ({
         style={{ width: `${percentage}%` }}
       ></div>
       <div className="text-center text-sm font-medium mt-1">
-        Time left: {Math.ceil(timeLeft / 1000)} seconds
+        Time left: {Math.floor(timeLeft / 1000)} seconds
       </div>
     </div>
   );
