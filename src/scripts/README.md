@@ -1,150 +1,107 @@
-# Auction System Scripts
+# Auction Scripts
 
-This directory contains utility scripts for managing the CC Bidding System.
+> Utility scripts to manage data for the CC Bidding System. All scripts load `.env.local` / `.env` and exit 0 on success, 1 on failure.
 
-## Available Scripts
+## Scripts
 
-### 1. Reset Auction (`reset-auction`)
+### reset-auction
 
-**Purpose**: Resets the auction to its initial state while keeping all data intact.
+Resets auction state while keeping core entities.
 
-**What it does**:
+- Sets every round to `scheduled` (keeps original `scheduledStart`)
+- Deletes all bids
+- Restores each house's `remainingBudget` to `totalBudget`
+- Clears participant `houseId`
 
-- ✅ Resets all rounds to "scheduled" status
-- ✅ Clears all bids
-- ✅ Resets house budgets to original amounts
-- ✅ Clears participant house assignments
+Run:
 
-**When to use**: Between testing sessions when you want to start fresh auctions without recreating all the data.
-
-**Usage**:
-
-```bash
+```powershell
 npm run reset-auction
 ```
 
----
+### full-reset
 
-### 2. Full Reset (`full-reset`)
+Drops all collections and reseeds canonical demo data.
 
-**Purpose**: Complete system reset with fresh data.
+- 4 houses (1000 credits each)
+- Ranked Round‑1 teams (rank 1..4)
+- 48 participants (with roll numbers + team assignment)
+- Users: 1 admin + 4 captains
+- Scheduled rounds with `scheduledStart` + `timerEnd`
 
-**What it does**:
+Credentials:
 
-- 🗑️ Drops all collections
-- 🏯 Creates 4 houses with $1000 budget each
-- 👥 Creates 50 participants
-- 🔐 Creates admin and house captain users
-- 📋 Creates scheduled rounds for all participants
+- Admin: `admin / admin123`
+- Captains:
+  - `captain_lord_shen / captain123`
+  - `captain_dragon_warrior / captain123`
+  - `captain_master_oogway / captain123`
+  - `captain_tai_lung / captain123`
 
-**When to use**: When you want to start completely fresh or if data gets corrupted.
+Run:
 
-**Usage**:
-
-```bash
+```powershell
 npm run full-reset
 ```
 
-**Login Credentials** (after full reset):
+### seed-test-data
 
-- **Admin**:
-  - Username: `admin`
-  - Password: `password123`
+Seeds test dataset (same credential scheme as full-reset) without dropping collections first. Useful after manual tweaks.
+Run:
 
-- **House Captains**:
-  - Lord Shen: `lordshen` / `password123`
-  - Dragon Warrior: `dragonwarrior` / `password123`
-  - Master Oogway: `masteroogway` / `password123`
-  - Tai Lung: `tailung` / `password123`
-
----
-
-### 3. Initialize Data (`init-data`)
-
-**Purpose**: Initial data seeding (legacy script).
-
-**Usage**:
-
-```bash
-npm run init-data
+```powershell
+npx tsx src/scripts/seed-test-data.ts
 ```
 
----
+### export-bids
 
-## Quick Testing Workflow
+Exports full bid history (every bid, including updates) to CSV.
 
-### Option 1: Quick Reset (Recommended for testing)
+- Columns: `bidId,roundId,houseId,houseName,participantId,participantName,amount,timestampISO`
+- Default filename: `bids-YYYY-MM-DDTHH-MM-SS.csv` (repo root)
+- Provide custom path as arg for target location.
 
-```bash
-# Reset auction between test runs
+Run (default):
+
+```powershell
+npx tsx src/scripts/export-bids.ts
+```
+
+Run (custom path):
+
+```powershell
+npx tsx src/scripts/export-bids.ts .\exports\bids.csv
+```
+
+### init-data (legacy)
+
+Deprecated; prefer `full-reset` or `seed-test-data`.
+
+## Quick Testing
+
+```powershell
+# Fresh start
+npm run full-reset
+npm run dev
+
+# Between tests
 npm run reset-auction
-
-# Start the dev server
-npm run dev
 ```
-
-### Option 2: Complete Fresh Start
-
-```bash
-# Full system reset
-npm run full-reset
-
-# Start the dev server
-npm run dev
-```
-
----
-
-## Script Details
-
-### Reset Auction Script
-
-- **File**: `src/scripts/reset-auction.ts`
-- **Safe**: Yes, preserves all base data
-- **Duration**: ~1 second
-- **Use case**: Quick testing iterations
-
-### Full Reset Script
-
-- **File**: `src/scripts/full-reset.ts`
-- **Safe**: No, drops all data
-- **Duration**: ~2-3 seconds
-- **Use case**: Fresh start or data corruption
-
----
 
 ## Troubleshooting
 
-### Script fails with "Cannot connect to MongoDB"
+- Ensure `MONGODB_URI` in `.env.local` or `.env`
+- Atlas: whitelist your IP
+- Missing collections → `npm run full-reset`
 
-- Check your `.env.local` file has `MONGODB_URI` set
-- Ensure MongoDB Atlas is accessible
-- Verify your IP is whitelisted in MongoDB Atlas
+## Adding a Script
 
-### Script runs but no changes visible
+1. Create file under `src/scripts/`
+2. Add npm script in `package.json`
+3. Document here succinctly
 
-- Refresh your browser (hard refresh: Ctrl+Shift+R)
-- Check the script output for errors
-- Verify you're connected to the correct database
+## Notes
 
-### "Collection not found" errors
-
-- Run `npm run full-reset` to recreate all collections
-- Check MongoDB Atlas to ensure database exists
-
----
-
-## Development Notes
-
-All scripts use:
-
-- TypeScript with `tsx` runner
-- MongoDB native driver
-- Async/await patterns
-- Proper error handling and logging
-
-To create a new script:
-
-1. Create file in `src/scripts/`
-2. Add script command to `package.json`
-3. Document it in this README
+- TypeScript + `tsx`
+- MongoDB driver, async/await
+- Clear logging + proper exit codes

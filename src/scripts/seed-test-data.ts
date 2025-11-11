@@ -67,6 +67,9 @@ async function initializeData() {
         totalPoints,
         totalPenalty,
         timeTakenPerProblem,
+        // Rank is mandatory and pre-hardcoded; here we assign deterministic rank by loop order
+        // Adjust as needed to match your real pre-auction data
+        rank: i,
       });
 
       teamIds.push(result.insertedId);
@@ -123,6 +126,8 @@ async function initializeData() {
       participantIds.push(result.insertedId);
     }
 
+    // No dynamic rank computation; ranks are predetermined and set during creation
+
     // Rounds: one scheduled for each participant
     console.log("Creating rounds...");
 
@@ -166,6 +171,14 @@ async function initializeData() {
     }
 
     console.log("✅ Test database seeded successfully!");
+    console.log("\nDemo Accounts:\n");
+    console.log("Admin: admin / admin123\n");
+    console.log("House Captains:\n");
+    (await Houses.getAll()).forEach((house) => {
+      console.log(
+        `captain_${house.name.toLowerCase().replace(/\s+/g, "_")} / captain123`
+      );
+    });
     process.exit(0);
   } catch (err) {
     console.error("Error initializing test data:", err);

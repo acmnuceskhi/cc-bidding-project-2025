@@ -9,7 +9,11 @@
  *
  * Usage: npx tsx src/scripts/reset-auction.ts
  */
-
+import { config } from "dotenv";
+import path from "path";
+// Load env like seed-test-data
+config({ path: path.resolve(process.cwd(), ".env.local") });
+config({ path: path.resolve(process.cwd(), ".env") });
 import clientPromise from "@/lib/mongodb";
 
 async function resetAuction() {
@@ -29,6 +33,7 @@ async function resetAuction() {
           timerEnd: null,
           finalized: false,
           winningBid: null,
+          // scheduledStart is preserved to maintain planned schedule
         },
       }
     );
