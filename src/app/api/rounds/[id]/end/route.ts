@@ -42,10 +42,10 @@ export async function POST(
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
-    // Prevent double completion if round is finalized (participant sold)
-    if (round.finalized) {
+    // Prevent double completion if round is already completed or finalized
+    if (round.status === "completed" || round.finalized) {
       return NextResponse.json(
-        { error: "Round already finalized for this participant" },
+        { error: "Round already ended" },
         { status: 400 }
       );
     }

@@ -26,7 +26,8 @@ export async function GET() {
     const now = Date.now();
     const timerEnd = activeRound.timerEnd?.getTime();
 
-    if (timerEnd && now >= timerEnd) {
+    // SERVER-SIDE AUTO-END: Check if round has expired and is still active
+    if (timerEnd && now >= timerEnd && activeRound.status === "active") {
       console.log(
         "⏰ Round expired - auto-ending on server side:",
         activeRound._id?.toString()
