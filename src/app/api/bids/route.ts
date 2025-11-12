@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { roundId, amount } = body;
+    const { roundId, amount, previousAmount } = body;
 
     // Validate input
     if (!roundId || !amount) {
@@ -135,9 +135,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isNew: boolean = previousAmount === null;
+
     // Place or update the bid (NO budget deduction here)
     // Budget is only deducted when the round ends and they win
-    const { previousAmount, isNew } = await Bids.upsertBid(
+    await Bids.upsertBid(
       roundId,
       houseId,
       round.participantId.toString(),

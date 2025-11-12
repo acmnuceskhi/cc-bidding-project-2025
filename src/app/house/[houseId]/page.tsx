@@ -168,6 +168,7 @@ export default function HouseDashboard() {
         body: JSON.stringify({
           roundId: activeRound.roundId,
           amount: bidAmount,
+          previousAmount: currentBid,
         }),
       });
 
@@ -191,9 +192,10 @@ export default function HouseDashboard() {
         .json()
         .then((data) => {
           if (data.success) {
-            const finalMsg = data.newAmount
-              ? `Bid confirmed: $${data.newAmount}`
-              : "Bid confirmed";
+            const finalMsg =
+              data.previousAmount == null
+                ? `Bid confirmed: $${data.newAmount}`
+                : `Bid updated from $${data.previousAmount} to $${data.newAmount}`;
             toast.update(toastId, finalMsg, {
               type: "success",
               duration: 2500,

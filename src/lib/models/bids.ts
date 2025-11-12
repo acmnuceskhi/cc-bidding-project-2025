@@ -179,7 +179,7 @@ export const Bids = {
         { upsert: true, returnDocument: "after" }
       );
 
-    return result.value as Bid;
+    return result as Bid;
   },
 
   // Fetch all bids from the database
