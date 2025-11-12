@@ -3,7 +3,7 @@ export async function fetchWithAuth(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const token = localStorage.getItem("token");
+  const token = sessionStorage.getItem("token");
 
   // Attach Authorization header if token exists
   const headers = {
@@ -22,9 +22,9 @@ export async function fetchWithAuth(
     console.warn("[Auth] Token expired or invalid. Logging out.");
 
     // Clear stored session
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("houseId");
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("role");
+    sessionStorage.removeItem("houseId");
 
     // Optional: redirect to login
     if (typeof window !== "undefined") {

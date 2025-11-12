@@ -30,9 +30,9 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (data.success) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("role", data.role);
-        if (data.houseId) localStorage.setItem("houseId", data.houseId);
+        sessionStorage.setItem("token", data.token);
+        sessionStorage.setItem("role", data.role);
+        if (data.houseId) sessionStorage.setItem("houseId", data.houseId);
 
         if (data.role === "admin") router.push("/admin");
         else if (data.role === "house_captain")
@@ -71,7 +71,7 @@ export default function LoginPage() {
         <img
           src="/cc-logo.png"
           alt="CC Trophy Logo"
-          className="absolute inset-0 w-full h-full object-contain opacity-40 pointer-events-none z-0"
+          className="absolute inset-0 w-full h-full object-contain opacity-35 pointer-events-none z-0"
         />
 
         {/* Head */}
@@ -79,7 +79,7 @@ export default function LoginPage() {
           <h1 className="text-3xl font-extrabold text-[#FFD700] mb-2 drop-shadow-[0_0_10px_#B22222]">
             CC Bidding System
           </h1>
-          <p className="text-[#00A6FF] font-medium drop-shadow-[0_0_8px_#FFD700]">
+          <p className="text-[#ffffff] font-medium drop-shadow-[0_0_8px_#FFD700]">
             Please sign in to continue
           </p>
         </div>

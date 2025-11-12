@@ -78,11 +78,12 @@ export async function verifyAuth(
     return null;
   }
 
-  // Check if the user's active session matches the provided token
-  if (user.activeSessionToken !== token) {
-    console.warn(`Token mismatch for user ${user.username}`);
-    return null;
-  }
+  // ✅ MULTI-TAB FIX: Allow multiple concurrent sessions per user
+  // We no longer enforce single-session-per-user to support admin + house captains in different tabs
+  // if (user.activeSessionToken !== token) {
+  //   console.warn(`Token mismatch for user ${user.username}`);
+  //   return null;
+  // }
 
   // Check if session has expired (30-minute inactivity)
   if (user.lastActiveAt) {
