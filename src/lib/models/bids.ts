@@ -114,20 +114,72 @@ export const Bids = {
   },
 
   /**
-   * Get the latest (most recent) bid placed by a house in a round.
+   * Retrieves the single latest bid for each house within a specific round.
+   * This is the definitive method to get final bids for round-end calculations.
+   * @param roundId - The ID of the round.
+   * @returns A promise that resolves to an array of the latest bids, one per house.
    */
-  async getLatestByHouseInRound(
-    roundId: string,
-    houseId: string
-  ): Promise<Bid | null> {
+  async getLatestBidPerHouseForRound(roundId: string): Promise<Bid[]> {
     const client = await clientPromise;
-    return client
+    const col = client.db().collection<Bid>(collectionName);
+
+    // Aggregation pipeline to get the latest bid from each house for the specified round
+    const pipeline = [
+      // Match bids for the specific round
+      { $match: { roundId: new ObjectId(roundId) } },
+      // Sort by timestamp descending to get the latest bids first
+      { $sort: { timestamp: -1 } },
+      // Group by houseId and take the first document (which is the latest bid)
+      {
+        $group: {
+          _id: "$houseId",
+          latestBid: { $first: "$$ROOT" },
+        },
+      },
+      // Replace the root with the latest bid document
+      { $replaceRoot: { newRoot: "$latestBid" } },
+    ];
+
+    const bids = await col.aggregate<Bid>(pipeline).toArray();
+    return bids;
+  },
+
+  /**
+   * Upserts a bid for a given house and round.
+   * If a bid already exists, it updates the bid amount and timestamp.
+   * If no bid exists, it creates a new bid entry.
+   * @param roundId - The ID of the round.
+   * @param houseId - The ID of the house.
+   * @param participantId - The ID of the participant.
+   * @param amount - The bid amount.
+   * @returns A promise that resolves to the upserted bid document.
+   */
+  async upsertBid(
+    roundId: string,
+    houseId: string,
+    participantId: string,
+    amount: number
+  ): Promise<Bid> {
+    const client = await clientPromise;
+    const bidData: Partial<Bid> = {
+      roundId: new ObjectId(roundId),
+      houseId: new ObjectId(houseId),
+      participantId: new ObjectId(participantId),
+      amount,
+      timestamp: new Date(),
+    };
+
+    // Update or insert the bid
+    const result = await client
       .db()
       .collection<Bid>(collectionName)
-      .find({ roundId: new ObjectId(roundId), houseId: new ObjectId(houseId) })
-      .sort({ timestamp: -1 })
-      .limit(1)
-      .next();
+      .findOneAndUpdate(
+        { roundId: bidData.roundId, houseId: bidData.houseId },
+        { $set: bidData },
+        { upsert: true, returnDocument: "after" }
+      );
+
+    return result.value as Bid;
   },
 
   // Fetch all bids from the database
@@ -158,41 +210,5 @@ export const Bids = {
       .db()
       .collection<Bid>(collectionName)
       .deleteOne({ _id: new ObjectId(id) });
-  },
-
-  /**
-   * Update or create a bid for a house in a round (upsert)
-   * Returns the previous bid amount if it existed, or 0 if new
-   * @param roundId - Round ID
-   * @param houseId - House ID
-   * @param participantId - Participant ID
-   * @param amount - New bid amount
-   */
-  async upsertBid(
-    roundId: string,
-    houseId: string,
-    participantId: string,
-    amount: number
-  ): Promise<{ previousAmount: number; isNew: boolean }> {
-    const client = await clientPromise;
-
-    // Get latest existing bid for this house in this round (if any)
-    const existingBid = await this.getLatestByHouseInRound(roundId, houseId);
-    const previousAmount = existingBid?.amount || 0;
-    const isNew = !existingBid;
-
-    // Insert a new bid log entry (append-only)
-    await client
-      .db()
-      .collection<Bid>(collectionName)
-      .insertOne({
-        roundId: new ObjectId(roundId),
-        houseId: new ObjectId(houseId),
-        participantId: new ObjectId(participantId),
-        amount,
-        timestamp: new Date(),
-      });
-
-    return { previousAmount, isNew };
   },
 };

@@ -50,8 +50,9 @@ export async function POST(
       );
     }
 
-    // Get all bids for this specific round (not all rounds for the participant)
-    const bids = await Bids.getByRound(id);
+    // Get only the LATEST bid from each house for this round.
+    // This is the definitive list of final bids.
+    const bids = await Bids.getLatestBidPerHouseForRound(id);
 
     // 🚫 No bids case — do not mark completed
     if (bids.length === 0) {
@@ -94,9 +95,9 @@ export async function POST(
     }
 
     // ESCROW LOGIC with transaction:
-    // - Budgets were reserved at bid time (already deducted)
-    // - Winner keeps reserved amount (no extra deduction)
-    // - All losing bids are refunded (their reserved amounts restored)
+    // - Budgets are NOT deducted at bid time (only validation)
+    // - When round ends, deduct ONLY from winner
+    // - Losing bids don't need refund (they were never charged)
     const client = await clientPromise;
     const session = client.startSession();
     let message: string = "Round ended";
@@ -104,20 +105,15 @@ export async function POST(
       await session.withTransaction(async () => {
         const db = client.db();
 
-        // Refund losing bids if there was at least one winning bid
+        // Deduct budget from winning house ONLY
         if (winningBid) {
-          const losingBids = bids.filter(
-            (b) => b._id?.toString() !== winningBid!._id?.toString()
-          );
-          for (const lb of losingBids) {
-            await db
-              .collection("houses")
-              .updateOne(
-                { _id: new ObjectId(lb.houseId) },
-                { $inc: { remainingBudget: lb.amount } },
-                { session }
-              );
-          }
+          await db
+            .collection("houses")
+            .updateOne(
+              { _id: new ObjectId(winningBid.houseId) },
+              { $inc: { remainingBudget: -winningBid.amount } },
+              { session }
+            );
         }
 
         // Update round status (finalized only if sold)
