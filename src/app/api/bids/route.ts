@@ -3,7 +3,6 @@ import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
 import { verifyAuth } from "@/lib/auth";
-import { ObjectId } from "mongodb";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
