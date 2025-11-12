@@ -56,6 +56,19 @@ export default function RoundsPage() {
     null
   );
 
+  // Function to get house background image
+  const getHouseBackground = (houseName?: string) => {
+    if (!houseName) return "/temple-out.jpg";
+    
+    const houseMap: Record<string, string> = {
+      "Lord Shen": "/lord-shen.jpg",
+      "Dragon Warrior": "/dragon-warrior.jpg",
+      "Master Oogway": "/master-oogway.jpg",
+      "Tai Lung": "/tai-lung.jpg",
+    };
+    return houseMap[houseName] || "/temple-out.jpg";
+  };
+
   const fetchRounds = async () => {
     try {
       setLoading(true);
@@ -211,146 +224,159 @@ export default function RoundsPage() {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
-          ⏱️ Bidding Rounds
-        </h1>
+        <h1 className="text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">⏱️ Bidding Rounds</h1>
         <p className="text-gray-300">Complete history of all auction rounds</p>
       </div>
 
-      {loading && (
-        <div className="text-center text-yellow-400 text-lg">Loading...</div>
-      )}
+      {loading && <div className="text-center text-[#FFD700] text-lg animate-pulse">Loading...</div>}
 
       <div className="space-y-4">
-        {rounds.map((round, index) => (
-          <div
-            key={round._id || `round-${index}`}
-            className={`rounded-xl p-6 border-4 shadow-lg transition-all ${
-              round.status === "active"
-                ? "bg-gradient-to-r from-yellow-700 to-orange-700 border-yellow-400 animate-pulse"
-                : round.status === "completed"
-                  ? "bg-gradient-to-r from-green-700 to-green-900 border-green-500"
-                  : "bg-gradient-to-r from-gray-700 to-gray-900 border-gray-500"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div className="text-center">
-                  <div className="text-5xl font-bold text-yellow-400 mb-1">
-                    {round.roundNumber}
+        {rounds.map((round, index) => {
+          const backgroundImage = round.status === "completed" && round.winnerHouse
+            ? getHouseBackground(round.winnerHouse)
+            : round.status === "active"
+            ? "/arena-background.jpg"
+            : "/temple-out.jpg";
+
+          return (
+            <div
+              key={round._id || `round-${index}`}
+              className="relative rounded-xl p-6 border-2 shadow-lg transition-all overflow-hidden"
+              style={{
+                backgroundImage: `url('${backgroundImage}')`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            >
+              {/* Opacity overlay */}
+              <div className={`absolute inset-0 ${
+                round.status === "active"
+                  ? "bg-yellow-900/70 backdrop-blur-sm"
+                  : round.status === "completed"
+                  ? "bg-black/70 backdrop-blur-xs"
+                  : "bg-gray-900/80 backdrop-blur-sm"
+              }`}></div>
+
+              {/* Neon border effect for active */}
+              {round.status === "active" && (
+                <div className="absolute inset-0 border-2 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.6)] animate-pulse"></div>
+              )}
+
+              {/* Content */}
+              <div className="relative z-10 flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <div className="text-5xl font-bold text-[#FFD700] mb-1 drop-shadow-[0_0_20px_#FFD700]">{round.roundNumber}</div>
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${getStatusBadge(
+                        round.status
+                      )}`}
+                    >
+                      {getStatusText(round.status)}
+                    </span>
                   </div>
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${getStatusBadge(
-                      round.status
-                    )}`}
-                  >
-                    {getStatusText(round.status)}
-                  </span>
+
+                  {round.participantPicture && (
+                    <img
+                      src={round.participantPicture}
+                      alt={round.participantName}
+                      className="w-20 h-20 rounded-full border-4 border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)]"
+                    />
+                  )}
+
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-1 drop-shadow-[0_0_10px_#000000]">{round.participantName}</h3>
+                    {round.status === "completed" && round.winnerHouse && (
+                      <p className="text-lg text-gray-200">
+                        Sold to{" "}
+                        <span className="text-[#FFD700] font-bold drop-shadow-[0_0_10px_#FFD700]">{round.winnerHouse}</span> for{" "}
+                        <span className="text-green-400 font-bold text-2xl drop-shadow-[0_0_10px_#22C55E]">${round.winningBid}</span>
+                      </p>
+                    )}
+                    {round.status === "active" && (
+                      <p className="text-[#FFD700] font-semibold animate-pulse drop-shadow-[0_0_10px_#FFD700]">Bidding in progress...</p>
+                    )}
+                    {round.status === "not_started" && <p className="text-gray-400">Awaiting start</p>}
+                  </div>
                 </div>
 
-                {round.participantPicture && (
-                  <img
-                    src={round.participantPicture}
-                    alt={round.participantName}
-                    className="w-20 h-20 rounded-full border-4 border-yellow-400 shadow-lg"
-                  />
-                )}
-
-                <div>
-                  <h3 className="text-2xl font-bold text-white mb-1">
-                    {round.participantName}
-                  </h3>
-                  {round.status === "completed" && round.winnerHouse && (
-                    <p className="text-lg text-gray-200">
-                      Sold to{" "}
-                      <span className="text-yellow-400 font-bold">
-                        {round.winnerHouse}
-                      </span>{" "}
-                      for{" "}
-                      <span className="text-green-400 font-bold text-2xl">
-                        ${round.winningBid}
-                      </span>
-                    </p>
+                <div className="flex flex-col gap-2">
+                  {round.status === "completed" && (
+                    <button
+                      onClick={() => handleViewDetails(round)}
+                      className="bg-blue-600/90 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(59,130,246,0.5)] transform hover:scale-105"
+                    >
+                      View Details
+                    </button>
                   )}
                   {round.status === "active" && (
-                    <p className="text-yellow-300 font-semibold animate-pulse">
-                      Bidding in progress...
-                    </p>
+                    <button
+                      onClick={() => handleEndRound(round._id)}
+                      className="bg-red-600/90 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(239,68,68,0.5)] transform hover:scale-105"
+                    >
+                      End Round
+                    </button>
                   )}
                   {round.status === "not_started" && (
-                    <p className="text-gray-400">Awaiting start</p>
+                    <button
+                      onClick={() => handleStartRound(round._id)}
+                      className="bg-green-600/90 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(34,197,94,0.5)] transform hover:scale-105"
+                    >
+                      Start Round
+                    </button>
                   )}
                 </div>
               </div>
-
-              <div className="flex flex-col gap-2">
-                {round.status === "completed" && (
-                  <button
-                    onClick={() => handleViewDetails(round)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
-                  >
-                    📊 View Details
-                  </button>
-                )}
-                {round.status === "active" && (
-                  <button
-                    onClick={() => handleEndRound(round._id)}
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
-                  >
-                    ⏹️ End Round
-                  </button>
-                )}
-                {round.status === "not_started" && (
-                  <button
-                    onClick={() => handleStartRound(round._id)}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all"
-                  >
-                    ▶️ Start Round
-                  </button>
-                )}
-              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Modal for View Details */}
       {selectedRound && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-gray-900 text-white rounded-lg p-6 w-11/12 md:w-2/3 lg:w-1/2 relative">
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-gradient-to-br from-gray-900 to-black text-white rounded-2xl p-8 w-11/12 md:w-2/3 lg:w-1/2 relative border-2 border-[#FFD700]/50 shadow-[0_0_40px_rgba(255,215,0,0.4)]">
             <button
               onClick={closeModal}
-              className="absolute top-4 right-4 text-xl font-bold hover:text-yellow-400"
+              className="absolute top-4 right-4 text-3xl font-bold hover:text-[#FFD700] transition-colors drop-shadow-[0_0_10px_#FFD700]"
             >
               ✖
             </button>
-            <h2 className="text-3xl font-bold mb-4">
+            <h2 className="text-4xl font-bold mb-6 text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
               Round {selectedRound.roundNumber} Details
             </h2>
-            <p className="mb-2">
-              <strong>Participant:</strong> {selectedRound.participantName}
-            </p>
-            {selectedRound.winnerHouse && (
-              <p className="mb-2">
-                <strong>Winner House:</strong> {selectedRound.winnerHouse}
+            <div className="space-y-4 text-lg">
+              <p>
+                <strong className="text-[#FFD700]">Participant:</strong> <span className="text-white">{selectedRound.participantName}</span>
               </p>
-            )}
-            {selectedRound.winningBid !== undefined ? (
-              <p className="mb-2">
-                <strong>Winning Bid:</strong> ${selectedRound.winningBid}
+              {selectedRound.winnerHouse && (
+                <p>
+                  <strong className="text-[#FFD700]">Winner House:</strong> <span className="text-white">{selectedRound.winnerHouse}</span>
+                </p>
+              )}
+              {selectedRound.winningBid !== undefined ? (
+                <p>
+                  <strong className="text-[#FFD700]">Winning Bid:</strong> <span className="text-green-400 font-bold text-2xl drop-shadow-[0_0_10px_#22C55E]">${selectedRound.winningBid}</span>
+                </p>
+              ) : selectedRound.status === "completed" ? (
+                <p className="text-gray-400">No bids placed</p>
+              ) : null}
+              <p>
+                <strong className="text-[#FFD700]">Status:</strong> <span className="text-white">{getStatusText(selectedRound.status)}</span>
               </p>
-            ) : selectedRound.status === "completed" ? (
-              <p className="mb-2 text-gray-400">No bids placed</p>
-            ) : null}
-            <p className="mb-2">
-              <strong>Status:</strong> {getStatusText(selectedRound.status)}
-            </p>
-            {selectedRound.timerEnd && (
-              <p className="mb-2">
-                <strong>Timer End:</strong>{" "}
-                {selectedRound.timerEnd.toLocaleString()}
-              </p>
-            )}
+              {selectedRound.timerEnd && (
+                <p>
+                  <strong className="text-[#FFD700]">Timer End:</strong>{" "}
+                  <span className="text-white">{selectedRound.timerEnd.toLocaleString()}</span>
+                </p>
+              )}
+            </div>
+            <button
+              onClick={closeModal}
+              className="mt-6 bg-gradient-to-r from-[#FFD700] to-[#FFB800] text-black font-bold py-3 px-8 rounded-lg transition-all shadow-[0_0_20px_rgba(255,215,0,0.5)] transform hover:scale-105"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

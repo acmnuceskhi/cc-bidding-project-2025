@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { House } from "@/lib/models/houses";
 import { Participant } from "@/lib/models/participants";
-import { fetchWithAuth } from "@/lib/fetchWithAuth"; // ✅ your global helper
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useToast } from "@/components/ToastProvider";
 
@@ -22,12 +22,12 @@ interface HouseApiResponse {
 }
 
 interface filteredRound {
-  _id: string; // matches MongoDB _id
-  roundId: string; // matches MongoDB _id
+  _id: string;
+  roundId: string;
   participantId: string;
-  status: "scheduled" | "active" | "completed"; // matches schema
-  timerEnd?: string; // string from API, parse to Date
-  scheduledStart?: string; // string from API, parse to Date
+  status: "scheduled" | "active" | "completed";
+  timerEnd?: string;
+  scheduledStart?: string;
   finalized?: boolean;
 }
 
@@ -42,20 +42,29 @@ export default function HouseDashboard() {
   const [currentParticipant, setCurrentParticipant] =
     useState<ParticipantWithDetails | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
+  const [currentBid, setCurrentBid] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  // removed unused hasBid state after allowing multiple bids
 
-  // Server time handled via synchronized countdown hook
+  // Function to get house background image
+  const getHouseBackground = (houseName: string) => {
+    const houseMap: Record<string, string> = {
+      "Lord Shen": "/lord-shen.jpg",
+      "Dragon Warrior": "/dragon-warrior.jpg",
+      "Master Oogway": "/master-oogway.jpg",
+      "Tai Lung": "/tai-lung.jpg",
+    };
+    return houseMap[houseName] || "/arena-background.jpg";
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // ✅ Fetch all houses and find the one matching the URL param
         const housesResponse = await fetchWithAuth("/api/houses", {
           cache: "no-store",
         });
         const allHouses = await housesResponse.json();
+
         const selectedHouse = allHouses.find(
           (h: HouseApiResponse) => h.houseId === houseId
         );
@@ -66,13 +75,11 @@ export default function HouseDashboard() {
         }
         setHouse(selectedHouse);
 
-        // ✅ Fetch status (includes round number)
         const statusRes = await fetchWithAuth("/api/status", {
           cache: "no-store",
         });
         const statusData = await statusRes.json();
 
-        // Build active round from status data
         if (
           statusData &&
           statusData.roundId &&
@@ -87,48 +94,52 @@ export default function HouseDashboard() {
               _id: statusData.roundId,
               roundId: statusData.roundId,
               participantId: statusData.participant?.participantId || "",
-              status: statusData.roundStatus,
+              status: "active",
               timerEnd: serverTimerEnd.toISOString(),
               roundNumber: statusData.roundNumber,
             });
+
+            setCurrentParticipant(statusData.participant || null);
+
+            // Fetch current bid for this house in this round
+            try {
+              const bidsRes = await fetchWithAuth(`/api/bids?roundId=${statusData.roundId}`, {
+                cache: "no-store",
+              });
+              const bidsData = await bidsRes.json();
+              
+              if (Array.isArray(bidsData)) {
+                const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
+                setCurrentBid(myBid ? myBid.amount : null);
+              } else {
+                setCurrentBid(null);
+              }
+            } catch (error) {
+              console.error("Failed to fetch current bid:", error);
+              setCurrentBid(null);
+            }
           } else {
             setActiveRound(null);
+            setCurrentParticipant(null);
+            setCurrentBid(null);
           }
         } else {
           setActiveRound(null);
-        }
-
-        if (!statusData || !statusData.roundId) {
           setCurrentParticipant(null);
+          setCurrentBid(null);
           setTimeLeft(0);
-          return;
         }
-
-        // ✅ Fetch participant for active round
-        const participantResponse = await fetchWithAuth(`/api/participants`, {
-          cache: "no-store",
-        });
-        const participants = await participantResponse.json();
-        const matchedParticipant = participants.find(
-          (p: any) => p.participantId === statusData.participant?.participantId
-        );
-        setCurrentParticipant(matchedParticipant || null);
-
-        // Time will be driven by synchronized countdown hook
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("Failed to fetch house data:", error);
         setHouse(null);
         setActiveRound(null);
         setCurrentParticipant(null);
         setTimeLeft(0);
-        // No-op
       }
     };
 
-    // ✅ Fetch once when the component mounts
     fetchData();
 
-    // Poll every 3 seconds (reduced from 2s to ease compositor load during screen recording)
     const pollInterval = setInterval(() => {
       fetchData();
     }, 3000);
@@ -136,7 +147,6 @@ export default function HouseDashboard() {
     return () => clearInterval(pollInterval);
   }, [houseId]);
 
-  // Synced countdown via server time (rAF-based)
   const { remainingMs: houseRemaining } = useSynchronizedCountdown(
     activeRound?.timerEnd ?? null
   );
@@ -144,18 +154,11 @@ export default function HouseDashboard() {
     setTimeLeft(houseRemaining);
   }, [houseRemaining]);
 
-  // Toast API
   const toast = useToast();
 
   const placeBid = async () => {
     if (!activeRound || !currentParticipant || !house || bidAmount <= 0) return;
     setLoading(true);
-    const { remainingBudget } = house;
-    // Optimistic budget update (temporary) - will reconcile with server
-    const optimisticBudget = Math.max(0, remainingBudget - bidAmount);
-    setHouse((prev) =>
-      prev ? { ...prev, remainingBudget: optimisticBudget } : prev
-    );
 
     const toastId = toast.show("Placing bid…", { type: "info" });
 
@@ -168,15 +171,12 @@ export default function HouseDashboard() {
         }),
       });
 
-      // Fast path: immediate feedback after headers, before body parse
       if (!response.ok) {
         let message = "Failed to place bid.";
         try {
           const errJson = await response.json();
           message = errJson.message || message;
         } catch {}
-        // Revert optimistic budget on failure
-        setHouse((prev) => (prev ? { ...prev, remainingBudget } : prev));
         toast.update(toastId, `Bid failed: ${message}`, {
           type: "error",
           duration: 3000,
@@ -185,10 +185,8 @@ export default function HouseDashboard() {
         return;
       }
 
-      // Immediate success feedback (non-blocking)
       toast.update(toastId, "Bid placed — confirming…", { type: "success" });
 
-      // Background parse and UI reconciliation
       response
         .json()
         .then((data) => {
@@ -201,39 +199,39 @@ export default function HouseDashboard() {
               duration: 2500,
             });
             setBidAmount(0);
+            // Update current bid display
+            setCurrentBid(data.newAmount || bidAmount);
             if (typeof data.remainingBudget === "number") {
               setHouse((prev) =>
                 prev ? { ...prev, remainingBudget: data.remainingBudget } : prev
               );
             } else {
               fetchWithAuth("/api/houses")
-                .then((res) => res.json())
-                .then((allHouses) => {
-                  const updatedHouse = allHouses.find(
+                .then((r) => r.json())
+                .then((houses) => {
+                  const updated = houses.find(
                     (h: HouseApiResponse) => h.houseId === houseId
                   );
-                  if (updatedHouse) setHouse(updatedHouse);
+                  if (updated) setHouse(updated);
                 })
-                .catch((e) =>
-                  console.warn("House refetch failed (non-critical):", e)
-                );
+                .catch(() => {});
             }
           } else {
-            // Revert optimistic change if server rejects
-            setHouse((prev) => (prev ? { ...prev, remainingBudget } : prev));
-            toast.update(
-              toastId,
-              `Bid rejected: ${data.message || "Could not be confirmed."}`,
-              { type: "error", duration: 3000 }
-            );
+            toast.update(toastId, data.message || "Bid failed", {
+              type: "error",
+              duration: 3000,
+            });
           }
+          setLoading(false);
         })
-        .catch((e) => console.warn("Parsing bid response failed:", e))
-        .finally(() => setLoading(false));
+        .catch(() => {
+          toast.update(toastId, "Failed to parse response", {
+            type: "error",
+            duration: 3000,
+          });
+          setLoading(false);
+        });
     } catch (error: any) {
-      console.error(error);
-      // Revert optimistic budget
-      setHouse((prev) => (prev ? { ...prev, remainingBudget } : prev));
       toast.update(
         toastId,
         `${error.message || "Network error placing bid."}`,
@@ -243,7 +241,6 @@ export default function HouseDashboard() {
     }
   };
 
-  // Use floor to avoid displaying one second ahead of authoritative remaining time
   const formatTime = (ms: number) => `${Math.floor(ms / 1000)}s`;
 
   if (!house) {
@@ -262,78 +259,70 @@ export default function HouseDashboard() {
     <div
       className="min-h-screen bg-cover bg-center bg-fixed relative"
       style={{
-        backgroundImage: "url('/arena-background.jpg')",
+        backgroundImage: house ? `url('${getHouseBackground(house.name)}')` : "url('/arena-background.jpg')",
       }}
     >
-      {/* Dark overlay for text visibility */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+      {/* Enhanced dark overlay with neon glow */}
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-xs"></div>
+      
+      {/* Neon grid overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
 
       {/* Content */}
-      <div className="relative z-10 min-h-screen p-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Header with House Info and Logout */}
-          <div className="bg-gradient-to-r from-red-800 to-orange-800 rounded-2xl p-8 mb-8 border-4 border-yellow-600 shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h1 className="text-5xl font-bold text-yellow-400 drop-shadow-lg mb-2">
+      <div className="relative z-10 min-h-screen p-4 sm:p-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Enhanced Header */}
+          <div className="bg-gradient-to-r from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+              <div className="text-center sm:text-left">
+                <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-2">
                   🏯 {house.name}
                 </h1>
-                <p className="text-xl text-gray-200">Command Center</p>
+                <p className="text-lg sm:text-xl text-gray-200">Command Center</p>
               </div>
               <button
                 onClick={async () => {
                   try {
-                    const data = await fetchWithAuth("/api/auth/logout", {
-                      method: "POST",
-                    });
-                    console.log("Logout response:", data);
-
-                    // Clear client-side storage
-                    localStorage.removeItem("token");
-                    localStorage.removeItem("role");
-                    localStorage.removeItem("houseId");
-
-                    // Redirect to login
+                    await fetchWithAuth("/api/auth/logout", { method: "POST" });
+                    sessionStorage.removeItem("token");
+                    sessionStorage.removeItem("role");
+                    sessionStorage.removeItem("houseId");
                     window.location.href = "/login";
                   } catch (err) {
                     console.error("Logout failed:", err);
                   }
                 }}
-                className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded"
+                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
               >
                 Logout
               </button>
             </div>
 
-            {/* Budget Display */}
-            <div className="bg-black bg-opacity-40 rounded-xl p-6 border-2 border-yellow-500">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-gray-300 text-lg mb-1">Treasury Balance</p>
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-5xl font-bold text-yellow-300">
+            {/* Enhanced Budget Display */}
+            <div className="bg-black/60 rounded-xl p-4 sm:p-6 border border-[#FFD700]/30 shadow-[0_0_20px_rgba(255,215,0,0.2)]">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
+                <div className="text-center sm:text-left">
+                  <p className="text-gray-300 text-base sm:text-lg mb-1">💰 Treasury Balance</p>
+                  <div className="flex items-baseline gap-2 sm:gap-3 justify-center sm:justify-start">
+                    <span className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
                       ${house.remainingBudget}
                     </span>
-                    <span className="text-xl text-gray-400">
+                    <span className="text-lg sm:text-xl text-gray-400">
                       / ${house.totalBudget}
                     </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-yellow-400">
+                <div className="text-center sm:text-right">
+                  <div className="text-2xl sm:text-3xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
                     {budgetPercentage.toFixed(0)}%
                   </div>
                   <div className="text-sm text-gray-400">Remaining</div>
                 </div>
               </div>
-              <div className="w-full bg-black bg-opacity-60 rounded-full h-4 border-2 border-yellow-600">
+              <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${
-                    budgetPercentage > 50
-                      ? "bg-green-500"
-                      : budgetPercentage > 25
-                        ? "bg-yellow-500"
-                        : "bg-red-500"
+                  className={`h-full rounded-full transition-all shadow-[0_0_10px_currentColor] ${
+                    budgetPercentage > 50 ? "bg-green-500" : budgetPercentage > 25 ? "bg-yellow-500" : "bg-red-500"
                   }`}
                   style={{ width: `${budgetPercentage}%` }}
                 ></div>
@@ -342,29 +331,25 @@ export default function HouseDashboard() {
           </div>
 
           {activeRound && currentParticipant ? (
-            <div className="space-y-8">
-              {/* Round Info and Timer */}
-              <div className="bg-gradient-to-br from-yellow-600 to-orange-700 rounded-2xl p-8 border-4 border-yellow-400 shadow-2xl">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-4xl font-bold text-black drop-shadow-lg">
+            <div className="space-y-6 sm:space-y-8">
+              {/* Enhanced Round Info */}
+              <div className="bg-gradient-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0 mb-6">
+                  <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
                     ⚔️ ROUND {activeRound.roundNumber || "?"}
                   </h2>
                   <div className="text-center">
-                    <div
-                      className={`text-6xl font-bold ${isTimeRunningOut ? "text-red-600 animate-pulse" : "text-black"}`}
-                    >
+                    <div className={`text-5xl sm:text-6xl font-bold ${isTimeRunningOut ? "text-red-500 animate-pulse drop-shadow-[0_0_20px_#FF0000]" : "text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]"}`}>
                       {formatTime(timeLeftValue)}
                     </div>
-                    <div className="text-sm text-black font-semibold mt-1">
-                      Time Left
-                    </div>
+                    <div className="text-sm text-white font-semibold mt-1">Time Left</div>
                   </div>
                 </div>
 
                 {/* Timer Progress Bar */}
-                <div className="w-full bg-black bg-opacity-40 rounded-full h-4 border-2 border-black">
+                <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-1000 ${
+                    className={`h-full rounded-full transition-all shadow-[0_0_15px_currentColor] ${
                       isTimeRunningOut ? "bg-red-500" : "bg-green-500"
                     }`}
                     style={{
@@ -374,66 +359,72 @@ export default function HouseDashboard() {
                 </div>
               </div>
 
-              {/* Player Info */}
-              <div className="bg-black bg-opacity-80 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
-                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center drop-shadow-lg">
+              {/* Enhanced Player Info */}
+              <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+                <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
                   🥋 WARRIOR UP FOR BIDDING
                 </h2>
-                <div className="flex items-center gap-8">
+                <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
                   {/* Player Picture */}
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     {currentParticipant.picture ? (
                       <img
                         src={currentParticipant.picture}
                         alt={currentParticipant.name}
-                        className="w-48 h-48 object-cover rounded-full border-8 border-yellow-400 shadow-2xl"
+                        className="w-32 h-32 sm:w-48 sm:h-48 object-cover rounded-full border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]"
                       />
                     ) : (
-                      <div className="w-48 h-48 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full border-8 border-yellow-400 shadow-2xl flex items-center justify-center">
-                        <span className="text-6xl">👤</span>
+                      <div className="w-32 h-32 sm:w-48 sm:h-48 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)] flex items-center justify-center">
+                        <span className="text-4xl sm:text-6xl">👤</span>
                       </div>
                     )}
                     {currentParticipant.batch && (
-                      <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-6 py-2 rounded-full border-4 border-yellow-400">
-                        <span className="text-yellow-400 font-bold text-lg">
-                          {currentParticipant.batch}
-                        </span>
+                      <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-4 sm:px-6 py-2 rounded-full border-2 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]">
+                        <span className="text-[#FFD700] font-bold text-sm sm:text-lg">{currentParticipant.batch}</span>
                       </div>
                     )}
                   </div>
 
                   {/* Player Details */}
-                  <div className="flex-1 space-y-3">
-                    <h3 className="text-4xl font-bold text-white drop-shadow-lg">
+                  <div className="flex-1 space-y-3 text-center sm:text-left w-full">
+                    <h3 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF]">
                       {currentParticipant.name}
                     </h3>
                     {currentParticipant.universityId && (
-                      <div className="flex items-center gap-3">
-                        <span className="bg-yellow-600 text-black px-4 py-2 rounded-lg font-bold text-xl border-2 border-yellow-400">
+                      <div className="flex items-center justify-center sm:justify-start gap-3">
+                        <span className="bg-[#FFD700]/20 text-[#FFD700] px-4 py-2 rounded-lg font-bold text-lg sm:text-xl border border-[#FFD700]/50 shadow-[0_0_15px_rgba(255,215,0,0.3)]">
                           🎓 {currentParticipant.universityId}
                         </span>
                       </div>
                     )}
                     {currentParticipant.batch && (
-                      <div className="text-xl text-gray-300">
-                        📚 Year:{" "}
-                        <span className="text-yellow-400 font-semibold">
-                          {currentParticipant.batch}
-                        </span>
+                      <div className="text-lg sm:text-xl text-gray-300">
+                        📚 Year: <span className="text-[#FFD700] font-semibold">{currentParticipant.batch}</span>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Bidding Section */}
-              <div className="bg-black bg-opacity-80 rounded-2xl p-8 border-4 border-yellow-600 shadow-2xl">
+              {/* Enhanced Bidding Section */}
+              <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 {timeLeftValue > 0 ? (
                   <div className="space-y-6">
-                    <h2 className="text-3xl font-bold text-yellow-400 text-center">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] text-center drop-shadow-[0_0_20px_#FFD700]">
                       💰 PLACE YOUR BID
                     </h2>
-                    <div className="flex gap-4">
+                    
+                    {/* Current Bid Display */}
+                    {currentBid !== null && (
+                      <div className="bg-gradient-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
+                        <div className="text-gray-200 text-sm sm:text-base mb-1">Your Active Bid</div>
+                        <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
+                          ${currentBid}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-4">
                       <input
                         type="number"
                         id="bidAmount"
@@ -442,41 +433,34 @@ export default function HouseDashboard() {
                         value={bidAmount || ""}
                         onChange={(e) => {
                           const val = e.target.value;
-                          // Only set if it's a valid number or empty string
                           setBidAmount(val === "" ? 0 : parseInt(val, 10));
                         }}
-                        className="flex-1 bg-gray-800 border-4 border-yellow-600 rounded-xl px-6 py-4 text-white text-2xl font-bold focus:outline-none focus:ring-4 focus:ring-yellow-500"
+                        className="flex-1 bg-gray-900/80 border-2 border-[#FFD700]/50 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-white text-xl sm:text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.2)]"
                         placeholder="Enter bid amount"
                       />
                       <button
                         onClick={placeBid}
-                        disabled={
-                          loading ||
-                          bidAmount <= 0 ||
-                          bidAmount > house.remainingBudget
-                        }
-                        className={`px-8 py-4 rounded-xl text-2xl font-bold transition-all transform ${
-                          loading ||
-                          bidAmount <= 0 ||
-                          bidAmount > house.remainingBudget
+                        disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
+                        className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
+                          loading || bidAmount <= 0 || bidAmount > house.remainingBudget
                             ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                            : "bg-green-600 hover:bg-green-700 text-white hover:scale-105 shadow-lg"
+                            : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
                         }`}
                       >
                         {loading ? "⏳ Placing..." : "✅ Place Bid"}
                       </button>
                     </div>
                     {bidAmount > house.remainingBudget && (
-                      <div className="bg-red-900 border-2 border-red-500 rounded-lg p-4 text-center">
-                        <p className="text-red-300 font-bold text-lg">
+                      <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                        <p className="text-red-300 font-bold text-base sm:text-lg">
                           ⚠️ Bid amount exceeds your remaining treasury!
                         </p>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="bg-red-900 border-4 border-red-500 rounded-xl p-6 text-center">
-                    <p className="text-red-300 font-bold text-2xl">
+                  <div className="bg-red-900/80 border-2 border-red-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(239,68,68,0.5)]">
+                    <p className="text-red-300 font-bold text-xl sm:text-2xl">
                       ⏰ Time&apos;s Up! Bidding has ended for this round
                     </p>
                   </div>
@@ -484,17 +468,11 @@ export default function HouseDashboard() {
               </div>
             </div>
           ) : (
-            <div className="bg-black bg-opacity-80 rounded-2xl p-12 border-4 border-yellow-600 shadow-2xl">
+            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
               <div className="text-center">
-                <h2 className="text-4xl font-bold text-yellow-400 mb-4">
-                  ⏸️ No Active Round
-                </h2>
-                <p className="text-xl text-gray-300">
-                  Waiting for the next battle to begin...
-                </p>
-                <p className="text-gray-400 mt-4">
-                  The admin will start the next round soon
-                </p>
+                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">⏸️ No Active Round</h2>
+                <p className="text-lg sm:text-xl text-gray-300">Waiting for the next battle to begin...</p>
+                <p className="text-gray-400 mt-4">The admin will start the next round soon</p>
               </div>
             </div>
           )}

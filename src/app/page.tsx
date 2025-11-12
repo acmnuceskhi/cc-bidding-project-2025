@@ -77,7 +77,7 @@ export default function LandingPage() {
       style={{ backgroundImage: "url('/arena-background.jpg')" }}
     >
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-xs"></div>
 
       {/* Content */}
       <div className="relative z-10 px-6">

@@ -113,7 +113,7 @@ export default function ProjectorDisplay() {
                       setTimeout(() => {
                         setShowWinner(false);
                         setWinnerData(null);
-                      }, 10000);
+                      }, 15000); // Show winner for 15 seconds
                     }
                   }
                 } catch (err) {
@@ -168,12 +168,12 @@ export default function ProjectorDisplay() {
         setShowWinner(true);
         setLastRoundId(null); // Reset for next round
 
-        // Auto-hide after 10 seconds
+        // Auto-hide after 15 seconds
         setTimeout(() => {
           console.log("⏰ Hiding winner modal");
           setShowWinner(false);
           setWinnerData(null);
-        }, 10000);
+        }, 15000); // Show winner for 15 seconds
       } else {
         console.log(
           "📊 Status:",
@@ -223,9 +223,14 @@ export default function ProjectorDisplay() {
   // Winner Announcement Screen
   if (showWinner && winnerData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-500 via-orange-500 to-red-600 text-white flex items-center justify-center">
-        <div className="text-center max-w-5xl mx-auto p-8 animate-pulse">
-          <h1 className="text-9xl font-bold mb-12 drop-shadow-lg">
+      <div 
+        className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
+        style={{ backgroundImage: "url('/arena-background.jpg')" }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 via-orange-500/30 to-red-600/30 backdrop-blur-sm"></div>
+        
+        <div className="relative z-10 text-center max-w-5xl mx-auto p-8">
+          <h1 className="text-8xl sm:text-9xl font-bold mb-12 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700] animate-pulse">
             🏆 SOLD! 🏆
           </h1>
 
@@ -233,21 +238,21 @@ export default function ProjectorDisplay() {
             <img
               src={participant.picture}
               alt={participant.name}
-              className="w-64 h-64 object-cover rounded-full mx-auto mb-8 border-8 border-yellow-400 shadow-2xl"
+              className="w-48 h-48 sm:w-64 sm:h-64 object-cover rounded-full mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]"
             />
           )}
 
-          <h2 className="text-7xl font-bold mb-8 text-black drop-shadow-lg">
+          <h2 className="text-5xl sm:text-7xl font-bold mb-8 text-white drop-shadow-[0_0_30px_#000000]">
             {participant?.name || "Participant"}
           </h2>
 
-          <div className="text-5xl mb-6">has been won by</div>
+          <div className="text-4xl sm:text-5xl mb-8 text-white drop-shadow-[0_0_20px_#000000]">has been won by</div>
 
-          <div className="bg-black bg-opacity-40 rounded-3xl p-12 border-4 border-yellow-400">
-            <div className="text-8xl font-bold text-yellow-300 mb-6">
+          <div className="bg-black/60 rounded-3xl p-8 sm:p-12 border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)] backdrop-blur-md">
+            <div className="text-6xl sm:text-8xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_30px_#FFD700]">
               🏯 {winnerData.houseName}
             </div>
-            <div className="text-6xl font-bold text-white">
+            <div className="text-5xl sm:text-6xl font-bold text-white drop-shadow-[0_0_20px_#FFFFFF]">
               for ${winnerData.amount}
             </div>
           </div>
@@ -259,11 +264,16 @@ export default function ProjectorDisplay() {
   // Waiting Screen
   if (!status || status.roundStatus !== "active") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-800 to-gray-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-9xl mb-8">⏳</div>
-          <h1 className="text-7xl font-bold mb-8">CC Bidding System</h1>
-          <p className="text-4xl text-gray-300">
+      <div 
+        className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
+        style={{ backgroundImage: "url('/temple-out.jpg')" }}
+      >
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+        
+        <div className="relative z-10 text-center">
+          <div className="text-8xl sm:text-9xl mb-8 animate-bounce">⏳</div>
+          <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#FFD700]">CC Bidding System</h1>
+          <p className="text-3xl sm:text-4xl text-gray-300">
             Waiting for admin to start the next round...
           </p>
         </div>
@@ -276,139 +286,151 @@ export default function ProjectorDisplay() {
   const bidsPlaced = status.bidsPlaced || [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 text-white">
-      {/* Header */}
-      <div className="bg-black bg-opacity-30 p-6">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-5xl font-bold">CC Bidding System</h1>
-          <div className="text-right">
-            <div className="text-3xl font-bold text-green-400">
-              🔴 LIVE BIDDING
-            </div>
-            <div className="text-2xl text-gray-300">
-              Round {status.roundNumber || "?"}
-            </div>
-          </div>
-        </div>
-      </div>
+    <div 
+      className="min-h-screen bg-cover bg-center relative"
+      style={{ backgroundImage: "url('/arena-background.jpg')" }}
+    >
+      {/* Enhanced dark overlay */}
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+      
+      {/* Neon grid overlay */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
 
-      <div className="max-w-7xl mx-auto p-8">
-        {/* Timer */}
-        <div className="text-center mb-12">
-          <div
-            className={`text-[12rem] font-bold mb-6 ${isTimeRunningOut ? "text-red-400 animate-pulse" : "text-white"}`}
-          >
-            {formatTime(timeLeft)}
-          </div>
-          <div className="w-full max-w-4xl mx-auto bg-gray-700 rounded-full h-10">
-            <div
-              className={`h-10 rounded-full transition-all duration-1000 ${
-                isTimeRunningOut ? "bg-red-500" : "bg-green-500"
-              }`}
-              style={{
-                width: `${Math.max(0, (timeLeft / 60000) * 100)}%`,
-              }}
-            ></div>
-          </div>
-          <div className="text-3xl text-gray-300 mt-4">seconds remaining</div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Current Participant */}
-          <div className="bg-white bg-opacity-10 rounded-3xl p-10 backdrop-blur-sm border-4 border-yellow-400">
-            <h2 className="text-5xl font-bold mb-8 text-center text-yellow-400">
-              🥋 WARRIOR UP FOR BIDDING
-            </h2>
-            <div className="text-center">
-              {participant?.picture ? (
-                <img
-                  src={participant.picture}
-                  alt={participant.name}
-                  className="w-72 h-72 object-cover rounded-full mx-auto mb-8 border-8 border-yellow-400 shadow-2xl"
-                />
-              ) : (
-                <div className="w-72 h-72 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full mx-auto mb-8 border-8 border-yellow-400 shadow-2xl flex items-center justify-center">
-                  <span className="text-9xl">👤</span>
-                </div>
-              )}
-              <h3 className="text-6xl font-bold text-white drop-shadow-lg">
-                {participant?.name || "Loading..."}
-              </h3>
-            </div>
-          </div>
-
-          {/* Bidding Status */}
-          <div className="bg-white bg-opacity-10 rounded-3xl p-10 backdrop-blur-sm border-4 border-blue-400">
-            <h2 className="text-5xl font-bold mb-8 text-center text-blue-300">
-              🏯 Bidding Status
-            </h2>
-            <div className="space-y-6">
-              <div className="text-3xl mb-8 text-center">
-                Houses that placed bids:{" "}
-                <span className="font-bold text-green-400 text-5xl">
-                  {bidsPlaced.length}
-                </span>
+      {/* Content */}
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="bg-black/60 p-4 sm:p-6 border-b-2 border-[#FFD700]/50 backdrop-blur-md">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">CC Bidding System</h1>
+            <div className="text-center sm:text-right">
+              <div className="text-2xl sm:text-3xl font-bold text-green-400 drop-shadow-[0_0_15px_#22C55E]">
+                🔴 LIVE BIDDING
               </div>
+              <div className="text-xl sm:text-2xl text-gray-300">
+                Round {status.roundNumber || "?"}
+              </div>
+            </div>
+          </div>
+        </div>
 
-              {bidsPlaced.length > 0 ? (
-                <div className="grid grid-cols-2 gap-6">
-                  {Array.isArray(houses) &&
-                    houses
-                      .filter((house) =>
-                        bidsPlaced.some(
-                          (bid) => bid.houseId === house._id?.toString()
-                        )
-                      )
-                      .map((house) => (
-                        <div
-                          key={house._id?.toString()}
-                          className="bg-green-500 bg-opacity-30 rounded-xl p-8 text-center border-4 border-green-400 transform hover:scale-105 transition-all"
-                        >
-                          <div className="text-3xl font-bold mb-2">
-                            {house.name}
-                          </div>
-                          <div className="text-2xl text-green-200">
-                            ✓ Bid Placed
-                          </div>
-                        </div>
-                      ))}
-                </div>
-              ) : (
-                <div className="text-center text-gray-300 text-3xl py-12">
-                  No bids placed yet...
-                </div>
-              )}
+        <div className="max-w-7xl mx-auto p-4 sm:p-8">
+          {/* Timer */}
+          <div className="text-center mb-8 sm:mb-12">
+            <div
+              className={`text-8xl sm:text-[12rem] font-bold mb-6 transition-colors ${isTimeRunningOut ? "text-red-500 animate-pulse drop-shadow-[0_0_40px_#EF4444]" : "text-[#FFD700] drop-shadow-[0_0_40px_#FFD700]"}`}
+            >
+              {formatTime(timeLeft)}
+            </div>
+            <div className="w-full max-w-4xl mx-auto bg-gray-700/60 rounded-full h-8 sm:h-10 border-2 border-[#FFD700]/50">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 shadow-[0_0_20px_currentColor] ${
+                  isTimeRunningOut ? "bg-red-500" : "bg-green-500"
+                }`}
+                style={{
+                  width: `${Math.max(0, (timeLeft / 60000) * 100)}%`,
+                }}
+              ></div>
+            </div>
+            <div className="text-2xl sm:text-3xl text-gray-300 mt-4">seconds remaining</div>
+          </div>
 
-              {/* Show houses that haven't bid */}
-              {Array.isArray(houses) && houses.length > bidsPlaced.length && (
-                <div className="mt-10">
-                  <div className="text-2xl mb-6 text-gray-300 text-center">
-                    Waiting for:
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-12">
+            {/* Current Participant */}
+            <div className="bg-black/60 rounded-3xl p-6 sm:p-10 backdrop-blur-md border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+              <h2 className="text-3xl sm:text-5xl font-bold mb-6 sm:mb-8 text-center text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
+                🥋 WARRIOR UP FOR BIDDING
+              </h2>
+              <div className="text-center">
+                {participant?.picture ? (
+                  <img
+                    src={participant.picture}
+                    alt={participant.name}
+                    className="w-48 h-48 sm:w-72 sm:h-72 object-cover rounded-full mx-auto mb-6 sm:mb-8 border-4 sm:border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)]"
+                  />
+                ) : (
+                  <div className="w-48 h-48 sm:w-72 sm:h-72 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full mx-auto mb-6 sm:mb-8 border-4 sm:border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)] flex items-center justify-center">
+                    <span className="text-7xl sm:text-9xl">👤</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-6">
-                    {houses
-                      .filter(
-                        (house) =>
-                          !bidsPlaced.some(
+                )}
+                <h3 className="text-4xl sm:text-6xl font-bold text-white drop-shadow-[0_0_20px_#FFFFFF]">
+                  {participant?.name || "Loading..."}
+                </h3>
+              </div>
+            </div>
+
+            {/* Bidding Status */}
+            <div className="bg-black/60 rounded-3xl p-6 sm:p-10 backdrop-blur-md border-2 border-blue-400/50 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+              <h2 className="text-3xl sm:text-5xl font-bold mb-6 sm:mb-8 text-center text-blue-300 drop-shadow-[0_0_20px_#93C5FD]">
+                🏯 Bidding Status
+              </h2>
+              <div className="space-y-6">
+                <div className="text-2xl sm:text-3xl mb-6 sm:mb-8 text-center">
+                  Houses that placed bids:{" "}
+                  <span className="font-bold text-green-400 text-4xl sm:text-5xl drop-shadow-[0_0_15px_#22C55E]">
+                    {bidsPlaced.length}
+                  </span>
+                </div>
+
+                {bidsPlaced.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                    {Array.isArray(houses) &&
+                      houses
+                        .filter((house) =>
+                          bidsPlaced.some(
                             (bid) => bid.houseId === house._id?.toString()
                           )
-                      )
-                      .map((house) => (
-                        <div
-                          key={house._id?.toString()}
-                          className="bg-gray-500 bg-opacity-30 rounded-xl p-8 text-center border-4 border-gray-400"
-                        >
-                          <div className="text-3xl font-bold mb-2">
-                            {house.name}
+                        )
+                        .map((house) => (
+                          <div
+                            key={house._id?.toString()}
+                            className="bg-green-500/30 rounded-xl p-4 sm:p-8 text-center border-2 sm:border-4 border-green-400 transform hover:scale-105 transition-all shadow-[0_0_25px_rgba(34,197,94,0.4)] backdrop-blur-sm"
+                          >
+                            <div className="text-xl sm:text-3xl font-bold mb-2 text-white drop-shadow-[0_0_10px_#000000]">
+                              {house.name}
+                            </div>
+                            <div className="text-lg sm:text-2xl text-green-200">
+                              ✓ Bid Placed
+                            </div>
                           </div>
-                          <div className="text-2xl text-gray-300">
-                            Thinking...
-                          </div>
-                        </div>
-                      ))}
+                        ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center text-gray-300 text-2xl sm:text-3xl py-12">
+                    No bids placed yet...
+                  </div>
+                )}
+
+                {/* Show houses that haven't bid */}
+                {Array.isArray(houses) && houses.length > bidsPlaced.length && (
+                  <div className="mt-6 sm:mt-10">
+                    <div className="text-xl sm:text-2xl mb-4 sm:mb-6 text-gray-300 text-center">
+                      Waiting for:
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                      {houses
+                        .filter(
+                          (house) =>
+                            !bidsPlaced.some(
+                              (bid) => bid.houseId === house._id?.toString()
+                            )
+                        )
+                        .map((house) => (
+                          <div
+                            key={house._id?.toString()}
+                            className="bg-gray-500/30 rounded-xl p-4 sm:p-8 text-center border-2 sm:border-4 border-gray-400 backdrop-blur-sm"
+                          >
+                            <div className="text-xl sm:text-3xl font-bold mb-2 text-white drop-shadow-[0_0_10px_#000000]">
+                              {house.name}
+                            </div>
+                            <div className="text-lg sm:text-2xl text-gray-300">
+                              Thinking...
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

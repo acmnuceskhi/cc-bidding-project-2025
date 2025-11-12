@@ -52,7 +52,7 @@ export default function FinalTeamsPage() {
           (house) => ({
             ...house,
             players: participantsData.filter(
-              (p) => p.houseId && String(p.houseId) === String(house.houseId)
+              (p) => p.houseId && String(p.houseId) === String(house._id)
             ),
           })
         );
