@@ -5,13 +5,13 @@ import clientPromise from "@/lib/mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
-// POST /api/rounds/[id]/restart - Restart a round (Admin only)
+// POST /api/rounds/[id]/restart - Fully resets a round, refunds bids, clears data
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
+    // ✅ Authentication & role check
     const authResult = await verifyAuth(request);
     if (!authResult) {
       return NextResponse.json(
@@ -20,7 +20,6 @@ export async function POST(
       );
     }
 
-    // Only admin can restart rounds
     if (!hasRole(authResult.payload, "admin")) {
       return NextResponse.json(
         { error: "Admin access required" },
@@ -28,6 +27,7 @@ export async function POST(
       );
     }
 
+    // ✅ Validate round ID
     const { id } = await context.params;
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -41,66 +41,44 @@ export async function POST(
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
-    // Prevent restart if round already finalized (participant sold)
-    if (round.finalized) {
-      return NextResponse.json(
-        { error: "Cannot restart a finalized round" },
-        { status: 400 }
-      );
-    }
+    // ✅ Get the *latest bid* for each house for this round (aggregate-based)
+    const latestBids = await Bids.getLatestBidPerHouseForRound(id);
 
-    if (round.status === "active") {
-      return NextResponse.json(
-        { error: "Cannot restart a round that is currently active" },
-        { status: 400 }
-      );
-    }
-
-    // Fetch all bids for this round to potentially refund & delete
-    const bidsForRound = await Bids.getByRound(id);
-
-    // Start transaction for atomic restart (refund + cleanup + status reset)
     const client = await clientPromise;
     const session = client.startSession();
     let refundedCount = 0;
     let totalRefundAmount = 0;
+
     try {
       await session.withTransaction(async () => {
         const db = client.db();
 
-        // Only refund budgets if the round was not already completed (to avoid double refunds)
-        // If round.status === 'completed', losing bids have already been refunded at end phase.
-        if (round.status !== "completed") {
-          for (const bid of bidsForRound) {
-            // Refund the reserved amount back to the house budget
-            await db
-              .collection("houses")
-              .updateOne(
-                { _id: new ObjectId(bid.houseId) },
-                { $inc: { remainingBudget: bid.amount } },
-                { session }
-              );
-            refundedCount++;
-            totalRefundAmount += bid.amount;
-          }
+        // ✅ Refund only the latest bid from each house
+        for (const bid of latestBids) {
+          await db.collection("houses").updateOne(
+            { _id: new ObjectId(bid.houseId) },
+            { $inc: { remainingBudget: bid.amount } },
+            { session }
+          );
+          refundedCount++;
+          totalRefundAmount += bid.amount;
         }
 
-        // Delete all bids for this round
-        if (bidsForRound.length > 0) {
-          await db
-            .collection("bids")
-            .deleteMany({ roundId: new ObjectId(id) }, { session });
-        }
+        // ✅ Delete all bids for this round (clear the slate)
+        await db
+          .collection("bids")
+          .deleteMany({ roundId: new ObjectId(id) }, { session });
 
-        // Reset round status & timer
+        // ✅ Reset the round’s state so it’s ready for restart
         await db.collection("rounds").updateOne(
           { _id: new ObjectId(id) },
           {
             $set: {
               status: "scheduled",
               timerEnd: null,
+              finalized: false,
+              scheduledStart: null,
             },
-            $unset: { finalized: "" }, // ensure finalized removed if present
           },
           { session }
         );
@@ -113,11 +91,12 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      canRestart: true, // ✅ explicitly indicate ready-to-start
       round: updatedRound,
-      bidsRemoved: bidsForRound.length,
-      refundedBids: refundedCount,
+      refundedCount,
       totalRefundAmount,
-      message: "Round restarted successfully",
+      bidsCleared: latestBids.length,
+      message: "Round reset successfully and ready to start",
     });
   } catch (error) {
     console.error("Error restarting round:", error);
