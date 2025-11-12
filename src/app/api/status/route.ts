@@ -26,8 +26,8 @@ export async function GET() {
     const now = Date.now();
     const timerEnd = activeRound.timerEnd?.getTime();
 
-    // SERVER-SIDE AUTO-END: Check if round has expired and is still active
-    if (timerEnd && now >= timerEnd && activeRound.status === "active") {
+    // SERVER-SIDE AUTO-END: Check if round has expired and is still active and not finalized
+    if (timerEnd && now >= timerEnd && activeRound.status === "active" && !activeRound.finalized) {
       console.log(
         "⏰ Round expired - auto-ending on server side:",
         activeRound._id?.toString()
@@ -39,8 +39,39 @@ export async function GET() {
       const { ObjectId } = await import("mongodb");
 
       try {
-        // Get all bids for this round
-        const bids = await Bids.getByRound(activeRound._id!.toString());
+        const client = await clientPromise;
+        const { ObjectId } = await import("mongodb");
+        
+        // ATOMIC CHECK: Try to mark round as "processing" to prevent race conditions
+        const markResult = await client.db().collection("rounds").findOneAndUpdate(
+          { 
+            _id: new ObjectId(activeRound._id!),
+            status: "active",  // Only update if still active
+            finalized: { $ne: true }  // And not already finalized
+          },
+          { 
+            $set: { 
+              status: "processing"  // Temporary status to lock the round
+            } 
+          },
+          { returnDocument: "after" }
+        );
+
+        // If we couldn't mark it (another request beat us), skip auto-end
+        if (!markResult) {
+          console.log("⏭️ Round already being processed by another request, skipping");
+          return NextResponse.json({
+            roundId: null,
+            participant: null,
+            roundStatus: "idle",
+            timerRemaining: 0,
+            bidsPlaced: [],
+            serverTime: Date.now(),
+          });
+        }
+
+        // Get only the LATEST bid from each house for this round
+        const bids = await Bids.getLatestBidPerHouseForRound(activeRound._id!.toString());
 
         // Find the winning bid
         let winningBid = null;
@@ -60,31 +91,25 @@ export async function GET() {
           winningHouse = await Houses.getById(winningBid.houseId.toString());
         }
 
-        // Use transaction to end the round
-        const client = await clientPromise;
+        // ESCROW LOGIC: Deduct ONLY from winner (no refunds needed)
         const session = client.startSession();
 
         try {
           await session.withTransaction(async () => {
             const db = client.db();
 
-            // Refund losing bids
+            // Deduct budget from winning house ONLY
             if (winningBid) {
-              const losingBids = bids.filter(
-                (b) => b._id?.toString() !== winningBid!._id?.toString()
-              );
-              for (const lb of losingBids) {
-                await db
-                  .collection("houses")
-                  .updateOne(
-                    { _id: new ObjectId(lb.houseId) },
-                    { $inc: { remainingBudget: lb.amount } },
-                    { session }
-                  );
-              }
+              await db
+                .collection("houses")
+                .updateOne(
+                  { _id: new ObjectId(winningBid.houseId) },
+                  { $inc: { remainingBudget: -winningBid.amount } },
+                  { session }
+                );
             }
 
-            // Update round status
+            // Update round status to completed
             await db.collection("rounds").updateOne(
               { _id: new ObjectId(activeRound._id!) },
               {
@@ -112,25 +137,7 @@ export async function GET() {
 
           console.log("✅ Round auto-ended successfully");
 
-          // Emit socket event for real-time updates
-          try {
-            const { getIO } = await import("@/lib/socket-server");
-            const io = getIO();
-            io.emit("round-ended", {
-              roundId: activeRound._id?.toString(),
-              winner: winningHouse
-                ? {
-                    houseName: winningHouse.name,
-                    amount: winningBid!.amount,
-                  }
-                : null,
-            });
-          } catch (socketError) {
-            console.log(
-              "Socket.IO not available or error emitting event:",
-              socketError
-            );
-          }
+          // Real-time updates handled by polling
         } finally {
           await session.endSession();
         }
