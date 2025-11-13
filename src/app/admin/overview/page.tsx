@@ -355,6 +355,35 @@ export default function OverviewPage() {
     }
   };
 
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  
+  const handleReStartRound = async () => {
+    if (!activeRound?._id) return;
+    const res = await fetchWithAuth(`/api/rounds/${activeRound._id.toString()}/restart`, { method: "POST" });
+    const response = await res.json();
+    if (response.canRestart === true) {
+      await delay(5000)
+      if (isStartingRound) return;
+      setIsStartingRound(true);
+      try {
+        const response = await fetchWithAuth(`/api/rounds/${activeRound._id.toString()}/start`, {
+          method: "POST",
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          setIsStartingRound(false);
+          alert(result.error || result.message || "Failed to start round");
+          return;
+        }
+        setIsStartingRound(false);
+      } catch (e: any) {
+        console.error(e);
+        alert(e.message || "Failed to start round");
+        setIsStartingRound(false);
+      }
+    }
+  };
+
   const handleViewFullStats = () => {
     window.location.href = "/rounds";
   };
@@ -537,10 +566,12 @@ export default function OverviewPage() {
             End Current Round
           </button>
           <button
-            onClick={handleViewFullStats}
+            // onClick={handleViewFullStats}
+            onClick={handleReStartRound}
             className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all transform hover:scale-105"
           >
-            View Full Stats
+            {/* View Full Stats */}
+            Restart Round
           </button>
         </div>
       </div>

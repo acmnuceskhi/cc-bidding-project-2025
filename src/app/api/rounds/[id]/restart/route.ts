@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Bids } from "@/lib/models/bids";
+import { Participants } from "@/lib/models/participants"
 import clientPromise from "@/lib/mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { ObjectId } from "mongodb";
@@ -42,26 +43,38 @@ export async function POST(
     }
 
     // ✅ Get the *latest bid* for each house for this round (aggregate-based)
-    const latestBids = await Bids.getLatestBidPerHouseForRound(id);
+    const participant = await Participants.getById(round.participantId.toString())
+    console.log("participant ", participant);
+    // if (participant !== null) {
+    //   latestBids = await Bids.getByHouse(participant!.houseId!.toString());
+    // }
+    // if (round.finalized !== true) {
+    //   latestBids = await Bids.getLatestBidPerHouseForRound(id);
+    // }
 
     const client = await clientPromise;
     const session = client.startSession();
     let refundedCount = 0;
     let totalRefundAmount = 0;
+    let numBids = 0;
 
     try {
       await session.withTransaction(async () => {
         const db = client.db();
 
         // ✅ Refund only the latest bid from each house
-        for (const bid of latestBids) {
-          await db.collection("houses").updateOne(
-            { _id: new ObjectId(bid.houseId) },
-            { $inc: { remainingBudget: bid.amount } },
-            { session }
-          );
-          refundedCount++;
-          totalRefundAmount += bid.amount;
+        if (round.finalized === true && participant !== null) {
+          const latestBids = await Bids.getByHouse(participant!.houseId!.toString());
+          numBids = latestBids.length;
+          for (const bid of latestBids) {
+            await db.collection("houses").updateOne(
+              { _id: new ObjectId(bid.houseId) },
+              { $inc: { remainingBudget: bid.amount } },
+              { session }
+            );
+            refundedCount++;
+            totalRefundAmount += bid.amount;
+          }
         }
 
         // ✅ Delete all bids for this round (clear the slate)
@@ -95,7 +108,7 @@ export async function POST(
       round: updatedRound,
       refundedCount,
       totalRefundAmount,
-      bidsCleared: latestBids.length,
+      bidsCleared: numBids,
       message: "Round reset successfully and ready to start",
     });
   } catch (error) {

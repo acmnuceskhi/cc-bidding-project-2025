@@ -191,6 +191,16 @@ export default function RoundsPage() {
     await fetchRounds();
   };
 
+  const handleReStartRound = async (roundId: string) => {
+    const res = await fetchWithAuth(`/api/rounds/${roundId}/restart`, { method: "POST" });
+    const response = await res.json();
+    if (response.canRestart === true) {
+      await fetchWithAuth(`/api/rounds/${roundId}/start`, { method: "POST" });
+      await fetchRounds();
+    }
+    await fetchRounds();
+  };
+
   const handleViewDetails = (round: RoundWithDetails) => {
     setSelectedRound(round);
   };
@@ -302,12 +312,20 @@ export default function RoundsPage() {
 
                 <div className="flex flex-col gap-2">
                   {round.status === "completed" && (
-                    <button
-                      onClick={() => handleViewDetails(round)}
-                      className="bg-blue-600/90 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(59,130,246,0.5)] transform hover:scale-105"
-                    >
-                      View Details
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleReStartRound(round._id)}
+                        className="bg-red-600/90 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(59,130,246,0.5)] transform hover:scale-105"
+                      >
+                        Restart
+                      </button>
+                      <button
+                        onClick={() => handleViewDetails(round)}
+                        className="bg-blue-700/90 hover:bg-blue-800 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(156,163,175,0.4)] transform hover:scale-105"
+                      >
+                        View Details
+                      </button>
+                    </div>
                   )}
                   {round.status === "active" && (
                     <button

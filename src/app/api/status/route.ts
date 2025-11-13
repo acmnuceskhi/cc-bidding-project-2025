@@ -73,6 +73,22 @@ export async function GET() {
         // Get only the LATEST bid from each house for this round
         const bids = await Bids.getLatestBidPerHouseForRound(activeRound._id!.toString());
 
+        // 🚫 No bids case — do not mark completed
+        if (bids.length === 0) {
+          await Rounds.update(activeRound._id!.toString(), {
+            status: "scheduled",
+            timerEnd: new Date(),
+            finalized: false,
+          });
+
+          return NextResponse.json({
+            success: true,
+            winningBid: null,
+            allBids: [],
+            message: "Round ended — no bids were placed. Not marked as completed.",
+          });
+        }
+
         // Find the winning bid
         let winningBid = null;
         let winningHouse = null;
