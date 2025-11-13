@@ -166,4 +166,24 @@ export const Participants = {
       .collection<Participant>(collectionName)
       .findOne({ _id: new ObjectId(id) });
   },
+
+  /**
+   * Fetch all participants belonging to a specific house
+   * @param houseId - MongoDB ObjectId as string
+   * @returns Promise resolving to an array of participants in that house
+   */
+  async getByHouse(houseId: string): Promise<Participant[]> {
+    const client = await clientPromise;
+    const db = client.db();
+
+    if (!houseId) {
+      throw new Error("houseId is required");
+    }
+
+    return db
+      .collection<Participant>(collectionName)
+      .find({ houseId: new ObjectId(houseId) })
+      .sort({ name: 1 })
+      .toArray();
+  },
 };

@@ -45,6 +45,8 @@ export default function HouseDashboard() {
   const [currentBid, setCurrentBid] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [canBid, setCanBid] = useState<boolean>(true);
+  const [canBidMessage, setCanBidMessage] = useState<string>("");
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -100,6 +102,22 @@ export default function HouseDashboard() {
             });
 
             setCurrentParticipant(statusData.participant || null);
+
+            if (selectedHouse && statusData.participant?.participantId) {
+              try {
+                const canBidRes = await fetchWithAuth(
+                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?participantId=${statusData.participant.participantId}`,
+                  { cache: "no-store" }
+                );
+                const canBidData = await canBidRes.json();
+
+                setCanBid(!!canBidData.canBid);
+                setCanBidMessage(canBidData.message || "");
+              } catch (err) {
+                console.error("Failed to check canBid:", err);
+                setCanBid(true); // default to true to not block bidding if check fails
+              }
+            }
 
             // Fetch current bid for this house in this round
             try {
@@ -411,55 +429,62 @@ export default function HouseDashboard() {
               {/* Enhanced Bidding Section */}
               <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 {timeLeftValue > 0 ? (
-                  <div className="space-y-6">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] text-center drop-shadow-[0_0_20px_#FFD700]">
-                      💰 PLACE YOUR BID
-                    </h2>
-                    
-                    {/* Current Bid Display */}
-                    {currentBid !== null && (
-                      <div className="bg-gradient-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
-                        <div className="text-gray-200 text-sm sm:text-base mb-1">Your Active Bid</div>
-                        <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
-                          ${currentBid}
-                        </div>
-                      </div>
-                    )}
+                  canBid ? (
+                    <div className="space-y-6">
+                      <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] text-center drop-shadow-[0_0_20px_#FFD700]">
+                        💰 PLACE YOUR BID
+                      </h2>
 
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <input
-                        type="number"
-                        id="bidAmount"
-                        min="1"
-                        max={house.remainingBudget}
-                        value={bidAmount || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setBidAmount(val === "" ? 0 : parseInt(val, 10));
-                        }}
-                        className="flex-1 bg-gray-900/80 border-2 border-[#FFD700]/50 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-white text-xl sm:text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.2)]"
-                        placeholder="Enter bid amount"
-                      />
-                      <button
-                        onClick={placeBid}
-                        disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
-                        className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
-                          loading || bidAmount <= 0 || bidAmount > house.remainingBudget
-                            ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                            : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
-                        }`}
-                      >
-                        {loading ? "⏳ Placing..." : "✅ Place Bid"}
-                      </button>
-                    </div>
-                    {bidAmount > house.remainingBudget && (
-                      <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
-                        <p className="text-red-300 font-bold text-base sm:text-lg">
-                          ⚠️ Bid amount exceeds your remaining treasury!
-                        </p>
+                      {currentBid !== null && (
+                        <div className="bg-gradient-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
+                          <div className="text-gray-200 text-sm sm:text-base mb-1">Your Active Bid</div>
+                          <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
+                            ${currentBid}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <input
+                          type="number"
+                          id="bidAmount"
+                          min="1"
+                          max={house.remainingBudget}
+                          value={bidAmount || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setBidAmount(val === "" ? 0 : parseInt(val, 10));
+                          }}
+                          className="flex-1 bg-gray-900/80 border-2 border-[#FFD700]/50 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-white text-xl sm:text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.2)]"
+                          placeholder="Enter bid amount"
+                        />
+                        <button
+                          onClick={placeBid}
+                          disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
+                          className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
+                            loading || bidAmount <= 0 || bidAmount > house.remainingBudget
+                              ? "bg-gray-600 text-gray-400 cursor-not-allowed"
+                              : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
+                          }`}
+                        >
+                          {loading ? "⏳ Placing..." : "✅ Place Bid"}
+                        </button>
                       </div>
-                    )}
-                  </div>
+                      {bidAmount > house.remainingBudget && (
+                        <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                          <p className="text-red-300 font-bold text-base sm:text-lg">
+                            ⚠️ Bid amount exceeds your remaining treasury!
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+                      <p className="text-yellow-300 font-bold text-xl sm:text-2xl">
+                        ⚠️ {canBidMessage || "You have already recruited 3 players from this batch!"}
+                      </p>
+                    </div>
+                  )
                 ) : (
                   <div className="bg-red-900/80 border-2 border-red-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(239,68,68,0.5)]">
                     <p className="text-red-300 font-bold text-xl sm:text-2xl">

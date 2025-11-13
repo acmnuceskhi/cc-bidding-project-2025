@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
+import { Participants } from "@/lib/models/participants"; 
 import { verifyAuth } from "@/lib/auth";
 
 // POST /api/bids - Place a bid
@@ -134,6 +135,39 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+
+    // 🧍 Get participant being bid on
+    const participant = await Participants.getById(round.participantId.toString());
+    if (!participant || !participant.rollNumber) {
+      return NextResponse.json(
+        { success: false, error: "PARTICIPANT_NOT_FOUND", message: "Participant not found or missing university ID" },
+        { status: 404 }
+      );
+    }
+
+    // 🎓 Extract the batch year (first 2 digits of rollNumber)
+    const batchPrefix = participant.rollNumber.slice(0, 2);
+
+    // 👥 Get all participants already assigned to this house
+    const houseMembers = await Participants.getByHouse(houseId);
+
+    // Count how many have the same batch prefix
+    const sameBatchCount = houseMembers.filter(
+      (p) => p.rollNumber?.startsWith(batchPrefix)
+    ).length;
+
+    // ❌ Enforce the 3-per-batch limit
+    if (sameBatchCount >= 3) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "BATCH_LIMIT_REACHED",
+          message: `House '${house.name}' already has 3 members from batch '${batchPrefix}'.`,
+        },
+        { status: 403 }
+      );
+    }
+
 
     const isNew: boolean = previousAmount === null;
 
