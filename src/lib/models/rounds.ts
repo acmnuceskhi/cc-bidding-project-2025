@@ -10,6 +10,7 @@ export interface Round {
   scheduledStart?: Date | null; // Round scheduled start time
   finalized?: boolean; // To indicate participant sold or up for next pass
   winningBid?: number; // Final winning bid amount, if any
+  skipped?: boolean; // Indicates round completed with no bids (eligible for second pass)
   // bids: Bid[]; Removed since redundant; bids.ts already present
 }
 

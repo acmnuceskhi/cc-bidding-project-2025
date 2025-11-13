@@ -36,7 +36,6 @@ export async function GET() {
       // Import the end round logic
       const { Houses } = await import("@/lib/models/houses");
       const clientPromise = (await import("@/lib/mongodb")).default;
-      const { ObjectId } = await import("mongodb");
 
       try {
         const client = await clientPromise;
@@ -73,19 +72,26 @@ export async function GET() {
         // Get only the LATEST bid from each house for this round
         const bids = await Bids.getLatestBidPerHouseForRound(activeRound._id!.toString());
 
-        // 🚫 No bids case — do not mark completed
+        // 🚫 No bids case — mark as completed & skipped
         if (bids.length === 0) {
           await Rounds.update(activeRound._id!.toString(), {
-            status: "scheduled",
+            status: "completed",
             timerEnd: new Date(),
             finalized: false,
+            winningBid: undefined,
+            skipped: true,
           });
 
           return NextResponse.json({
-            success: true,
-            winningBid: null,
-            allBids: [],
-            message: "Round ended — no bids were placed. Not marked as completed.",
+            roundId: null,
+            participant: null,
+            roundStatus: "completed",
+            timerRemaining: 0,
+            bidsPlaced: [],
+            roundEnded: true,
+            winner: null,
+            skipped: true,
+            serverTime: Date.now(),
           });
         }
 
@@ -134,6 +140,7 @@ export async function GET() {
                   timerEnd: new Date(),
                   finalized: !!winningHouse,
                   winningBid: winningBid ? winningBid.amount : null,
+                  skipped: !winningHouse,
                 },
               },
               { session }
@@ -172,6 +179,9 @@ export async function GET() {
                 amount: winningBid!.amount,
               }
             : null,
+          skipped: !winningHouse,
+          winningBid: winningHouse ? winningBid!.amount : null,
+          serverTime: Date.now(),
         });
       } catch (autoEndError) {
         console.error("❌ Error auto-ending round:", autoEndError);

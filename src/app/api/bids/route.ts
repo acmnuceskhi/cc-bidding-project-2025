@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
     const { roundId, amount, previousAmount } = body;
 
     // Validate input
-    if (!roundId || !amount) {
+    // Treat 0 as a valid provided value; only undefined/null should be missing
+    if (!roundId || amount === undefined || amount === null) {
       return NextResponse.json(
         {
           success: false,
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (amount <= 0) {
+    if (typeof amount !== "number" || amount < 0) {
       return NextResponse.json(
         {
           success: false,
@@ -148,7 +149,17 @@ export async function POST(request: NextRequest) {
     // 🎓 Extract the batch year (first 2 digits of rollNumber)
     const batchPrefix = participant.rollNumber.slice(0, 2);
 
-    // 👥 Get all participants already assigned to this house
+    // If amount === 0, interpret as an explicit "skip" (captain not interested).
+    // Do NOT create/update a bid document, and do NOT enforce batch limits.
+    if (amount === 0) {
+      return NextResponse.json({
+        success: true,
+        remainingBudget: house.remainingBudget,
+        message: "No bid (skip)",
+      });
+    }
+
+    // 👥 Get all participants already assigned to this house (only relevant for real bids)
     const houseMembers = await Participants.getByHouse(houseId);
 
     // Count how many have the same batch prefix
@@ -156,7 +167,7 @@ export async function POST(request: NextRequest) {
       (p) => p.rollNumber?.startsWith(batchPrefix)
     ).length;
 
-    // ❌ Enforce the 3-per-batch limit
+    // ❌ Enforce the 3-per-batch limit for actual bids
     if (sameBatchCount >= 3) {
       return NextResponse.json(
         {
@@ -167,7 +178,6 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-
 
     const isNew: boolean = previousAmount === null;
 

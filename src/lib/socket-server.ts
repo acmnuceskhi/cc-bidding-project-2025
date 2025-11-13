@@ -60,11 +60,15 @@ export function initializeSocket(httpServer: HTTPServer) {
             round.participantId.toString()
           );
 
+          const timeLeft = round.timerEnd
+            ? Math.max(0, round.timerEnd.getTime() - Date.now())
+            : 0;
+
           currentState = {
             screen: "bidding",
             roundId: roundId,
             participantId: round.participantId.toString(),
-            timeLeft: Math.max(0, round.timerEnd.getTime() - Date.now()),
+            timeLeft,
           };
 
           // Broadcast to all clients
@@ -72,7 +76,7 @@ export function initializeSocket(httpServer: HTTPServer) {
           io?.emit("round-started", {
             roundId,
             participant,
-            timerEnd: round.timerEnd,
+            timerEnd: round.timerEnd ?? null,
           });
         }
       } catch (error) {

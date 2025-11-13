@@ -54,19 +54,21 @@ export async function POST(
     // This is the definitive list of final bids.
     const bids = await Bids.getLatestBidPerHouseForRound(id);
 
-    // 🚫 No bids case — do not mark completed
+    // 🚫 No bids case — mark as completed & skipped (eligible for second pass)
     if (bids.length === 0) {
       await Rounds.update(id, {
-        status: "scheduled",
+        status: "completed",
         timerEnd: new Date(),
         finalized: false,
+        winningBid: undefined,
+        skipped: true,
       });
 
       return NextResponse.json({
         success: true,
         winningBid: null,
         allBids: [],
-        message: "Round ended — no bids were placed. Not marked as completed.",
+        message: "Round completed with no bids (skipped).",
       });
     }
 
@@ -125,6 +127,7 @@ export async function POST(
               timerEnd: new Date(),
               finalized: !!winningHouse,
               winningBid: winningBid ? winningBid.amount : null,
+              skipped: !winningHouse, // mark skipped if not sold
             },
           },
           { session }

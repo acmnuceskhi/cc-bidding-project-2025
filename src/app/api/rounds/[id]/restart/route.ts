@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
-import { Bids } from "@/lib/models/bids";
 import { Participants } from "@/lib/models/participants"
 import clientPromise from "@/lib/mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
-import { ObjectId } from "mongodb";
+import { ObjectId, ReturnDocument } from "mongodb";
 
 // POST /api/rounds/[id]/restart - Fully resets a round, refunds bids, clears data
 export async function POST(
@@ -42,15 +41,17 @@ export async function POST(
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
-    // ✅ Get the *latest bid* for each house for this round (aggregate-based)
-    const participant = await Participants.getById(round.participantId.toString())
-    console.log("participant ", participant);
-    // if (participant !== null) {
-    //   latestBids = await Bids.getByHouse(participant!.houseId!.toString());
-    // }
-    // if (round.finalized !== true) {
-    //   latestBids = await Bids.getLatestBidPerHouseForRound(id);
-    // }
+    // Only allow restarting rounds that have completed (including skipped rounds)
+    if (round.status !== "completed") {
+      return NextResponse.json(
+        { error: "Round must be completed to restart" },
+        { status: 400 }
+      );
+    }
+
+    // Determine winning bid refund eligibility (escrow only deducted winner)
+    const participant = await Participants.getById(round.participantId.toString());
+    const winningHouseId = participant?.houseId?.toString();
 
     const client = await clientPromise;
     const session = client.startSession();
@@ -58,31 +59,96 @@ export async function POST(
     let totalRefundAmount = 0;
     let numBids = 0;
 
+    const lockKey = `restart-${id}`;
+    const locksColl = client.db().collection<{ _id: string; createdAt: Date }>(
+      "_locks"
+    );
+
+    // Try to acquire a lightweight lock by inserting a document with a unique _id
+    try {
+      await locksColl.insertOne({ _id: lockKey, createdAt: new Date() });
+    } catch (err: unknown) {
+      // Duplicate key means another restart is in progress or recently completed.
+      const e = err as { code?: number; codeName?: string };
+      if (e && (e.code === 11000 || e.codeName === "DuplicateKey")) {
+        const updatedRound = await Rounds.getById(id);
+        return NextResponse.json({
+          success: true,
+          canRestart: false,
+          round: updatedRound,
+          refundedCount: 0,
+          totalRefundAmount: 0,
+          bidsCleared: 0,
+          message: "Restart already in progress or completed",
+        });
+      }
+      throw err;
+    }
+
     try {
       await session.withTransaction(async () => {
         const db = client.db();
 
-        // ✅ Refund only the latest bid from each house
-        if (round.finalized === true && participant !== null) {
-          const latestBids = await Bids.getByHouse(participant!.houseId!.toString());
-          numBids = latestBids.length;
-          for (const bid of latestBids) {
+        // Re-read participant inside the transaction to get current assignment
+        const participantDoc = await db
+          .collection("participants")
+          .findOne({ _id: new ObjectId(round.participantId) }, { session });
+        const currentWinningHouseId = participantDoc?.houseId
+          ? participantDoc.houseId.toString()
+          : undefined;
+
+        // Atomically flip the round.finalized flag from true -> false and
+        // use the previous value to determine if a refund is necessary.
+        const prevRound = await db.collection("rounds").findOneAndUpdate(
+          { _id: new ObjectId(id), finalized: true },
+          { $set: { finalized: false } },
+          { session, returnDocument: ReturnDocument.BEFORE }
+        );
+
+        // `findOneAndUpdate` may return different shapes depending on driver version
+        // Normalize to the previous document if present.
+        const prevRoundDoc = prevRound
+          ? (prevRound as unknown as { value?: unknown }).value ?? prevRound
+          : null;
+
+        if (prevRoundDoc && currentWinningHouseId) {
+          // If the round was finalized we refund the winning bid (if present).
+          const winningBidDoc = await db.collection("bids").findOne(
+            {
+              roundId: new ObjectId(id),
+              houseId: new ObjectId(currentWinningHouseId),
+            },
+            { session }
+          );
+
+          if (winningBidDoc) {
             await db.collection("houses").updateOne(
-              { _id: new ObjectId(bid.houseId) },
-              { $inc: { remainingBudget: bid.amount } },
+              { _id: new ObjectId(winningBidDoc.houseId) },
+              { $inc: { remainingBudget: winningBidDoc.amount } },
               { session }
             );
-            refundedCount++;
-            totalRefundAmount += bid.amount;
+            refundedCount = 1;
+            totalRefundAmount = winningBidDoc.amount;
           }
         }
 
-        // ✅ Delete all bids for this round (clear the slate)
-        await db
-          .collection("bids")
-          .deleteMany({ roundId: new ObjectId(id) }, { session });
+        // Delete all bids for this round (clear the slate) and capture deleted count
+        const deleteRes = await db.collection("bids").deleteMany(
+          { roundId: new ObjectId(id) },
+          { session }
+        );
+        numBids = deleteRes.deletedCount ?? 0;
 
-        // ✅ Reset the round’s state so it’s ready for restart
+        // Unassign participant from house if they were assigned
+        if (currentWinningHouseId) {
+          await db.collection("participants").updateOne(
+            { _id: new ObjectId(round.participantId) },
+            { $unset: { houseId: "" } },
+            { session }
+          );
+        }
+
+        // Reset the round's state so it's ready for restart (clear skipped flag for fresh start)
         await db.collection("rounds").updateOne(
           { _id: new ObjectId(id) },
           {
@@ -92,12 +158,22 @@ export async function POST(
               finalized: false,
               scheduledStart: null,
             },
+            $unset: { winningBid: "", skipped: "" },
           },
           { session }
         );
       });
     } finally {
-      await session.endSession();
+      try {
+        await session.endSession();
+      } finally {
+        // release lock (best-effort)
+        try {
+          await locksColl.deleteOne({ _id: lockKey });
+        } catch {
+          /* ignore lock release errors */
+        }
+      }
     }
 
     const updatedRound = await Rounds.getById(id);

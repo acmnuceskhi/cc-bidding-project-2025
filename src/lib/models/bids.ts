@@ -14,22 +14,28 @@ export interface Bid {
 // Name of MongoDB collection
 const collectionName = "bids";
 
-// Ensure indexes (run once on startup) - non-unique to allow full bid history per house per round
+// Ensure indexes (run once on startup) - unique per (roundId, houseId) to keep only latest bid
 async function ensureIndexes() {
   try {
     const client = await clientPromise;
     const col = client.db().collection<Bid>(collectionName);
-    // Drop legacy unique index if it exists to allow multiple bids per (roundId, houseId)
-    try {
-      await col.dropIndex("roundId_1_houseId_1");
-    } catch {
-      // ignore if not found
-    }
+    // Unique compound index so only one document exists per house per round
+    await col.createIndex({ roundId: 1, houseId: 1 }, { unique: true });
+    // Supporting indexes for queries
     await col.createIndex({ roundId: 1 });
     await col.createIndex({ houseId: 1 });
     await col.createIndex({ participantId: 1 });
-    // Compound index to efficiently fetch latest bid per house in a round
-    await col.createIndex({ roundId: 1, houseId: 1, timestamp: -1 });
+    // Defensive TTL index for lightweight locks used by admin operations
+    // Stale lock documents will be automatically removed after 5 minutes.
+    try {
+      await client.db().collection("_locks").createIndex(
+        { createdAt: 1 },
+        { expireAfterSeconds: 300 }
+      );
+    } catch (err) {
+      // If creating the TTL index fails (e.g., permissions), log but continue.
+      console.warn("Failed to create TTL index on _locks.createdAt:", err);
+    }
   } catch (err) {
     console.error("Failed to create indexes on bids:", err);
   }
@@ -120,28 +126,13 @@ export const Bids = {
    * @returns A promise that resolves to an array of the latest bids, one per house.
    */
   async getLatestBidPerHouseForRound(roundId: string): Promise<Bid[]> {
+    // With unique (roundId, houseId) each document already represents the latest bid
     const client = await clientPromise;
-    const col = client.db().collection<Bid>(collectionName);
-
-    // Aggregation pipeline to get the latest bid from each house for the specified round
-    const pipeline = [
-      // Match bids for the specific round
-      { $match: { roundId: new ObjectId(roundId) } },
-      // Sort by timestamp descending to get the latest bids first
-      { $sort: { timestamp: -1 } },
-      // Group by houseId and take the first document (which is the latest bid)
-      {
-        $group: {
-          _id: "$houseId",
-          latestBid: { $first: "$$ROOT" },
-        },
-      },
-      // Replace the root with the latest bid document
-      { $replaceRoot: { newRoot: "$latestBid" } },
-    ];
-
-    const bids = await col.aggregate<Bid>(pipeline).toArray();
-    return bids;
+    return client
+      .db()
+      .collection<Bid>(collectionName)
+      .find({ roundId: new ObjectId(roundId) })
+      .toArray();
   },
 
   /**
@@ -161,24 +152,24 @@ export const Bids = {
     amount: number
   ): Promise<Bid> {
     const client = await clientPromise;
-    const bidData: Partial<Bid> = {
+    const col = client.db().collection<Bid>(collectionName);
+    const filter = {
       roundId: new ObjectId(roundId),
       houseId: new ObjectId(houseId),
-      participantId: new ObjectId(participantId),
-      amount,
-      timestamp: new Date(),
     };
-
-    // Update or insert the bid
-    const result = await client
-      .db()
-      .collection<Bid>(collectionName)
-      .findOneAndUpdate(
-        { roundId: bidData.roundId, houseId: bidData.houseId },
-        { $set: bidData },
-        { upsert: true, returnDocument: "after" }
-      );
-
+    const update = {
+      $set: {
+        roundId: new ObjectId(roundId),
+        houseId: new ObjectId(houseId),
+        participantId: new ObjectId(participantId),
+        amount,
+        timestamp: new Date(),
+      },
+    };
+    const result = await col.findOneAndUpdate(filter, update, {
+      upsert: true,
+      returnDocument: "after",
+    });
     return result as Bid;
   },
 
