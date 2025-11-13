@@ -21,6 +21,7 @@ interface PlayerWithDetails extends Participant {
 
 interface House {
   houseId?: string;
+  _id?: string | { toString: () => string };
   name: string;
   totalBudget: number;
   remainingBudget: number;

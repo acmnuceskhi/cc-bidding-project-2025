@@ -15,12 +15,23 @@ import { Teams } from "@/lib/models/teams";
 import { hashPassword } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
-async function initializeData() {
+export async function initializeData() {
   try {
     console.log("Connecting to MongoDB...");
     const client = await clientPromise;
     const db = client.db();
     console.log("Connected!");
+
+    // Safety: prevent accidentally seeding production unless explicitly opted in
+    const uri = process.env.MONGODB_URI || "";
+    const isProduction = uri.includes("mongodb+srv") || uri.includes("cluster0");
+    const isTestEnv = process.env.NODE_ENV === "test" || uri.includes("127.0.0.1") || uri.includes("localhost");
+    
+    if (isProduction && !isTestEnv && process.env.RUN_SEED_SCRIPT !== "true") {
+      throw new Error(
+        "⚠️  SAFETY: Refusing to seed production database. Set RUN_SEED_SCRIPT=true to override."
+      );
+    }
 
     // Remove previous test data
     await db.collection("houses").deleteMany({});
@@ -47,15 +58,20 @@ async function initializeData() {
 
     // Round-1 dummy teams with dummy stats
     const teamIds: ObjectId[] = [];
-    for (let i = 1; i <= 4; i++) {
-      const successfulAttempts = Math.floor(Math.random() * 10); // 0-9
-      const unsuccessfulAttempts = Math.floor(Math.random() * 5); // 0-4
-      const penaltyPerProblem = 5;
-      const avgPointsPerProblem = 10;
+    // Create 16 teams (we expect ~48 participants, ~3 per team)
+    for (let i = 1; i <= 16; i++) {
+      // Each team attempts 5 problems in total. Randomize successful attempts
+      // between 0 and 5, then set unsuccessfulAttempts so the sum is 5.
+      const successfulAttempts = Math.floor(Math.random() * 6); // 0-5
+      const unsuccessfulAttempts = 5 - successfulAttempts;
+      // Use vjudge/ICPC-like scoring for realism in test data:
+      // - Each solved problem gives a fixed 100 points
+      // - Each wrong submission adds a 20-minute penalty (represented here as points deducted)
+      const pointsPerSolved = 100;
+      const penaltyPerWrong = 20; // minutes penalty translated to points deduction for estimation
 
-      const totalPenalty = unsuccessfulAttempts * penaltyPerProblem;
-      const totalPoints =
-        successfulAttempts * avgPointsPerProblem - totalPenalty;
+      const totalPenalty = unsuccessfulAttempts * penaltyPerWrong;
+      const totalPoints = successfulAttempts * pointsPerSolved - totalPenalty;
       const timeTakenPerProblem = Array.from(
         { length: 5 },
         () => Math.floor(Math.random() * (300 - 30 + 1)) + 30 // 30-300s per problem
@@ -126,7 +142,26 @@ async function initializeData() {
       participantIds.push(result.insertedId);
     }
 
-    // No dynamic rank computation; ranks are predetermined and set during creation
+    // Recompute team ranks based on totalPoints (descending) and totalPenalty (ascending)
+    // so rank 1 has highest totalPoints (tie-breaker: lower penalty).
+    try {
+      const allTeams = await Teams.getAll();
+      allTeams.sort((a, b) => {
+        if ((b.totalPoints || 0) !== (a.totalPoints || 0)) {
+          return (b.totalPoints || 0) - (a.totalPoints || 0);
+        }
+        return (a.totalPenalty || 0) - (b.totalPenalty || 0);
+      });
+
+      for (let idx = 0; idx < allTeams.length; idx++) {
+        const team = allTeams[idx];
+        if (!team._id) continue;
+        await Teams.update(team._id.toString(), { rank: idx + 1 });
+      }
+      console.log("Assigned team ranks based on totalPoints and totalPenalty");
+    } catch (err) {
+      console.warn("Failed to recompute team ranks:", err);
+    }
 
     // Rounds: one scheduled for each participant
     console.log("Creating rounds...");
@@ -179,11 +214,20 @@ async function initializeData() {
         `captain_${house.name.toLowerCase().replace(/\s+/g, "_")} / captain123`
       );
     });
-    process.exit(0);
+    return { success: true };
   } catch (err) {
     console.error("Error initializing test data:", err);
-    process.exit(1);
+    throw err;
   }
 }
 
-initializeData();
+// Export default for convenience
+export default initializeData;
+
+// When running the script directly (npm run seed), set RUN_SEED_SCRIPT=true
+// to allow the script to call process.exit for CLI usage.
+if (process.env.RUN_SEED_SCRIPT === "true") {
+  initializeData()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}
