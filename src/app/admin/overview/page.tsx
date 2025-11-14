@@ -7,6 +7,7 @@ import { Team } from "@/lib/models/teams";
 import { Round } from "@/lib/models/rounds";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
+import { FullPageSpinner } from "@/components/Spinner";
 
 interface WinnerData {
   teamName: string;
@@ -423,11 +424,7 @@ export default function OverviewPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen text-yellow-400 text-3xl">
-        Loading admin overview...
-      </div>
-    );
+    return <FullPageSpinner message="Loading admin overview..." />;
   }
 
   return (

@@ -221,7 +221,7 @@ export default function HousesPage() {
               style={{
                 backgroundImage: `url('${getHouseBackground(house.name)}')`,
                 backgroundSize: "cover",
-                backgroundPosition: "center",
+                backgroundPosition: "center 30%",
               }}
             >
               {/* Opacity overlay */}

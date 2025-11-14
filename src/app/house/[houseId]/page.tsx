@@ -291,6 +291,7 @@ export default function HouseDashboard() {
         backgroundImage: house
           ? `url('${getHouseBackground(house.name)}')`
           : "url('/arena-background.jpg')",
+        backgroundPosition: "center 30%",
       }}
     >
       {/* Enhanced dark overlay with neon glow */}

@@ -1,20 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Spinner } from "@/components/Spinner";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState("");
   const router = useRouter();
-
-  useEffect(() => {
-    const timer = setTimeout(() => setPageLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +29,7 @@ export default function LoginPage() {
         sessionStorage.setItem("role", data.role);
         if (data.houseId) sessionStorage.setItem("houseId", data.houseId);
 
-        if (data.role === "admin") router.push("/admin");
+        if (data.role === "admin") router.push("/admin/overview");
         else if (data.role === "house_captain")
           router.push(`/house/${data.houseId}`);
         else router.push("/");
@@ -49,13 +44,7 @@ export default function LoginPage() {
     }
   };
 
-  if (pageLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#0A0F2F]">
-        <p className="text-[#FFD700] text-xl">Loading...</p>
-      </div>
-    );
-  }
+
 
   return (
     <div
@@ -133,13 +122,20 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-2 px-4 rounded-md font-bold text-black shadow-lg transition-all ${
+            className={`w-full py-3 px-4 rounded-md font-bold text-black shadow-lg transition-all flex items-center justify-center ${
               loading
                 ? "bg-gray-500 cursor-not-allowed"
                 : "bg-gradient-to-r from-[#FFD700] to-[#FFB800] hover:from-[#FFB800] hover:to-[#FFD700] hover:shadow-[0_0_25px_rgba(255,215,0,0.6)] focus:outline-none focus:ring-2 focus:ring-[#FFD700] focus:ring-offset-2"
             }`}
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? (
+              <>
+                <Spinner size="sm" color="border-gray-800" className="mr-2" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </button>
         </form>
 
