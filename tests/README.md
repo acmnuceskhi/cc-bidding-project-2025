@@ -1,6 +1,14 @@
-Tests README — cc-bidding-project-2025
+# Tests README — cc-bidding-project-2025
 
-Purpose
+**Related Documentation:**
+
+- [Root README](../README.md) - Project overview
+- [ONBOARDING.md](../ONBOARDING.md) - Development setup
+- [API.md](../API.md) - API endpoints being tested
+
+---
+
+## Purpose
 
 - Document how to run the test suite for this repository and how the test environment is configured.
 
@@ -15,19 +23,19 @@ Quick run (Windows PowerShell)
 3. Run tests in watch mode during development:
    npm run test:watch
 
-What the tests do
+## What the tests do
 
-- Unit + integration style tests using Jest and ts-jest.
-- Tests use mongodb-memory-server in replica-set mode so MongoDB transactions are available.
-- Tests dynamically import application model modules so the in-memory MongoDB URI can be injected before modules open connections.
-- **67 tests across 13 test suites** covering models, API routes, integration flows, and edge cases.
-- All tests verified as **100% functional** and passing as of November 14, 2025.
+- Unit + integration tests using Jest and ts-jest
+- Tests use `mongodb-memory-server` in replica-set mode for MongoDB transactions
+- Tests dynamically import application models so in-memory MongoDB URI can be injected
+- Covers models, API routes, integration flows, and edge cases
+- All tests verified as passing (run `npm test` for current status)
 
-Environment
+## Environment
 
 - Node.js (v16+ recommended)
-- Windows PowerShell (commands above are for PowerShell; adjust for bash if needed)
-- No external MongoDB required — tests spin up an in-memory replica-set instance.
+- Windows PowerShell or Bash
+- No external MongoDB required — tests spin up an in-memory replica-set instance
 
 Key files
 
