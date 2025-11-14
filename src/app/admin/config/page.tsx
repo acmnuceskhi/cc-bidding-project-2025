@@ -17,12 +17,12 @@ export default function ConfigPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Form state
-  const [maxTeamsPerBatch, setMaxTeamsPerBatch] = useState(1);
-  const [roundDurationSeconds, setRoundDurationSeconds] = useState(120);
-  const [countdownWarningSeconds, setCountdownWarningSeconds] = useState(30);
+  // Form state - use strings for inputs to avoid parsing issues while typing
+  const [maxTeamsPerBatch, setMaxTeamsPerBatch] = useState("1");
+  const [roundDurationSeconds, setRoundDurationSeconds] = useState("120");
+  const [countdownWarningSeconds, setCountdownWarningSeconds] = useState("30");
   const [autoStartNextRound, setAutoStartNextRound] = useState(false);
-  const [delayBetweenRoundsSeconds, setDelayBetweenRoundsSeconds] = useState(5);
+  const [delayBetweenRoundsSeconds, setDelayBetweenRoundsSeconds] = useState("5");
 
   useEffect(() => {
     fetchConfig();
@@ -35,12 +35,12 @@ export default function ConfigPage() {
       const data = await res.json();
       setConfig(data);
       
-      // Update form state
-      setMaxTeamsPerBatch(data.maxTeamsPerBatch);
-      setRoundDurationSeconds(data.roundDurationSeconds);
-      setCountdownWarningSeconds(data.countdownWarningSeconds);
+      // Update form state - convert to strings
+      setMaxTeamsPerBatch(String(data.maxTeamsPerBatch));
+      setRoundDurationSeconds(String(data.roundDurationSeconds));
+      setCountdownWarningSeconds(String(data.countdownWarningSeconds));
       setAutoStartNextRound(data.autoStartNextRound);
-      setDelayBetweenRoundsSeconds(data.delayBetweenRoundsSeconds);
+      setDelayBetweenRoundsSeconds(String(data.delayBetweenRoundsSeconds));
     } catch (error) {
       console.error("Error fetching config:", error);
       setMessage("❌ Failed to load configuration");
@@ -58,11 +58,11 @@ export default function ConfigPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          maxTeamsPerBatch,
-          roundDurationSeconds,
-          countdownWarningSeconds,
+          maxTeamsPerBatch: parseInt(maxTeamsPerBatch),
+          roundDurationSeconds: parseInt(roundDurationSeconds),
+          countdownWarningSeconds: parseInt(countdownWarningSeconds),
           autoStartNextRound,
-          delayBetweenRoundsSeconds,
+          delayBetweenRoundsSeconds: parseInt(delayBetweenRoundsSeconds),
         }),
       });
 
@@ -71,7 +71,14 @@ export default function ConfigPage() {
 
       if (res.ok) {
         setMessage("✅ Configuration saved successfully!");
-        setConfig(data.config || data);
+        const newConfig = data.config || data;
+        setConfig(newConfig);
+        // Update form with saved values
+        setMaxTeamsPerBatch(String(newConfig.maxTeamsPerBatch));
+        setRoundDurationSeconds(String(newConfig.roundDurationSeconds));
+        setCountdownWarningSeconds(String(newConfig.countdownWarningSeconds));
+        setAutoStartNextRound(newConfig.autoStartNextRound);
+        setDelayBetweenRoundsSeconds(String(newConfig.delayBetweenRoundsSeconds));
         setTimeout(() => setMessage(""), 3000);
       } else {
         setMessage(`❌ Error: ${data.error || "Failed to save"}`);
@@ -125,11 +132,11 @@ export default function ConfigPage() {
               min="1"
               max="10"
               value={maxTeamsPerBatch}
-              onChange={(e) => setMaxTeamsPerBatch(parseInt(e.target.value))}
+              onChange={(e) => setMaxTeamsPerBatch(e.target.value)}
               className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
             />
             <p className="text-sm text-gray-400 mt-2">
-              Current: Each house can win up to {maxTeamsPerBatch} team(s) from each batch
+              Current: Each house can win up to {maxTeamsPerBatch || 1} team(s) from each batch
             </p>
             <p className="text-sm text-yellow-400 mt-2 font-semibold">
               ⚠️ Recommended: 1 (ensures each house gets exactly 1 team from each of the 4 batches = 4 teams total)
@@ -149,11 +156,11 @@ export default function ConfigPage() {
               min="30"
               max="600"
               value={roundDurationSeconds}
-              onChange={(e) => setRoundDurationSeconds(parseInt(e.target.value))}
+              onChange={(e) => setRoundDurationSeconds(e.target.value)}
               className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
             />
             <p className="text-sm text-gray-400 mt-2">
-              Current: {roundDurationSeconds} seconds ({Math.floor(roundDurationSeconds / 60)}:{(roundDurationSeconds % 60).toString().padStart(2, '0')} minutes)
+              Current: {roundDurationSeconds || 120} seconds ({Math.floor((parseInt(roundDurationSeconds) || 120) / 60)}:{((parseInt(roundDurationSeconds) || 120) % 60).toString().padStart(2, '0')} minutes)
             </p>
           </div>
 
@@ -170,11 +177,11 @@ export default function ConfigPage() {
               min="5"
               max="60"
               value={countdownWarningSeconds}
-              onChange={(e) => setCountdownWarningSeconds(parseInt(e.target.value))}
+              onChange={(e) => setCountdownWarningSeconds(e.target.value)}
               className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
             />
             <p className="text-sm text-gray-400 mt-2">
-              Timer turns red in the last {countdownWarningSeconds} seconds
+              Timer turns red in the last {countdownWarningSeconds || 30} seconds
             </p>
           </div>
 
@@ -210,11 +217,11 @@ export default function ConfigPage() {
                 min="0"
                 max="60"
                 value={delayBetweenRoundsSeconds}
-                onChange={(e) => setDelayBetweenRoundsSeconds(parseInt(e.target.value))}
+                onChange={(e) => setDelayBetweenRoundsSeconds(e.target.value)}
                 className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
               />
               <p className="text-sm text-gray-400 mt-2">
-                Wait {delayBetweenRoundsSeconds} seconds before starting next round
+                Wait {delayBetweenRoundsSeconds || 5} seconds before starting next round
               </p>
             </div>
           )}
