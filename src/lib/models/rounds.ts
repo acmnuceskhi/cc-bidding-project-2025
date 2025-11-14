@@ -6,6 +6,7 @@ export interface Round {
   _id?: ObjectId; // MongoDB document ID
   participantId: ObjectId; // ID of the participant up for bidding
   status: "scheduled" | "active" | "completed"; // Round status flag
+  passPhase?: 1 | 2; // Auction pass phase
   timerEnd?: Date | null; // Timestamp when round ends, optional to allow manual admin control
   scheduledStart?: Date | null; // Round scheduled start time
   finalized?: boolean; // To indicate participant sold or up for next pass
@@ -32,6 +33,9 @@ async function ensureIndexes() {
     // Compound index for status and timerEnd queries
     await collection.createIndex({ status: 1, timerEnd: 1 });
 
+    // Index on passPhase for phase analytics
+    await collection.createIndex({ passPhase: 1 });
+
     console.log("Rounds indexes created successfully");
   } catch (err) {
     console.error("Failed to create indexes on rounds:", err);
@@ -51,6 +55,11 @@ export const Rounds = {
     // Convert participantId if coming as string
     if (typeof round.participantId === "string") {
       round.participantId = new ObjectId(round.participantId);
+    }
+
+    // Default passPhase to 1 when not provided
+    if (!round.passPhase) {
+      round.passPhase = 1;
     }
 
     // Ensure timerEnd and scheduledStart are real Date object

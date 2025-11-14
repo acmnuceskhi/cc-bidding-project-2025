@@ -177,6 +177,7 @@ export async function initializeData() {
       await Rounds.create({
         participantId: participantIds[i],
         status: "scheduled",
+        passPhase: 1,
         scheduledStart,
         timerEnd,
       });

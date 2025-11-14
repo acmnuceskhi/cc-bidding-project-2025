@@ -3,6 +3,7 @@ import { verifyAuth } from "@/lib/auth";
 import { Houses } from "@/lib/models/houses";
 import { Participants } from "@/lib/models/participants";
 import { ObjectId } from "mongodb";
+import { getBatchGroup } from "@/lib/utils";
 
 /**
  * GET /api/houses/[id]/canPlaceBid?participantId=<participantId>
@@ -60,21 +61,15 @@ export async function GET(
       );
     }
 
-    // Extract batch year (e.g., "23" from "23C-1234")
-    const batchYearPrefix = participant.rollNumber.slice(0, 2);
-
-    // Get all participants already recruited by this house
+    // Determine batch group for the participant and count house members in that group
+    const participantGroup = getBatchGroup(participant.rollNumber);
     const houseMembers = await Participants.getByHouse(id);
-
-    // Count how many of them share the same batch year prefix
-    const sameBatchCount = houseMembers.filter(
-      (member) => member.rollNumber?.startsWith(batchYearPrefix)
-    ).length;
+    const sameBatchCount = houseMembers.filter((member) => getBatchGroup(member.rollNumber) === participantGroup).length;
 
     if (sameBatchCount >= 3) {
       return NextResponse.json({
         canBid: false,
-        message: `House '${house.name}' already has 3 participants from batch '${batchYearPrefix}'.`,
+        message: `House '${house.name}' already has 3 participants from batch group '${participantGroup}'.`,
       });
     }
 

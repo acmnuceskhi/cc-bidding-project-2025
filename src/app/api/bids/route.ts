@@ -3,6 +3,7 @@ import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
 import { Participants } from "@/lib/models/participants"; 
+import { getBatchGroup } from "@/lib/utils";
 import { verifyAuth } from "@/lib/auth";
 
 // POST /api/bids - Place a bid
@@ -146,8 +147,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🎓 Extract the batch year (first 2 digits of rollNumber)
-    const batchPrefix = participant.rollNumber.slice(0, 2);
+    // 🎓 Determine batch group (25, 24, 23, or senior for all others)
+    const participantGroup = getBatchGroup(participant.rollNumber);
 
     // If amount === 0, interpret as an explicit "skip" (captain not interested).
     // Do NOT create/update a bid document, and do NOT enforce batch limits.
@@ -162,9 +163,32 @@ export async function POST(request: NextRequest) {
     // 👥 Get all participants already assigned to this house (only relevant for real bids)
     const houseMembers = await Participants.getByHouse(houseId);
 
-    // Count how many have the same batch prefix
+    // 🏷️ In second pass, only houses below minimum roster may bid
+    const passPhase = round.passPhase ?? 1;
+    if (passPhase === 2) {
+      const counts: Record<string, number> = { "25": 0, "24": 0, "23": 0, senior: 0 };
+      for (const m of houseMembers) {
+        const grp = getBatchGroup(m.rollNumber);
+        if (grp === "25" || grp === "24" || grp === "23") counts[grp]++;
+        else counts.senior++;
+      }
+      const hasMinimumRoster =
+        counts["25"] >= 3 && counts["24"] >= 3 && counts["23"] >= 3 && counts.senior >= 3;
+      if (hasMinimumRoster) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "PASS2_NOT_ELIGIBLE",
+            message: `House '${house.name}' already meets minimum roster (3 per batch, total 12). Bidding in pass 2 is not allowed.`,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Count how many existing members are in the same batch group
     const sameBatchCount = houseMembers.filter(
-      (p) => p.rollNumber?.startsWith(batchPrefix)
+      (p) => getBatchGroup(p.rollNumber) === participantGroup
     ).length;
 
     // ❌ Enforce the 3-per-batch limit for actual bids
@@ -173,7 +197,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: "BATCH_LIMIT_REACHED",
-          message: `House '${house.name}' already has 3 members from batch '${batchPrefix}'.`,
+          message: `House '${house.name}' already has 3 members from batch group '${participantGroup}'.`,
         },
         { status: 403 }
       );

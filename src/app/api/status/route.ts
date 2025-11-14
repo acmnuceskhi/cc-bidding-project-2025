@@ -9,6 +9,23 @@ export async function GET() {
     // Get the currently active round (assuming only one active round at a time)
     const activeRounds = await Rounds.getActive();
 
+    // Always compute phase counts and unsold participants for dashboard context
+    const [allRoundsForCounts, unsoldParticipants] = await Promise.all([
+      Rounds.getAll(),
+      Participants.getAll().then((list) => list.filter((p) => !(p as any).houseId)),
+    ]);
+
+    const phaseCounts = { pass1: { total: 0, scheduled: 0, active: 0, completed: 0 }, pass2: { total: 0, scheduled: 0, active: 0, completed: 0 } } as const;
+    const counts: any = { pass1: { total: 0, scheduled: 0, active: 0, completed: 0 }, pass2: { total: 0, scheduled: 0, active: 0, completed: 0 } };
+
+    for (const r of allRoundsForCounts) {
+      const phaseKey = (r.passPhase === 2 ? "pass2" : "pass1") as "pass1" | "pass2";
+      counts[phaseKey].total += 1;
+      if (r.status === "scheduled") counts[phaseKey].scheduled += 1;
+      else if (r.status === "active") counts[phaseKey].active += 1;
+      else if (r.status === "completed") counts[phaseKey].completed += 1;
+    }
+
     if (activeRounds.length === 0) {
       return NextResponse.json({
         roundId: null,
@@ -17,6 +34,12 @@ export async function GET() {
         timerRemaining: 0,
         bidsPlaced: [],
         serverTime: Date.now(),
+        phaseCounts: counts,
+        unsoldParticipants: unsoldParticipants.map((p) => ({
+          participantId: p._id?.toString(),
+          name: p.name,
+          picture: (p as any).picture ?? null,
+        })),
       });
     }
 
@@ -231,6 +254,12 @@ export async function GET() {
       timerEnd: activeRound.timerEnd?.toISOString(), // Add actual end time
       bidsPlaced,
       serverTime: Date.now(),
+      phaseCounts: counts,
+      unsoldParticipants: unsoldParticipants.map((p) => ({
+        participantId: p._id?.toString(),
+        name: p.name,
+        picture: (p as any).picture ?? null,
+      })),
     });
   } catch (error) {
     console.error("Error fetching status:", error);

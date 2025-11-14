@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Rounds } from "@/lib/models/rounds";
+import { Rounds, type Round } from "@/lib/models/rounds";
 import { Participants } from "@/lib/models/participants"
 import clientPromise from "@/lib/mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
@@ -41,12 +41,17 @@ export async function POST(
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
-    // Only allow restarting rounds that have completed (including skipped rounds)
+    // Idempotency: if round is not completed, treat as a no-op success
     if (round.status !== "completed") {
-      return NextResponse.json(
-        { error: "Round must be completed to restart" },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: true,
+        canRestart: false,
+        round,
+        refundedCount: 0,
+        totalRefundAmount: 0,
+        bidsCleared: 0,
+        message: "Round is not completed; no restart needed",
+      });
     }
 
     // Determine winning bid refund eligibility (escrow only deducted winner)
@@ -97,19 +102,31 @@ export async function POST(
           ? participantDoc.houseId.toString()
           : undefined;
 
+        // Read current round state for pass phase logic
+        const roundBefore = await db
+          .collection<Round>("rounds")
+          .findOne({ _id: new ObjectId(id) }, { session });
+
         // Atomically flip the round.finalized flag from true -> false and
         // use the previous value to determine if a refund is necessary.
-        const prevRound = await db.collection("rounds").findOneAndUpdate(
+        const prevRoundRaw: unknown = await db.collection<Round>("rounds").findOneAndUpdate(
           { _id: new ObjectId(id), finalized: true },
           { $set: { finalized: false } },
           { session, returnDocument: ReturnDocument.BEFORE }
         );
 
-        // `findOneAndUpdate` may return different shapes depending on driver version
-        // Normalize to the previous document if present.
-        const prevRoundDoc = prevRound
-          ? (prevRound as unknown as { value?: unknown }).value ?? prevRound
-          : null;
+        // Helper to detect { value: T | null } shapes from driver variations
+        function hasValue<T>(x: unknown): x is { value: T | null } {
+          return typeof x === "object" && x !== null && "value" in x;
+        }
+
+        // Normalize previous document shape
+        let prevRoundDoc: Round | null = null;
+        if (hasValue<Round>(prevRoundRaw)) {
+          prevRoundDoc = prevRoundRaw.value ?? null;
+        } else if (typeof prevRoundRaw === "object" && prevRoundRaw !== null) {
+          prevRoundDoc = prevRoundRaw as Round;
+        }
 
         if (prevRoundDoc && currentWinningHouseId) {
           // If the round was finalized we refund the winning bid (if present).
@@ -149,6 +166,11 @@ export async function POST(
         }
 
         // Reset the round's state so it's ready for restart (clear skipped flag for fresh start)
+        let nextPassPhase: 1 | 2 = (roundBefore?.passPhase ?? 1) as 1 | 2;
+        if ((roundBefore?.finalized !== true) && nextPassPhase === 1) {
+          // Move unsold/no-bid rounds from pass 1 to pass 2 on restart
+          nextPassPhase = 2;
+        }
         await db.collection("rounds").updateOne(
           { _id: new ObjectId(id) },
           {
@@ -157,6 +179,7 @@ export async function POST(
               timerEnd: null,
               finalized: false,
               scheduledStart: null,
+              passPhase: nextPassPhase,
             },
             $unset: { winningBid: "", skipped: "" },
           },
