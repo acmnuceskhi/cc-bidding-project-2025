@@ -37,6 +37,15 @@ export default function HousesPage() {
   const [housePlayers, setHousePlayers] = useState<
     Record<string, filteredParticipant[]>
   >({});
+  const [hasActiveRound, setHasActiveRound] = useState(false);
+  const [editingHouse, setEditingHouse] = useState<string | null>(null);
+  const [budgetInput, setBudgetInput] = useState<{
+    totalBudget?: string;
+    adjustBy?: string;
+  }>({});
+  const [editMode, setEditMode] = useState<"total" | "adjust">("total");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -58,6 +67,13 @@ export default function HousesPage() {
         });
         const housesData: House[] = await housesResponse.json();
         setHouses(housesData);
+
+        // Check for active rounds
+        const statusResponse = await fetchWithAuth("/api/status", {
+          method: "GET",
+        });
+        const statusData = await statusResponse.json();
+        setHasActiveRound(statusData.roundStatus === "active");
 
         // Fetch participants
         const participantsResponse = await fetchWithAuth("/api/participants", {
@@ -122,6 +138,60 @@ export default function HousesPage() {
     fetchData();
   }, []);
 
+  const handleEditBudget = async (houseId: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const body: { totalBudget?: number; adjustRemainingBy?: number } = {};
+
+      if (editMode === "total") {
+        const total = parseFloat(budgetInput.totalBudget || "0");
+        if (isNaN(total) || total < 0) {
+          setError("Please enter a valid positive number for total budget");
+          setLoading(false);
+          return;
+        }
+        body.totalBudget = total;
+      } else {
+        const adjust = parseFloat(budgetInput.adjustBy || "0");
+        if (isNaN(adjust)) {
+          setError("Please enter a valid number for adjustment");
+          setLoading(false);
+          return;
+        }
+        body.adjustRemainingBy = adjust;
+      }
+
+      const response = await fetchWithAuth(`/api/houses/${houseId}/budget`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update budget");
+      }
+
+      // Refresh houses data
+      const housesResponse = await fetchWithAuth("/api/houses", {
+        method: "GET",
+      });
+      const housesData: House[] = await housesResponse.json();
+      setHouses(housesData);
+
+      // Close modal
+      setEditingHouse(null);
+      setBudgetInput({});
+      setEditMode("total");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update budget");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 sm:space-y-8 pb-8">
       <div className="text-center mb-8">
@@ -180,6 +250,17 @@ export default function HousesPage() {
                         style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
+                    <button
+                      onClick={() => {
+                        setEditingHouse(house.houseId?.toString() || "");
+                        setBudgetInput({});
+                        setEditMode("total");
+                        setError(null);
+                      }}
+                      className="mt-4 px-4 py-2 bg-[#FFD700] text-black font-semibold rounded-lg hover:bg-[#FFC700] transition-all shadow-[0_0_15px_rgba(255,215,0,0.5)]"
+                    >
+                      Edit Budget
+                    </button>
                   </div>
                 </div>
 
@@ -235,6 +316,121 @@ export default function HousesPage() {
           );
         })}
       </div>
+
+      {/* Budget Edit Modal */}
+      {editingHouse && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700] shadow-[0_0_50px_rgba(255,215,0,0.5)] max-w-md w-full">
+            <h2 className="text-2xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_15px_#FFD700]">
+              Edit Budget
+            </h2>
+
+            {hasActiveRound ? (
+              <div className="bg-red-900/30 border border-red-500 rounded-lg p-4 mb-4">
+                <p className="text-red-300 font-semibold">
+                  ⚠️ Cannot modify budget during an active round
+                </p>
+                <p className="text-red-400 text-sm mt-1">
+                  Please wait until the current auction round is complete.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4">
+                  <label className="block text-white mb-2 font-semibold">
+                    Edit Mode
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={editMode === "total"}
+                        onChange={() => setEditMode("total")}
+                        className="accent-[#FFD700]"
+                      />
+                      <span className="text-gray-300">
+                        Set Total Budget (preserves spent amount)
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        checked={editMode === "adjust"}
+                        onChange={() => setEditMode("adjust")}
+                        className="accent-[#FFD700]"
+                      />
+                      <span className="text-gray-300">
+                        Adjust Remaining Budget Only (total unchanged)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {editMode === "total" ? (
+                  <div className="mb-4">
+                    <label className="block text-white mb-2 font-semibold">
+                      New Total Budget
+                    </label>
+                    <input
+                      type="number"
+                      value={budgetInput.totalBudget || ""}
+                      onChange={(e) =>
+                        setBudgetInput({ ...budgetInput, totalBudget: e.target.value })
+                      }
+                      placeholder="Enter total budget"
+                      className="w-full px-4 py-2 bg-black/60 border border-[#FFD700]/50 rounded-lg text-white focus:outline-none focus:border-[#FFD700]"
+                      min="0"
+                    />
+                  </div>
+                ) : (
+                  <div className="mb-4">
+                    <label className="block text-white mb-2 font-semibold">
+                      Adjust By (use negative to subtract)
+                    </label>
+                    <input
+                      type="number"
+                      value={budgetInput.adjustBy || ""}
+                      onChange={(e) =>
+                        setBudgetInput({ ...budgetInput, adjustBy: e.target.value })
+                      }
+                      placeholder="e.g., 100 or -50"
+                      className="w-full px-4 py-2 bg-black/60 border border-[#FFD700]/50 rounded-lg text-white focus:outline-none focus:border-[#FFD700]"
+                    />
+                  </div>
+                )}
+
+                {error && (
+                  <div className="bg-red-900/30 border border-red-500 rounded-lg p-3 mb-4">
+                    <p className="text-red-300 text-sm">{error}</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setEditingHouse(null);
+                  setBudgetInput({});
+                  setError(null);
+                }}
+                className="flex-1 px-4 py-2 bg-gray-700 text-white font-semibold rounded-lg hover:bg-gray-600 transition-all"
+              >
+                Cancel
+              </button>
+              {!hasActiveRound && (
+                <button
+                  onClick={() => handleEditBudget(editingHouse)}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-[#FFD700] text-black font-semibold rounded-lg hover:bg-[#FFC700] transition-all shadow-[0_0_15px_rgba(255,215,0,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? "Saving..." : "Save"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
