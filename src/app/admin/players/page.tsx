@@ -42,7 +42,7 @@ export default function PlayersPage() {
   // Function to get house background image
   const getHouseBackground = (houseName?: string) => {
     if (!houseName) return "/temple-out.jpg";
-    
+
     const houseMap: Record<string, string> = {
       "Lord Shen": "/lord-shen.jpg",
       "Dragon Warrior": "/dragon-warrior.jpg",
@@ -138,7 +138,9 @@ export default function PlayersPage() {
   return (
     <div className="space-y-8">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">🥋 All Warriors</h1>
+        <h1 className="text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">
+          🥋 All Warriors
+        </h1>
         <p className="text-gray-300">Complete roster of participants</p>
       </div>
 
@@ -188,9 +190,10 @@ export default function PlayersPage() {
       {/* Players Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {sortedPlayers.map((player, index) => {
-          const backgroundImage = player.status === "sold" && player.soldToHouseName
-            ? getHouseBackground(player.soldToHouseName)
-            : "/temple-out.jpg";
+          const backgroundImage =
+            player.status === "sold" && player.soldToHouseName
+              ? getHouseBackground(player.soldToHouseName)
+              : "/temple-out.jpg";
 
           return (
             <div
@@ -198,16 +201,18 @@ export default function PlayersPage() {
               className="relative rounded-xl p-6 border-2 shadow-lg transform hover:scale-105 transition-all overflow-hidden"
               style={{
                 backgroundImage: `url('${backgroundImage}')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
+                backgroundSize: "cover",
+                backgroundPosition: "center",
               }}
             >
               {/* Opacity overlay */}
-              <div className={`absolute inset-0 ${
-                player.status === "available"
-                  ? "bg-gray-900/80 backdrop-blur-[2px]"
-                  : "bg-black/70 backdrop-blur-[2px]"
-              }`}></div>
+              <div
+                className={`absolute inset-0 ${
+                  player.status === "available"
+                    ? "bg-gray-900/80 backdrop-blur-[2px]"
+                    : "bg-black/70 backdrop-blur-[2px]"
+                }`}
+              ></div>
 
               {/* Neon border for sold players */}
               {player.status === "sold" && (
@@ -228,7 +233,9 @@ export default function PlayersPage() {
                     />
                   )}
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-white drop-shadow-[0_0_10px_#000000]">{player.name}</h3>
+                    <h3 className="text-xl font-bold text-white drop-shadow-[0_0_10px_#000000]">
+                      {player.name}
+                    </h3>
                     {player.roundNumber && (
                       <p className="text-sm text-gray-300">
                         Round {player.roundNumber}

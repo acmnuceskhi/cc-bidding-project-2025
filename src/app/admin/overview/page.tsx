@@ -135,15 +135,20 @@ export default function OverviewPage() {
 
           // Fetch current bids for this round
           try {
-            const bidsRes = await fetchWithAuth(`/api/bids?roundId=${statusData.roundId}`, {
-              cache: "no-store",
-            });
+            const bidsRes = await fetchWithAuth(
+              `/api/bids?roundId=${statusData.roundId}`,
+              {
+                cache: "no-store",
+              }
+            );
             const bidsData = await bidsRes.json();
-            
+
             if (Array.isArray(bidsData)) {
               // Enrich bids with house names
               const enrichedBids = bidsData.map((bid: any) => {
-                const house = housesData.find((h: any) => h.houseId === bid.houseId);
+                const house = housesData.find(
+                  (h: any) => h.houseId === bid.houseId
+                );
                 return {
                   ...bid,
                   houseName: house?.name || "Unknown House",
@@ -355,20 +360,27 @@ export default function OverviewPage() {
     }
   };
 
-  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  
+  const delay = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
   const handleReStartRound = async () => {
     if (!activeRound?._id) return;
-    const res = await fetchWithAuth(`/api/rounds/${activeRound._id.toString()}/restart`, { method: "POST" });
+    const res = await fetchWithAuth(
+      `/api/rounds/${activeRound._id.toString()}/restart`,
+      { method: "POST" }
+    );
     const response = await res.json();
     if (response.canRestart === true) {
-      await delay(5000)
+      await delay(5000);
       if (isStartingRound) return;
       setIsStartingRound(true);
       try {
-        const response = await fetchWithAuth(`/api/rounds/${activeRound._id.toString()}/start`, {
-          method: "POST",
-        });
+        const response = await fetchWithAuth(
+          `/api/rounds/${activeRound._id.toString()}/start`,
+          {
+            method: "POST",
+          }
+        );
         const result = await response.json();
         if (!response.ok) {
           setIsStartingRound(false);
@@ -480,9 +492,11 @@ export default function OverviewPage() {
                           <div className="text-lg font-bold text-white mb-2">
                             {bid.houseName}
                           </div>
-                          <div className={`text-3xl font-bold ${
-                            index === 0 ? "text-green-400" : "text-[#FFD700]"
-                          } drop-shadow-[0_0_10px_currentColor]`}>
+                          <div
+                            className={`text-3xl font-bold ${
+                              index === 0 ? "text-green-400" : "text-[#FFD700]"
+                            } drop-shadow-[0_0_10px_currentColor]`}
+                          >
                             ${bid.amount}
                           </div>
                           {index === 0 && (
@@ -506,10 +520,13 @@ export default function OverviewPage() {
 
       {/* House Treasuries with Backgrounds */}
       <div className="bg-black/40 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
-        <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">🏯 House Treasuries</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
+          🏯 House Treasuries
+        </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {houses.map((house, index) => {
-            const percentage = (house.remainingBudget / house.totalBudget) * 100;
+            const percentage =
+              (house.remainingBudget / house.totalBudget) * 100;
 
             return (
               <div
@@ -517,27 +534,35 @@ export default function OverviewPage() {
                 className="relative rounded-xl p-6 border-2 border-[#FFD700]/50 shadow-[0_0_25px_rgba(255,215,0,0.3)] transform hover:scale-105 transition-all overflow-hidden"
                 style={{
                   backgroundImage: `url('${getHouseBackground(house.name)}')`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
                 }}
               >
                 {/* Opacity overlay */}
                 <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"></div>
-                
+
                 {/* Content */}
                 <div className="relative z-10">
-                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 text-center drop-shadow-[0_0_15px_#000000]">{house.name}</h3>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 text-center drop-shadow-[0_0_15px_#000000]">
+                    {house.name}
+                  </h3>
                   <div className="text-center mb-4">
-                    <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">${house.remainingBudget}</div>
-                    <div className="text-sm text-gray-200">of ${house.totalBudget}</div>
+                    <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
+                      ${house.remainingBudget}
+                    </div>
+                    <div className="text-sm text-gray-200">
+                      of ${house.totalBudget}
+                    </div>
                   </div>
                   <div className="w-full bg-black/60 rounded-full h-4 overflow-hidden border border-[#FFD700]/30">
-                    <div 
-                      className="bg-[#FFD700] h-full rounded-full transition-all shadow-[0_0_10px_#FFD700]" 
+                    <div
+                      className="bg-[#FFD700] h-full rounded-full transition-all shadow-[0_0_10px_#FFD700]"
                       style={{ width: `${percentage}%` }}
                     ></div>
                   </div>
-                  <div className="text-center mt-2 text-sm text-gray-200">{percentage.toFixed(0)}% remaining</div>
+                  <div className="text-center mt-2 text-sm text-gray-200">
+                    {percentage.toFixed(0)}% remaining
+                  </div>
                 </div>
               </div>
             );
@@ -582,7 +607,7 @@ export default function OverviewPage() {
           <div className="bg-gradient-to-br from-black via-gray-900 to-black rounded-3xl p-8 sm:p-12 border-4 border-[#FFD700] shadow-[0_0_60px_rgba(255,215,0,0.6)] max-w-4xl w-full mx-4 relative overflow-hidden">
             {/* Neon grid overlay */}
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70008_1px,transparent_1px),linear-gradient(to_bottom,#FFD70008_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-30"></div>
-            
+
             <div className="relative z-10 text-center">
               <h1 className="text-5xl sm:text-7xl font-bold text-[#FFD700] mb-8 drop-shadow-[0_0_30px_#FFD700] animate-pulse">
                 🏆 SOLD! 🏆
@@ -599,7 +624,9 @@ export default function OverviewPage() {
                 <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4 drop-shadow-[0_0_20px_#FFFFFF]">
                   {winnerData.participantName}
                 </h2>
-                <p className="text-2xl sm:text-3xl text-gray-300">has been won by</p>
+                <p className="text-2xl sm:text-3xl text-gray-300">
+                  has been won by
+                </p>
               </div>
 
               <div className="bg-gradient-to-r from-green-900/80 to-emerald-900/80 rounded-2xl p-8 border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.4)]">

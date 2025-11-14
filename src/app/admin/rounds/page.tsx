@@ -59,7 +59,7 @@ export default function RoundsPage() {
   // Function to get house background image
   const getHouseBackground = (houseName?: string) => {
     if (!houseName) return "/temple-out.jpg";
-    
+
     const houseMap: Record<string, string> = {
       "Lord Shen": "/lord-shen.jpg",
       "Dragon Warrior": "/dragon-warrior.jpg",
@@ -192,7 +192,9 @@ export default function RoundsPage() {
   };
 
   const handleReStartRound = async (roundId: string) => {
-    const res = await fetchWithAuth(`/api/rounds/${roundId}/restart`, { method: "POST" });
+    const res = await fetchWithAuth(`/api/rounds/${roundId}/restart`, {
+      method: "POST",
+    });
     const response = await res.json();
     if (response.canRestart === true) {
       await fetchWithAuth(`/api/rounds/${roundId}/start`, { method: "POST" });
@@ -234,19 +236,26 @@ export default function RoundsPage() {
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">⏱️ Bidding Rounds</h1>
+        <h1 className="text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">
+          ⏱️ Bidding Rounds
+        </h1>
         <p className="text-gray-300">Complete history of all auction rounds</p>
       </div>
 
-      {loading && <div className="text-center text-[#FFD700] text-lg animate-pulse">Loading...</div>}
+      {loading && (
+        <div className="text-center text-[#FFD700] text-lg animate-pulse">
+          Loading...
+        </div>
+      )}
 
       <div className="space-y-4">
         {rounds.map((round, index) => {
-          const backgroundImage = round.status === "completed" && round.winnerHouse
-            ? getHouseBackground(round.winnerHouse)
-            : round.status === "active"
-            ? "/arena-background.jpg"
-            : "/temple-out.jpg";
+          const backgroundImage =
+            round.status === "completed" && round.winnerHouse
+              ? getHouseBackground(round.winnerHouse)
+              : round.status === "active"
+                ? "/arena-background.jpg"
+                : "/temple-out.jpg";
 
           return (
             <div
@@ -254,18 +263,20 @@ export default function RoundsPage() {
               className="relative rounded-xl p-6 border-2 shadow-lg transition-all overflow-hidden"
               style={{
                 backgroundImage: `url('${backgroundImage}')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
+                backgroundSize: "cover",
+                backgroundPosition: "center",
               }}
             >
               {/* Opacity overlay */}
-              <div className={`absolute inset-0 ${
-                round.status === "active"
-                  ? "bg-yellow-900/70 backdrop-blur-sm"
-                  : round.status === "completed"
-                  ? "bg-black/70 backdrop-blur-xs"
-                  : "bg-gray-900/80 backdrop-blur-sm"
-              }`}></div>
+              <div
+                className={`absolute inset-0 ${
+                  round.status === "active"
+                    ? "bg-yellow-900/70 backdrop-blur-sm"
+                    : round.status === "completed"
+                      ? "bg-black/70 backdrop-blur-xs"
+                      : "bg-gray-900/80 backdrop-blur-sm"
+                }`}
+              ></div>
 
               {/* Neon border effect for active */}
               {round.status === "active" && (
@@ -276,7 +287,9 @@ export default function RoundsPage() {
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-6">
                   <div className="text-center">
-                    <div className="text-5xl font-bold text-[#FFD700] mb-1 drop-shadow-[0_0_20px_#FFD700]">{round.roundNumber}</div>
+                    <div className="text-5xl font-bold text-[#FFD700] mb-1 drop-shadow-[0_0_20px_#FFD700]">
+                      {round.roundNumber}
+                    </div>
                     <span
                       className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${getStatusBadge(
                         round.status
@@ -295,18 +308,29 @@ export default function RoundsPage() {
                   )}
 
                   <div>
-                    <h3 className="text-2xl font-bold text-white mb-1 drop-shadow-[0_0_10px_#000000]">{round.participantName}</h3>
+                    <h3 className="text-2xl font-bold text-white mb-1 drop-shadow-[0_0_10px_#000000]">
+                      {round.participantName}
+                    </h3>
                     {round.status === "completed" && round.winnerHouse && (
                       <p className="text-lg text-gray-200">
                         Sold to{" "}
-                        <span className="text-[#FFD700] font-bold drop-shadow-[0_0_10px_#FFD700]">{round.winnerHouse}</span> for{" "}
-                        <span className="text-green-400 font-bold text-2xl drop-shadow-[0_0_10px_#22C55E]">${round.winningBid}</span>
+                        <span className="text-[#FFD700] font-bold drop-shadow-[0_0_10px_#FFD700]">
+                          {round.winnerHouse}
+                        </span>{" "}
+                        for{" "}
+                        <span className="text-green-400 font-bold text-2xl drop-shadow-[0_0_10px_#22C55E]">
+                          ${round.winningBid}
+                        </span>
                       </p>
                     )}
                     {round.status === "active" && (
-                      <p className="text-[#FFD700] font-semibold animate-pulse drop-shadow-[0_0_10px_#FFD700]">Bidding in progress...</p>
+                      <p className="text-[#FFD700] font-semibold animate-pulse drop-shadow-[0_0_10px_#FFD700]">
+                        Bidding in progress...
+                      </p>
                     )}
-                    {round.status === "not_started" && <p className="text-gray-400">Awaiting start</p>}
+                    {round.status === "not_started" && (
+                      <p className="text-gray-400">Awaiting start</p>
+                    )}
                   </div>
                 </div>
 
@@ -365,27 +389,41 @@ export default function RoundsPage() {
             </h2>
             <div className="space-y-4 text-lg">
               <p>
-                <strong className="text-[#FFD700]">Participant:</strong> <span className="text-white">{selectedRound.participantName}</span>
+                <strong className="text-[#FFD700]">Participant:</strong>{" "}
+                <span className="text-white">
+                  {selectedRound.participantName}
+                </span>
               </p>
               {selectedRound.winnerHouse && (
                 <p>
-                  <strong className="text-[#FFD700]">Winner House:</strong> <span className="text-white">{selectedRound.winnerHouse}</span>
+                  <strong className="text-[#FFD700]">Winner House:</strong>{" "}
+                  <span className="text-white">
+                    {selectedRound.winnerHouse}
+                  </span>
                 </p>
               )}
               {selectedRound.winningBid !== undefined ? (
                 <p>
-                  <strong className="text-[#FFD700]">Winning Bid:</strong> <span className="text-green-400 font-bold text-2xl drop-shadow-[0_0_10px_#22C55E]">${selectedRound.winningBid}</span>
+                  <strong className="text-[#FFD700]">Winning Bid:</strong>{" "}
+                  <span className="text-green-400 font-bold text-2xl drop-shadow-[0_0_10px_#22C55E]">
+                    ${selectedRound.winningBid}
+                  </span>
                 </p>
               ) : selectedRound.status === "completed" ? (
                 <p className="text-gray-400">No bids placed</p>
               ) : null}
               <p>
-                <strong className="text-[#FFD700]">Status:</strong> <span className="text-white">{getStatusText(selectedRound.status)}</span>
+                <strong className="text-[#FFD700]">Status:</strong>{" "}
+                <span className="text-white">
+                  {getStatusText(selectedRound.status)}
+                </span>
               </p>
               {selectedRound.timerEnd && (
                 <p>
                   <strong className="text-[#FFD700]">Timer End:</strong>{" "}
-                  <span className="text-white">{selectedRound.timerEnd.toLocaleString()}</span>
+                  <span className="text-white">
+                    {selectedRound.timerEnd.toLocaleString()}
+                  </span>
                 </p>
               )}
             </div>

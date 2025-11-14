@@ -9,21 +9,43 @@ describe("Authorization & Role-Based Access", () => {
   async function createAdmin() {
     const { Users } = await import("@/lib/models/users");
     const unique = `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const res = await Users.create({ username: unique, password: "hashed", role: "admin" });
-    return generateToken({ userId: res.insertedId.toString(), username: unique, role: "admin" });
+    const res = await Users.create({
+      username: unique,
+      password: "hashed",
+      role: "admin",
+    });
+    return generateToken({
+      userId: res.insertedId.toString(),
+      username: unique,
+      role: "admin",
+    });
   }
 
   async function createCaptain(houseId: string) {
     const { Users } = await import("@/lib/models/users");
     const { ObjectId } = await import("mongodb");
     const unique = `captain-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const res = await Users.create({ username: unique, password: "hashed", role: "house_captain", houseId: new ObjectId(houseId) });
-    return generateToken({ userId: res.insertedId.toString(), username: unique, role: "house_captain", houseId });
+    const res = await Users.create({
+      username: unique,
+      password: "hashed",
+      role: "house_captain",
+      houseId: new ObjectId(houseId),
+    });
+    return generateToken({
+      userId: res.insertedId.toString(),
+      username: unique,
+      role: "house_captain",
+      houseId,
+    });
   }
 
   async function createHouse() {
     const { Houses } = await import("@/lib/models/houses");
-    const res = await Houses.create({ name: `House-${Date.now()}`, totalBudget: 500, remainingBudget: 500 });
+    const res = await Houses.create({
+      name: `House-${Date.now()}`,
+      totalBudget: 500,
+      remainingBudget: 500,
+    });
     return res.insertedId.toString();
   }
 
@@ -33,9 +55,21 @@ describe("Authorization & Role-Based Access", () => {
     const { Rounds } = await import("@/lib/models/rounds");
     const { ObjectId } = await import("mongodb");
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Test", rollNumber: `25${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "active", timerEnd: new Date(Date.now() + 10000), finalized: false });
-    return { participantId: p.insertedId.toString(), roundId: r.insertedId.toString() };
+    const p = await Participants.create({
+      name: "Test",
+      rollNumber: `25${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() + 10000),
+      finalized: false,
+    });
+    return {
+      participantId: p.insertedId.toString(),
+      roundId: r.insertedId.toString(),
+    };
   }
 
   it("unauthorized request returns 401", async () => {
@@ -59,7 +93,10 @@ describe("Authorization & Role-Based Access", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${captain}` }),
     });
-    const res = await POST(req as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: roundId }) });
+    const res = await POST(
+      req as unknown as import("next/server").NextRequest,
+      { params: Promise.resolve({ id: roundId }) }
+    );
     expect(res.status).toBe(403);
   });
 
@@ -73,7 +110,10 @@ describe("Authorization & Role-Based Access", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${captain}` }),
     });
-    const res = await POST(req as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: roundId }) });
+    const res = await POST(
+      req as unknown as import("next/server").NextRequest,
+      { params: Promise.resolve({ id: roundId }) }
+    );
     expect(res.status).toBe(403);
   });
 
@@ -84,7 +124,10 @@ describe("Authorization & Role-Based Access", () => {
     const { POST } = await import("@/app/api/bids/route");
     const req = new Request("http://localhost/api/bids", {
       method: "POST",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${admin}` }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${admin}`,
+      }),
       body: JSON.stringify({ roundId, amount: 100, previousAmount: null }),
     });
     const res = await POST(req as unknown as import("next/server").NextRequest);
@@ -103,7 +146,10 @@ describe("Authorization & Role-Based Access", () => {
     const { POST: BidPOST } = await import("@/app/api/bids/route");
     const bidReq = new Request("http://localhost/api/bids", {
       method: "POST",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${captain}` }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${captain}`,
+      }),
       body: JSON.stringify({ roundId, amount: 100, previousAmount: null }),
     });
     await BidPOST(bidReq as unknown as import("next/server").NextRequest);
@@ -113,16 +159,27 @@ describe("Authorization & Role-Based Access", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${admin}` }),
     });
-    const endRes = await EndPOST(endReq as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: roundId }) });
+    const endRes = await EndPOST(
+      endReq as unknown as import("next/server").NextRequest,
+      { params: Promise.resolve({ id: roundId }) }
+    );
     expect(endRes.status).toBe(200);
 
     // Restart
-    const { POST: RestartPOST } = await import("@/app/api/rounds/[id]/restart/route");
-    const restartReq = new Request(`http://localhost/api/rounds/${roundId}/restart`, {
-      method: "POST",
-      headers: new Headers({ authorization: `Bearer ${admin}` }),
-    });
-    const restartRes = await RestartPOST(restartReq as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: roundId }) });
+    const { POST: RestartPOST } = await import(
+      "@/app/api/rounds/[id]/restart/route"
+    );
+    const restartReq = new Request(
+      `http://localhost/api/rounds/${roundId}/restart`,
+      {
+        method: "POST",
+        headers: new Headers({ authorization: `Bearer ${admin}` }),
+      }
+    );
+    const restartRes = await RestartPOST(
+      restartReq as unknown as import("next/server").NextRequest,
+      { params: Promise.resolve({ id: roundId }) }
+    );
     expect(restartRes.status).toBe(200);
   });
 

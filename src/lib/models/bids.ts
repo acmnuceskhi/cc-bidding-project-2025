@@ -25,16 +25,16 @@ async function ensureIndexes() {
     await col.createIndex({ roundId: 1 });
     await col.createIndex({ houseId: 1 });
     await col.createIndex({ participantId: 1 });
-    
+
     // Compound index for amount+timestamp queries (for finding winning bids)
     await col.createIndex({ roundId: 1, amount: -1, timestamp: 1 });
     // Defensive TTL index for lightweight locks used by admin operations
     // Stale lock documents will be automatically removed after 5 minutes.
     try {
-      await client.db().collection("_locks").createIndex(
-        { createdAt: 1 },
-        { expireAfterSeconds: 300 }
-      );
+      await client
+        .db()
+        .collection("_locks")
+        .createIndex({ createdAt: 1 }, { expireAfterSeconds: 300 });
     } catch (err) {
       // If creating the TTL index fails (e.g., permissions), log but continue.
       console.warn("Failed to create TTL index on _locks.createdAt:", err);

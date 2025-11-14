@@ -12,14 +12,24 @@ export async function GET() {
     // Always compute phase counts and unsold participants for dashboard context
     const [allRoundsForCounts, unsoldParticipants] = await Promise.all([
       Rounds.getAll(),
-      Participants.getAll().then((list) => list.filter((p) => !(p as any).houseId)),
+      Participants.getAll().then((list) =>
+        list.filter((p) => !(p as any).houseId)
+      ),
     ]);
 
-    const phaseCounts = { pass1: { total: 0, scheduled: 0, active: 0, completed: 0 }, pass2: { total: 0, scheduled: 0, active: 0, completed: 0 } } as const;
-    const counts: any = { pass1: { total: 0, scheduled: 0, active: 0, completed: 0 }, pass2: { total: 0, scheduled: 0, active: 0, completed: 0 } };
+    const phaseCounts = {
+      pass1: { total: 0, scheduled: 0, active: 0, completed: 0 },
+      pass2: { total: 0, scheduled: 0, active: 0, completed: 0 },
+    } as const;
+    const counts: any = {
+      pass1: { total: 0, scheduled: 0, active: 0, completed: 0 },
+      pass2: { total: 0, scheduled: 0, active: 0, completed: 0 },
+    };
 
     for (const r of allRoundsForCounts) {
-      const phaseKey = (r.passPhase === 2 ? "pass2" : "pass1") as "pass1" | "pass2";
+      const phaseKey = (r.passPhase === 2 ? "pass2" : "pass1") as
+        | "pass1"
+        | "pass2";
       counts[phaseKey].total += 1;
       if (r.status === "scheduled") counts[phaseKey].scheduled += 1;
       else if (r.status === "active") counts[phaseKey].active += 1;
@@ -50,7 +60,12 @@ export async function GET() {
     const timerEnd = activeRound.timerEnd?.getTime();
 
     // SERVER-SIDE AUTO-END: Check if round has expired and is still active and not finalized
-    if (timerEnd && now >= timerEnd && activeRound.status === "active" && !activeRound.finalized) {
+    if (
+      timerEnd &&
+      now >= timerEnd &&
+      activeRound.status === "active" &&
+      !activeRound.finalized
+    ) {
       console.log(
         "⏰ Round expired - auto-ending on server side:",
         activeRound._id?.toString()
@@ -63,25 +78,30 @@ export async function GET() {
       try {
         const client = await clientPromise;
         const { ObjectId } = await import("mongodb");
-        
+
         // ATOMIC CHECK: Try to mark round as "processing" to prevent race conditions
-        const markResult = await client.db().collection("rounds").findOneAndUpdate(
-          { 
-            _id: new ObjectId(activeRound._id!),
-            status: "active",  // Only update if still active
-            finalized: { $ne: true }  // And not already finalized
-          },
-          { 
-            $set: { 
-              status: "processing"  // Temporary status to lock the round
-            } 
-          },
-          { returnDocument: "after" }
-        );
+        const markResult = await client
+          .db()
+          .collection("rounds")
+          .findOneAndUpdate(
+            {
+              _id: new ObjectId(activeRound._id!),
+              status: "active", // Only update if still active
+              finalized: { $ne: true }, // And not already finalized
+            },
+            {
+              $set: {
+                status: "processing", // Temporary status to lock the round
+              },
+            },
+            { returnDocument: "after" }
+          );
 
         // If we couldn't mark it (another request beat us), skip auto-end
         if (!markResult) {
-          console.log("⏭️ Round already being processed by another request, skipping");
+          console.log(
+            "⏭️ Round already being processed by another request, skipping"
+          );
           return NextResponse.json({
             roundId: null,
             participant: null,
@@ -93,7 +113,9 @@ export async function GET() {
         }
 
         // Get only the LATEST bid from each house for this round
-        const bids = await Bids.getLatestBidPerHouseForRound(activeRound._id!.toString());
+        const bids = await Bids.getLatestBidPerHouseForRound(
+          activeRound._id!.toString()
+        );
 
         // 🚫 No bids case — mark as completed & skipped
         if (bids.length === 0) {

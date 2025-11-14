@@ -102,7 +102,10 @@ export async function POST(
         const p = await Participants.getById(round.participantId.toString());
 
         if (!p) {
-          console.log("Participant not found for round:", round._id?.toString());
+          console.log(
+            "Participant not found for round:",
+            round._id?.toString()
+          );
           continue;
         }
 
@@ -161,9 +164,7 @@ export async function POST(
     // Define timer durations
     // const BIDDING_DURATION_MS = 40000;
     // const RESULT_DURATION_MS = 20000;
-    const timerEnd = new Date(
-      Date.now() + 60 * 1000
-    );
+    const timerEnd = new Date(Date.now() + 60 * 1000);
 
     // Update the round
     const result = await Rounds.update(targetRoundId, {

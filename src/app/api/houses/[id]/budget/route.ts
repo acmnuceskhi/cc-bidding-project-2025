@@ -138,7 +138,6 @@ export async function PATCH(
     // Fetch updated house
     const updatedHouse = await Houses.getById(id);
 
-
     return NextResponse.json({
       success: true,
       message: "House budget updated successfully",

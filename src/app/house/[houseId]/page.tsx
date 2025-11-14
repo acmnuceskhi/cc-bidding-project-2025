@@ -121,13 +121,18 @@ export default function HouseDashboard() {
 
             // Fetch current bid for this house in this round
             try {
-              const bidsRes = await fetchWithAuth(`/api/bids?roundId=${statusData.roundId}`, {
-                cache: "no-store",
-              });
+              const bidsRes = await fetchWithAuth(
+                `/api/bids?roundId=${statusData.roundId}`,
+                {
+                  cache: "no-store",
+                }
+              );
               const bidsData = await bidsRes.json();
-              
+
               if (Array.isArray(bidsData)) {
-                const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
+                const myBid = bidsData.find(
+                  (bid: any) => bid.houseId === houseId
+                );
                 setCurrentBid(myBid ? myBid.amount : null);
               } else {
                 setCurrentBid(null);
@@ -279,12 +284,14 @@ export default function HouseDashboard() {
     <div
       className="min-h-screen bg-cover bg-center bg-fixed relative"
       style={{
-        backgroundImage: house ? `url('${getHouseBackground(house.name)}')` : "url('/arena-background.jpg')",
+        backgroundImage: house
+          ? `url('${getHouseBackground(house.name)}')`
+          : "url('/arena-background.jpg')",
       }}
     >
       {/* Enhanced dark overlay with neon glow */}
       <div className="absolute inset-0 bg-black/75 backdrop-blur-xs"></div>
-      
+
       {/* Neon grid overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
 
@@ -298,7 +305,9 @@ export default function HouseDashboard() {
                 <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-2">
                   🏯 {house.name}
                 </h1>
-                <p className="text-lg sm:text-xl text-gray-200">Command Center</p>
+                <p className="text-lg sm:text-xl text-gray-200">
+                  Command Center
+                </p>
               </div>
               <button
                 onClick={async () => {
@@ -322,7 +331,9 @@ export default function HouseDashboard() {
             <div className="bg-black/60 rounded-xl p-4 sm:p-6 border border-[#FFD700]/30 shadow-[0_0_20px_rgba(255,215,0,0.2)]">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
                 <div className="text-center sm:text-left">
-                  <p className="text-gray-300 text-base sm:text-lg mb-1">💰 Treasury Balance</p>
+                  <p className="text-gray-300 text-base sm:text-lg mb-1">
+                    💰 Treasury Balance
+                  </p>
                   <div className="flex items-baseline gap-2 sm:gap-3 justify-center sm:justify-start">
                     <span className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
                       ${house.remainingBudget}
@@ -342,7 +353,11 @@ export default function HouseDashboard() {
               <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all shadow-[0_0_10px_currentColor] ${
-                    budgetPercentage > 50 ? "bg-green-500" : budgetPercentage > 25 ? "bg-yellow-500" : "bg-red-500"
+                    budgetPercentage > 50
+                      ? "bg-green-500"
+                      : budgetPercentage > 25
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
                   }`}
                   style={{ width: `${budgetPercentage}%` }}
                 ></div>
@@ -359,10 +374,14 @@ export default function HouseDashboard() {
                     ⚔️ ROUND {activeRound.roundNumber || "?"}
                   </h2>
                   <div className="text-center">
-                    <div className={`text-5xl sm:text-6xl font-bold ${isTimeRunningOut ? "text-red-500 animate-pulse drop-shadow-[0_0_20px_#FF0000]" : "text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]"}`}>
+                    <div
+                      className={`text-5xl sm:text-6xl font-bold ${isTimeRunningOut ? "text-red-500 animate-pulse drop-shadow-[0_0_20px_#FF0000]" : "text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]"}`}
+                    >
                       {formatTime(timeLeftValue)}
                     </div>
-                    <div className="text-sm text-white font-semibold mt-1">Time Left</div>
+                    <div className="text-sm text-white font-semibold mt-1">
+                      Time Left
+                    </div>
                   </div>
                 </div>
 
@@ -400,7 +419,9 @@ export default function HouseDashboard() {
                     )}
                     {currentParticipant.batch && (
                       <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-4 sm:px-6 py-2 rounded-full border-2 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]">
-                        <span className="text-[#FFD700] font-bold text-sm sm:text-lg">{currentParticipant.batch}</span>
+                        <span className="text-[#FFD700] font-bold text-sm sm:text-lg">
+                          {currentParticipant.batch}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -419,7 +440,10 @@ export default function HouseDashboard() {
                     )}
                     {currentParticipant.batch && (
                       <div className="text-lg sm:text-xl text-gray-300">
-                        📚 Year: <span className="text-[#FFD700] font-semibold">{currentParticipant.batch}</span>
+                        📚 Year:{" "}
+                        <span className="text-[#FFD700] font-semibold">
+                          {currentParticipant.batch}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -437,7 +461,9 @@ export default function HouseDashboard() {
 
                       {currentBid !== null && (
                         <div className="bg-gradient-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
-                          <div className="text-gray-200 text-sm sm:text-base mb-1">Your Active Bid</div>
+                          <div className="text-gray-200 text-sm sm:text-base mb-1">
+                            Your Active Bid
+                          </div>
                           <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
                             ${currentBid}
                           </div>
@@ -460,9 +486,15 @@ export default function HouseDashboard() {
                         />
                         <button
                           onClick={placeBid}
-                          disabled={loading || bidAmount <= 0 || bidAmount > house.remainingBudget}
+                          disabled={
+                            loading ||
+                            bidAmount <= 0 ||
+                            bidAmount > house.remainingBudget
+                          }
                           className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
-                            loading || bidAmount <= 0 || bidAmount > house.remainingBudget
+                            loading ||
+                            bidAmount <= 0 ||
+                            bidAmount > house.remainingBudget
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                               : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
                           }`}
@@ -481,7 +513,9 @@ export default function HouseDashboard() {
                   ) : (
                     <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">
                       <p className="text-yellow-300 font-bold text-xl sm:text-2xl">
-                        ⚠️ {canBidMessage || "You have already recruited 3 players from this batch!"}
+                        ⚠️{" "}
+                        {canBidMessage ||
+                          "You have already recruited 3 players from this batch!"}
                       </p>
                     </div>
                   )
@@ -497,9 +531,15 @@ export default function HouseDashboard() {
           ) : (
             <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
               <div className="text-center">
-                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">⏸️ No Active Round</h2>
-                <p className="text-lg sm:text-xl text-gray-300">Waiting for the next battle to begin...</p>
-                <p className="text-gray-400 mt-4">The admin will start the next round soon</p>
+                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">
+                  ⏸️ No Active Round
+                </h2>
+                <p className="text-lg sm:text-xl text-gray-300">
+                  Waiting for the next battle to begin...
+                </p>
+                <p className="text-gray-400 mt-4">
+                  The admin will start the next round soon
+                </p>
               </div>
             </div>
           )}

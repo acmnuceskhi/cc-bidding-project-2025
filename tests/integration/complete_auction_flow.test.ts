@@ -1,9 +1,9 @@
 /**
  * COMPLETE AUCTION FLOW - Comprehensive Integration Test
- * 
+ *
  * This test covers the entire auction lifecycle from setup to completion,
  * including all critical paths and edge cases:
- * 
+ *
  * 1. Setup & Authentication
  * 2. Round Creation & Bidding (Pass 1)
  * 3. Winner Selection & Budget Deduction
@@ -27,16 +27,28 @@ describe("Complete Auction Flow - End to End", () => {
   async function createAdmin() {
     const { Users } = await import("@/lib/models/users");
     const unique = `admin-flow-${Date.now()}`;
-    const res = await Users.create({ username: unique, password: "hash", role: "admin" });
+    const res = await Users.create({
+      username: unique,
+      password: "hash",
+      role: "admin",
+    });
     return {
-      token: generateToken({ userId: res.insertedId.toString(), username: unique, role: "admin" }),
+      token: generateToken({
+        userId: res.insertedId.toString(),
+        username: unique,
+        role: "admin",
+      }),
       userId: res.insertedId.toString(),
     };
   }
 
   async function createHouse(name: string, budget: number) {
     const { Houses } = await import("@/lib/models/houses");
-    const res = await Houses.create({ name, totalBudget: budget, remainingBudget: budget });
+    const res = await Houses.create({
+      name,
+      totalBudget: budget,
+      remainingBudget: budget,
+    });
     return res.insertedId.toString();
   }
 
@@ -51,7 +63,12 @@ describe("Complete Auction Flow - End to End", () => {
       houseId: new ObjectId(houseId),
     });
     return {
-      token: generateToken({ userId: res.insertedId.toString(), username: unique, role: "house_captain", houseId }),
+      token: generateToken({
+        userId: res.insertedId.toString(),
+        username: unique,
+        role: "house_captain",
+        houseId,
+      }),
       houseId,
     };
   }
@@ -69,7 +86,10 @@ describe("Complete Auction Flow - End to End", () => {
     return res.insertedId.toString();
   }
 
-  async function createActiveRound(participantId: string, passPhase: 1 | 2 = 1) {
+  async function createActiveRound(
+    participantId: string,
+    passPhase: 1 | 2 = 1
+  ) {
     const { Rounds } = await import("@/lib/models/rounds");
     const { ObjectId } = await import("mongodb");
     const res = await Rounds.create({
@@ -102,9 +122,12 @@ describe("Complete Auction Flow - End to End", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${admin.token}` }),
     });
-    const res = await POST(req as unknown as import("next/server").NextRequest, {
-      params: Promise.resolve({ id: roundId }),
-    });
+    const res = await POST(
+      req as unknown as import("next/server").NextRequest,
+      {
+        params: Promise.resolve({ id: roundId }),
+      }
+    );
     return res.json();
   }
 
@@ -114,13 +137,19 @@ describe("Complete Auction Flow - End to End", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${admin.token}` }),
     });
-    const res = await POST(req as unknown as import("next/server").NextRequest, {
-      params: Promise.resolve({ id: roundId }),
-    });
+    const res = await POST(
+      req as unknown as import("next/server").NextRequest,
+      {
+        params: Promise.resolve({ id: roundId }),
+      }
+    );
     return res.json();
   }
 
-  async function adjustBudget(houseId: string, body: { totalBudget?: number; adjustRemainingBy?: number }) {
+  async function adjustBudget(
+    houseId: string,
+    body: { totalBudget?: number; adjustRemainingBy?: number }
+  ) {
     const { PATCH } = await import("@/app/api/houses/[id]/budget/route");
     const req = new Request(`http://localhost/api/houses/${houseId}/budget`, {
       method: "PATCH",
@@ -130,9 +159,12 @@ describe("Complete Auction Flow - End to End", () => {
       }),
       body: JSON.stringify(body),
     });
-    const res = await PATCH(req as unknown as import("next/server").NextRequest, {
-      params: Promise.resolve({ id: houseId }),
-    });
+    const res = await PATCH(
+      req as unknown as import("next/server").NextRequest,
+      {
+        params: Promise.resolve({ id: houseId }),
+      }
+    );
     return { status: res.status, data: await res.json() };
   }
 
@@ -200,7 +232,7 @@ describe("Complete Auction Flow - End to End", () => {
     expect(endResult.success).toBe(true);
     expect(endResult.winningBid.amount).toBe(400);
     // Blue should win (earlier timestamp)
-    
+
     const blueHouse = await getHouse(houses.blue);
     const yellowHouse = await getHouse(houses.yellow);
     expect(blueHouse!.remainingBudget).toBe(1600); // 2000 - 400
@@ -302,7 +334,9 @@ describe("Complete Auction Flow - End to End", () => {
     for (const batch of batches) {
       for (let i = 0; i < 3; i++) {
         const pid = await createParticipant(`${batch}A-${Date.now()}-${i}`);
-        await Participants.update(pid, { houseId: new ObjectId(houses.yellow) });
+        await Participants.update(pid, {
+          houseId: new ObjectId(houses.yellow),
+        });
       }
     }
 
@@ -379,14 +413,22 @@ describe("Complete Auction Flow - End to End", () => {
     await endRound(round);
 
     // Captain tries to restart
-    const { POST: RestartPOST } = await import("@/app/api/rounds/[id]/restart/route");
-    const restartReq = new Request(`http://localhost/api/rounds/${round}/restart`, {
-      method: "POST",
-      headers: new Headers({ authorization: `Bearer ${captains.red.token}` }),
-    });
-    const restartRes = await RestartPOST(restartReq as unknown as import("next/server").NextRequest, {
-      params: Promise.resolve({ id: round }),
-    });
+    const { POST: RestartPOST } = await import(
+      "@/app/api/rounds/[id]/restart/route"
+    );
+    const restartReq = new Request(
+      `http://localhost/api/rounds/${round}/restart`,
+      {
+        method: "POST",
+        headers: new Headers({ authorization: `Bearer ${captains.red.token}` }),
+      }
+    );
+    const restartRes = await RestartPOST(
+      restartReq as unknown as import("next/server").NextRequest,
+      {
+        params: Promise.resolve({ id: round }),
+      }
+    );
     await restartRes.json();
     expect(restartRes.status).toBe(403);
 
@@ -401,9 +443,15 @@ describe("Complete Auction Flow - End to End", () => {
         "content-type": "application/json",
         authorization: `Bearer ${admin.token}`,
       }),
-      body: JSON.stringify({ roundId: round2, amount: 100, previousAmount: null }),
+      body: JSON.stringify({
+        roundId: round2,
+        amount: 100,
+        previousAmount: null,
+      }),
     });
-    const bidRes = await BidPOST(bidReq as unknown as import("next/server").NextRequest);
+    const bidRes = await BidPOST(
+      bidReq as unknown as import("next/server").NextRequest
+    );
     await bidRes.json();
     expect(bidRes.status).toBe(403);
   });

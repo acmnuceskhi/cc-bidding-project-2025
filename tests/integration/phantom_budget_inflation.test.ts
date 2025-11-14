@@ -8,14 +8,26 @@ describe("Phantom budget inflation prevention", () => {
   async function createAdmin() {
     const { Users } = await import("@/lib/models/users");
     const unique = `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const res = await Users.create({ username: unique, password: "pw", role: "admin" });
-    const token = generateToken({ userId: res.insertedId.toString(), username: unique, role: "admin" });
+    const res = await Users.create({
+      username: unique,
+      password: "pw",
+      role: "admin",
+    });
+    const token = generateToken({
+      userId: res.insertedId.toString(),
+      username: unique,
+      role: "admin",
+    });
     return { token, id: res.insertedId.toString() };
   }
 
   async function createHouse(name: string, budget = 1000) {
     const { Houses } = await import("@/lib/models/houses");
-    const res = await Houses.create({ name, totalBudget: budget, remainingBudget: budget });
+    const res = await Houses.create({
+      name,
+      totalBudget: budget,
+      remainingBudget: budget,
+    });
     return res.insertedId.toString();
   }
 
@@ -23,7 +35,9 @@ describe("Phantom budget inflation prevention", () => {
     const { Houses } = await import("@/lib/models/houses");
     const house = await Houses.getById(houseId);
     if (!house) throw new Error("House not found");
-    await Houses.update(houseId, { remainingBudget: house.remainingBudget - amount });
+    await Houses.update(houseId, {
+      remainingBudget: house.remainingBudget - amount,
+    });
   }
 
   async function getBudgets(houseId: string) {

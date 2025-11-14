@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
-import { Participants } from "@/lib/models/participants"; 
+import { Participants } from "@/lib/models/participants";
 import { getBatchGroup } from "@/lib/utils";
 import { verifyAuth } from "@/lib/auth";
 
@@ -139,10 +139,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 🧍 Get participant being bid on
-    const participant = await Participants.getById(round.participantId.toString());
+    const participant = await Participants.getById(
+      round.participantId.toString()
+    );
     if (!participant || !participant.rollNumber) {
       return NextResponse.json(
-        { success: false, error: "PARTICIPANT_NOT_FOUND", message: "Participant not found or missing university ID" },
+        {
+          success: false,
+          error: "PARTICIPANT_NOT_FOUND",
+          message: "Participant not found or missing university ID",
+        },
         { status: 404 }
       );
     }
@@ -166,14 +172,22 @@ export async function POST(request: NextRequest) {
     // 🏷️ In second pass, only houses below minimum roster may bid
     const passPhase = round.passPhase ?? 1;
     if (passPhase === 2) {
-      const counts: Record<string, number> = { "25": 0, "24": 0, "23": 0, senior: 0 };
+      const counts: Record<string, number> = {
+        "25": 0,
+        "24": 0,
+        "23": 0,
+        senior: 0,
+      };
       for (const m of houseMembers) {
         const grp = getBatchGroup(m.rollNumber);
         if (grp === "25" || grp === "24" || grp === "23") counts[grp]++;
         else counts.senior++;
       }
       const hasMinimumRoster =
-        counts["25"] >= 3 && counts["24"] >= 3 && counts["23"] >= 3 && counts.senior >= 3;
+        counts["25"] >= 3 &&
+        counts["24"] >= 3 &&
+        counts["23"] >= 3 &&
+        counts.senior >= 3;
       if (hasMinimumRoster) {
         return NextResponse.json(
           {

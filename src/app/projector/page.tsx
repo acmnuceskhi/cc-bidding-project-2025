@@ -223,12 +223,12 @@ export default function ProjectorDisplay() {
   // Winner Announcement Screen
   if (showWinner && winnerData) {
     return (
-      <div 
+      <div
         className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
         style={{ backgroundImage: "url('/arena-background.jpg')" }}
       >
         <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 via-orange-500/30 to-red-600/30 backdrop-blur-sm"></div>
-        
+
         <div className="relative z-10 text-center max-w-5xl mx-auto p-8">
           <h1 className="text-8xl sm:text-9xl font-bold mb-12 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700] animate-pulse">
             🏆 SOLD! 🏆
@@ -246,7 +246,9 @@ export default function ProjectorDisplay() {
             {participant?.name || "Participant"}
           </h2>
 
-          <div className="text-4xl sm:text-5xl mb-8 text-white drop-shadow-[0_0_20px_#000000]">has been won by</div>
+          <div className="text-4xl sm:text-5xl mb-8 text-white drop-shadow-[0_0_20px_#000000]">
+            has been won by
+          </div>
 
           <div className="bg-black/60 rounded-3xl p-8 sm:p-12 border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)] backdrop-blur-md">
             <div className="text-6xl sm:text-8xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_30px_#FFD700]">
@@ -264,15 +266,17 @@ export default function ProjectorDisplay() {
   // Waiting Screen
   if (!status || status.roundStatus !== "active") {
     return (
-      <div 
+      <div
         className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
         style={{ backgroundImage: "url('/temple-out.jpg')" }}
       >
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
-        
+
         <div className="relative z-10 text-center">
           <div className="text-8xl sm:text-9xl mb-8 animate-bounce">⏳</div>
-          <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#FFD700]">CC Bidding System</h1>
+          <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#FFD700]">
+            CC Bidding System
+          </h1>
           <p className="text-3xl sm:text-4xl text-gray-300">
             Waiting for admin to start the next round...
           </p>
@@ -286,13 +290,13 @@ export default function ProjectorDisplay() {
   const bidsPlaced = status.bidsPlaced || [];
 
   return (
-    <div 
+    <div
       className="min-h-screen bg-cover bg-center relative"
       style={{ backgroundImage: "url('/arena-background.jpg')" }}
     >
       {/* Enhanced dark overlay */}
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
-      
+
       {/* Neon grid overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
 
@@ -301,7 +305,9 @@ export default function ProjectorDisplay() {
         {/* Header */}
         <div className="bg-black/60 p-4 sm:p-6 border-b-2 border-[#FFD700]/50 backdrop-blur-md">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">CC Bidding System</h1>
+            <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
+              CC Bidding System
+            </h1>
             <div className="text-center sm:text-right">
               <div className="text-2xl sm:text-3xl font-bold text-green-400 drop-shadow-[0_0_15px_#22C55E]">
                 🔴 LIVE BIDDING
@@ -331,7 +337,9 @@ export default function ProjectorDisplay() {
                 }}
               ></div>
             </div>
-            <div className="text-2xl sm:text-3xl text-gray-300 mt-4">seconds remaining</div>
+            <div className="text-2xl sm:text-3xl text-gray-300 mt-4">
+              seconds remaining
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-12">

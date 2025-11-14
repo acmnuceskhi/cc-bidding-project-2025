@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds, type Round } from "@/lib/models/rounds";
-import { Participants } from "@/lib/models/participants"
+import { Participants } from "@/lib/models/participants";
 import clientPromise from "@/lib/mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { ObjectId, ReturnDocument } from "mongodb";
@@ -55,7 +55,9 @@ export async function POST(
     }
 
     // Determine winning bid refund eligibility (escrow only deducted winner)
-    const participant = await Participants.getById(round.participantId.toString());
+    const participant = await Participants.getById(
+      round.participantId.toString()
+    );
     const winningHouseId = participant?.houseId?.toString();
 
     const client = await clientPromise;
@@ -65,9 +67,9 @@ export async function POST(
     let numBids = 0;
 
     const lockKey = `restart-${id}`;
-    const locksColl = client.db().collection<{ _id: string; createdAt: Date }>(
-      "_locks"
-    );
+    const locksColl = client
+      .db()
+      .collection<{ _id: string; createdAt: Date }>("_locks");
 
     // Try to acquire a lightweight lock by inserting a document with a unique _id
     try {
@@ -109,11 +111,13 @@ export async function POST(
 
         // Atomically flip the round.finalized flag from true -> false and
         // use the previous value to determine if a refund is necessary.
-        const prevRoundRaw: unknown = await db.collection<Round>("rounds").findOneAndUpdate(
-          { _id: new ObjectId(id), finalized: true },
-          { $set: { finalized: false } },
-          { session, returnDocument: ReturnDocument.BEFORE }
-        );
+        const prevRoundRaw: unknown = await db
+          .collection<Round>("rounds")
+          .findOneAndUpdate(
+            { _id: new ObjectId(id), finalized: true },
+            { $set: { finalized: false } },
+            { session, returnDocument: ReturnDocument.BEFORE }
+          );
 
         // Helper to detect { value: T | null } shapes from driver variations
         function hasValue<T>(x: unknown): x is { value: T | null } {
@@ -139,35 +143,38 @@ export async function POST(
           );
 
           if (winningBidDoc) {
-            await db.collection("houses").updateOne(
-              { _id: new ObjectId(winningBidDoc.houseId) },
-              { $inc: { remainingBudget: winningBidDoc.amount } },
-              { session }
-            );
+            await db
+              .collection("houses")
+              .updateOne(
+                { _id: new ObjectId(winningBidDoc.houseId) },
+                { $inc: { remainingBudget: winningBidDoc.amount } },
+                { session }
+              );
             refundedCount = 1;
             totalRefundAmount = winningBidDoc.amount;
           }
         }
 
         // Delete all bids for this round (clear the slate) and capture deleted count
-        const deleteRes = await db.collection("bids").deleteMany(
-          { roundId: new ObjectId(id) },
-          { session }
-        );
+        const deleteRes = await db
+          .collection("bids")
+          .deleteMany({ roundId: new ObjectId(id) }, { session });
         numBids = deleteRes.deletedCount ?? 0;
 
         // Unassign participant from house if they were assigned
         if (currentWinningHouseId) {
-          await db.collection("participants").updateOne(
-            { _id: new ObjectId(round.participantId) },
-            { $unset: { houseId: "" } },
-            { session }
-          );
+          await db
+            .collection("participants")
+            .updateOne(
+              { _id: new ObjectId(round.participantId) },
+              { $unset: { houseId: "" } },
+              { session }
+            );
         }
 
         // Reset the round's state so it's ready for restart (clear skipped flag for fresh start)
         let nextPassPhase: 1 | 2 = (roundBefore?.passPhase ?? 1) as 1 | 2;
-        if ((roundBefore?.finalized !== true) && nextPassPhase === 1) {
+        if (roundBefore?.finalized !== true && nextPassPhase === 1) {
           // Move unsold/no-bid rounds from pass 1 to pass 2 on restart
           nextPassPhase = 2;
         }

@@ -10,12 +10,26 @@ describe("Status Endpoint - Real-time Auction State", () => {
     const { Houses } = await import("@/lib/models/houses");
     const { Users } = await import("@/lib/models/users");
     const { ObjectId } = await import("mongodb");
-    
-    const house = await Houses.create({ name: `H-${Date.now()}`, totalBudget: 1000, remainingBudget: 1000 });
+
+    const house = await Houses.create({
+      name: `H-${Date.now()}`,
+      totalBudget: 1000,
+      remainingBudget: 1000,
+    });
     const houseId = house.insertedId.toString();
-    const user = await Users.create({ username: `cap-${Date.now()}`, password: "hash", role: "house_captain", houseId: new ObjectId(houseId) });
-    const token = generateToken({ userId: user.insertedId.toString(), username: "cap", role: "house_captain", houseId });
-    
+    const user = await Users.create({
+      username: `cap-${Date.now()}`,
+      password: "hash",
+      role: "house_captain",
+      houseId: new ObjectId(houseId),
+    });
+    const token = generateToken({
+      userId: user.insertedId.toString(),
+      username: "cap",
+      role: "house_captain",
+      houseId,
+    });
+
     return { houseId, token };
   }
 
@@ -24,12 +38,24 @@ describe("Status Endpoint - Real-time Auction State", () => {
     const { Participants } = await import("@/lib/models/participants");
     const { Rounds } = await import("@/lib/models/rounds");
     const { ObjectId } = await import("mongodb");
-    
+
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Test", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "active", timerEnd: new Date(Date.now() + 10000), finalized: false });
-    
-    return { participantId: p.insertedId.toString(), roundId: r.insertedId.toString() };
+    const p = await Participants.create({
+      name: "Test",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() + 10000),
+      finalized: false,
+    });
+
+    return {
+      participantId: p.insertedId.toString(),
+      roundId: r.insertedId.toString(),
+    };
   }
 
   async function getStatus() {
@@ -78,21 +104,25 @@ describe("Status Endpoint - Real-time Auction State", () => {
     const { ObjectId } = await import("mongodb");
 
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Expired", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ 
-      participantId: new ObjectId(p.insertedId.toString()), 
-      status: "active", 
-      timerEnd: new Date(Date.now() - 5000), 
-      finalized: false 
+    const p = await Participants.create({
+      name: "Expired",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() - 5000),
+      finalized: false,
     });
 
     // Trigger status check - expired rounds are auto-ended
     const status = await getStatus();
-    
+
     // Status endpoint detects expiration and handles it
     // Either returns completed status or is still processing
     expect(["completed", "active"]).toContain(status.roundStatus);
-    
+
     // If completed immediately, verify properties
     if (status.roundStatus === "completed") {
       expect(status.roundEnded).toBe(true);
@@ -108,7 +138,10 @@ describe("Status Endpoint - Real-time Auction State", () => {
     const { POST } = await import("@/app/api/bids/route");
     const req = new Request("http://localhost/api/bids", {
       method: "POST",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${token}` }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      }),
       body: JSON.stringify({ roundId, amount: 200, previousAmount: null }),
     });
     await POST(req as unknown as import("next/server").NextRequest);
@@ -126,15 +159,11 @@ describe("Status Endpoint - Real-time Auction State", () => {
   });
 
   it("handles multiple concurrent status requests", async () => {
-    const results = await Promise.all([
-      getStatus(),
-      getStatus(),
-      getStatus(),
-    ]);
+    const results = await Promise.all([getStatus(), getStatus(), getStatus()]);
 
     // All should return valid responses
     expect(results).toHaveLength(3);
-    results.forEach(result => {
+    results.forEach((result) => {
       expect(result).toBeDefined();
     });
   });
@@ -142,7 +171,7 @@ describe("Status Endpoint - Real-time Auction State", () => {
   it("excludes sensitive data from status response", async () => {
     await createActiveRound();
     const status = await getStatus();
-    
+
     // Should not expose house passwords, bidsPlaced only contains houseId
     if (status.bidsPlaced?.length > 0) {
       const bid = status.bidsPlaced[0];

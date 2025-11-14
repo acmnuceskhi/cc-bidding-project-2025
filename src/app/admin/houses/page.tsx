@@ -217,8 +217,8 @@ export default function HousesPage() {
               className="relative rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] transition-all overflow-hidden"
               style={{
                 backgroundImage: `url('${getHouseBackground(house.name)}')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
+                backgroundSize: "cover",
+                backgroundPosition: "center",
               }}
             >
               {/* Opacity overlay */}
@@ -270,7 +270,8 @@ export default function HousesPage() {
                     {players.map((player, idx) => (
                       <div
                         key={
-                          player.participantId || `player-${house.houseId}-${idx}`
+                          player.participantId ||
+                          `player-${house.houseId}-${idx}`
                         }
                         className="bg-black/60 rounded-xl p-4 border-2 border-[#FFD700]/50 hover:border-[#FFD700] transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,215,0,0.2)] hover:shadow-[0_0_25px_rgba(255,215,0,0.4)] backdrop-blur-sm"
                       >
@@ -375,7 +376,10 @@ export default function HousesPage() {
                       type="number"
                       value={budgetInput.totalBudget || ""}
                       onChange={(e) =>
-                        setBudgetInput({ ...budgetInput, totalBudget: e.target.value })
+                        setBudgetInput({
+                          ...budgetInput,
+                          totalBudget: e.target.value,
+                        })
                       }
                       placeholder="Enter total budget"
                       className="w-full px-4 py-2 bg-black/60 border border-[#FFD700]/50 rounded-lg text-white focus:outline-none focus:border-[#FFD700]"
@@ -391,7 +395,10 @@ export default function HousesPage() {
                       type="number"
                       value={budgetInput.adjustBy || ""}
                       onChange={(e) =>
-                        setBudgetInput({ ...budgetInput, adjustBy: e.target.value })
+                        setBudgetInput({
+                          ...budgetInput,
+                          adjustBy: e.target.value,
+                        })
                       }
                       placeholder="e.g., 100 or -50"
                       className="w-full px-4 py-2 bg-black/60 border border-[#FFD700]/50 rounded-lg text-white focus:outline-none focus:border-[#FFD700]"

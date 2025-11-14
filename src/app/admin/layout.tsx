@@ -65,7 +65,7 @@ export default function AdminLayout({
     >
       {/* Enhanced dark overlay */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xs"></div>
-      
+
       {/* Neon grid overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
 

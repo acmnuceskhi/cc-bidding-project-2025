@@ -30,9 +30,13 @@ export async function initializeData() {
 
     // Safety: prevent accidentally seeding production unless explicitly opted in
     const uri = process.env.MONGODB_URI || "";
-    const isProduction = uri.includes("mongodb+srv") || uri.includes("cluster0");
-    const isTestEnv = process.env.NODE_ENV === "test" || uri.includes("127.0.0.1") || uri.includes("localhost");
-    
+    const isProduction =
+      uri.includes("mongodb+srv") || uri.includes("cluster0");
+    const isTestEnv =
+      process.env.NODE_ENV === "test" ||
+      uri.includes("127.0.0.1") ||
+      uri.includes("localhost");
+
     if (isProduction && !isTestEnv && process.env.RUN_SEED_SCRIPT !== "true") {
       throw new Error(
         "⚠️  SAFETY: Refusing to seed production database. Set RUN_SEED_SCRIPT=true to override."

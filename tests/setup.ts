@@ -51,7 +51,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   if (!client || !dbSnapshot) return;
   const db = client.db();
-  
+
   // Clear all collections first
   const collections = await db.collections();
   for (const col of collections) {

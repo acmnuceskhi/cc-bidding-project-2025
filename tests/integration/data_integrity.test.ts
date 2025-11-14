@@ -91,9 +91,12 @@ describe("Data integrity assertions (meta)", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${adminToken}` }),
     });
-    const res = await POST(req as unknown as import("next/server").NextRequest, {
-      params: Promise.resolve({ id: roundId }),
-    });
+    const res = await POST(
+      req as unknown as import("next/server").NextRequest,
+      {
+        params: Promise.resolve({ id: roundId }),
+      }
+    );
     return res.json();
   }
 
@@ -103,9 +106,12 @@ describe("Data integrity assertions (meta)", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${adminToken}` }),
     });
-    const res = await POST(req as unknown as import("next/server").NextRequest, {
-      params: Promise.resolve({ id: roundId }),
-    });
+    const res = await POST(
+      req as unknown as import("next/server").NextRequest,
+      {
+        params: Promise.resolve({ id: roundId }),
+      }
+    );
     return res.json();
   }
 

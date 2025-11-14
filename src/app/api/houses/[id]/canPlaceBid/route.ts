@@ -47,10 +47,7 @@ export async function GET(
     // Validate house and participant existence
     const house = await Houses.getById(id);
     if (!house) {
-      return NextResponse.json(
-        { error: "House not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "House not found" }, { status: 404 });
     }
 
     const participant = await Participants.getById(participantId);
@@ -64,7 +61,9 @@ export async function GET(
     // Determine batch group for the participant and count house members in that group
     const participantGroup = getBatchGroup(participant.rollNumber);
     const houseMembers = await Participants.getByHouse(id);
-    const sameBatchCount = houseMembers.filter((member) => getBatchGroup(member.rollNumber) === participantGroup).length;
+    const sameBatchCount = houseMembers.filter(
+      (member) => getBatchGroup(member.rollNumber) === participantGroup
+    ).length;
 
     if (sameBatchCount >= 3) {
       return NextResponse.json({

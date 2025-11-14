@@ -9,20 +9,42 @@ describe("Budget Management & Admin Adjustments", () => {
   async function createAdmin() {
     const { Users } = await import("@/lib/models/users");
     const unique = `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const res = await Users.create({ username: unique, password: "hashed", role: "admin" });
-    return generateToken({ userId: res.insertedId.toString(), username: unique, role: "admin" });
+    const res = await Users.create({
+      username: unique,
+      password: "hashed",
+      role: "admin",
+    });
+    return generateToken({
+      userId: res.insertedId.toString(),
+      username: unique,
+      role: "admin",
+    });
   }
 
   async function createHouseAndCaptain() {
     const { Houses } = await import("@/lib/models/houses");
     const { Users } = await import("@/lib/models/users");
     const { ObjectId } = await import("mongodb");
-    
-    const house = await Houses.create({ name: `H-${Date.now()}`, totalBudget: 1000, remainingBudget: 1000 });
+
+    const house = await Houses.create({
+      name: `H-${Date.now()}`,
+      totalBudget: 1000,
+      remainingBudget: 1000,
+    });
     const houseId = house.insertedId.toString();
-    const user = await Users.create({ username: `cap-${Date.now()}`, password: "hash", role: "house_captain", houseId: new ObjectId(houseId) });
-    const token = generateToken({ userId: user.insertedId.toString(), username: "cap", role: "house_captain", houseId });
-    
+    const user = await Users.create({
+      username: `cap-${Date.now()}`,
+      password: "hash",
+      role: "house_captain",
+      houseId: new ObjectId(houseId),
+    });
+    const token = generateToken({
+      userId: user.insertedId.toString(),
+      username: "cap",
+      role: "house_captain",
+      houseId,
+    });
+
     return { houseId, token };
   }
 
@@ -30,10 +52,15 @@ describe("Budget Management & Admin Adjustments", () => {
     const { PATCH } = await import("@/app/api/houses/[id]/budget/route");
     const req = new Request(`http://localhost/api/houses/${houseId}/budget`, {
       method: "PATCH",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${admin}` }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${admin}`,
+      }),
       body: JSON.stringify({ adjustRemainingBy: delta }),
     });
-    return PATCH(req as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: houseId }) });
+    return PATCH(req as unknown as import("next/server").NextRequest, {
+      params: Promise.resolve({ id: houseId }),
+    });
   }
 
   it("admin can increase budget", async () => {
@@ -80,10 +107,16 @@ describe("Budget Management & Admin Adjustments", () => {
     const { PATCH } = await import("@/app/api/houses/[id]/budget/route");
     const req = new Request(`http://localhost/api/houses/${houseId}/budget`, {
       method: "PATCH",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${token}` }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      }),
       body: JSON.stringify({ adjustRemainingBy: 100 }),
     });
-    const res = await PATCH(req as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: houseId }) });
+    const res = await PATCH(
+      req as unknown as import("next/server").NextRequest,
+      { params: Promise.resolve({ id: houseId }) }
+    );
     expect(res.status).toBe(403);
   });
 
@@ -96,16 +129,32 @@ describe("Budget Management & Admin Adjustments", () => {
     const { Participants } = await import("@/lib/models/participants");
     const { Rounds } = await import("@/lib/models/rounds");
     const { ObjectId } = await import("mongodb");
-    
+
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Test", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "active", timerEnd: new Date(Date.now() + 10000), finalized: false });
+    const p = await Participants.create({
+      name: "Test",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() + 10000),
+      finalized: false,
+    });
 
     const { POST } = await import("@/app/api/bids/route");
     const bidReq = new Request("http://localhost/api/bids", {
       method: "POST",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${token}` }),
-      body: JSON.stringify({ roundId: r.insertedId.toString(), amount: 400, previousAmount: null }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      }),
+      body: JSON.stringify({
+        roundId: r.insertedId.toString(),
+        amount: 400,
+        previousAmount: null,
+      }),
     });
     await POST(bidReq as unknown as import("next/server").NextRequest);
 
@@ -135,33 +184,62 @@ describe("Budget Management & Admin Adjustments", () => {
     const { Participants } = await import("@/lib/models/participants");
     const { Rounds } = await import("@/lib/models/rounds");
     const { ObjectId } = await import("mongodb");
-    
+
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Test", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "active", timerEnd: new Date(Date.now() + 10000), finalized: false });
+    const p = await Participants.create({
+      name: "Test",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() + 10000),
+      finalized: false,
+    });
 
     const { POST: BidPOST } = await import("@/app/api/bids/route");
     const bidReq = new Request("http://localhost/api/bids", {
       method: "POST",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${token}` }),
-      body: JSON.stringify({ roundId: r.insertedId.toString(), amount: 300, previousAmount: null }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      }),
+      body: JSON.stringify({
+        roundId: r.insertedId.toString(),
+        amount: 300,
+        previousAmount: null,
+      }),
     });
     await BidPOST(bidReq as unknown as import("next/server").NextRequest);
 
     const { POST: EndPOST } = await import("@/app/api/rounds/[id]/end/route");
-    const endReq = new Request(`http://localhost/api/rounds/${r.insertedId.toString()}/end`, {
-      method: "POST",
-      headers: new Headers({ authorization: `Bearer ${admin}` }),
+    const endReq = new Request(
+      `http://localhost/api/rounds/${r.insertedId.toString()}/end`,
+      {
+        method: "POST",
+        headers: new Headers({ authorization: `Bearer ${admin}` }),
+      }
+    );
+    await EndPOST(endReq as unknown as import("next/server").NextRequest, {
+      params: Promise.resolve({ id: r.insertedId.toString() }),
     });
-    await EndPOST(endReq as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: r.insertedId.toString() }) });
 
     // Restart
-    const { POST: RestartPOST } = await import("@/app/api/rounds/[id]/restart/route");
-    const restartReq = new Request(`http://localhost/api/rounds/${r.insertedId.toString()}/restart`, {
-      method: "POST",
-      headers: new Headers({ authorization: `Bearer ${admin}` }),
-    });
-    await RestartPOST(restartReq as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: r.insertedId.toString() }) });
+    const { POST: RestartPOST } = await import(
+      "@/app/api/rounds/[id]/restart/route"
+    );
+    const restartReq = new Request(
+      `http://localhost/api/rounds/${r.insertedId.toString()}/restart`,
+      {
+        method: "POST",
+        headers: new Headers({ authorization: `Bearer ${admin}` }),
+      }
+    );
+    await RestartPOST(
+      restartReq as unknown as import("next/server").NextRequest,
+      { params: Promise.resolve({ id: r.insertedId.toString() }) }
+    );
 
     // Verify budget restored to adjusted amount
     const { Houses } = await import("@/lib/models/houses");

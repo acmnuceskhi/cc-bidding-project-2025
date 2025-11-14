@@ -1,6 +1,6 @@
 /**
  * Round Lifecycle Tests
- * Consolidates: round_flows.test.ts + round_flow_resilience.test.ts + 
+ * Consolidates: round_flows.test.ts + round_flow_resilience.test.ts +
  *               restart_comprehensive.test.ts + restart_idempotence.test.ts
  */
 
@@ -10,20 +10,42 @@ describe("Round Lifecycle Management", () => {
   async function createAdmin() {
     const { Users } = await import("@/lib/models/users");
     const unique = `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const res = await Users.create({ username: unique, password: "hashed", role: "admin" });
-    return generateToken({ userId: res.insertedId.toString(), username: unique, role: "admin" });
+    const res = await Users.create({
+      username: unique,
+      password: "hashed",
+      role: "admin",
+    });
+    return generateToken({
+      userId: res.insertedId.toString(),
+      username: unique,
+      role: "admin",
+    });
   }
 
   async function createHouseAndCaptain() {
     const { Houses } = await import("@/lib/models/houses");
     const { Users } = await import("@/lib/models/users");
     const { ObjectId } = await import("mongodb");
-    
-    const house = await Houses.create({ name: `H-${Date.now()}`, totalBudget: 1000, remainingBudget: 1000 });
+
+    const house = await Houses.create({
+      name: `H-${Date.now()}`,
+      totalBudget: 1000,
+      remainingBudget: 1000,
+    });
     const houseId = house.insertedId.toString();
-    const user = await Users.create({ username: `cap-${Date.now()}`, password: "hash", role: "house_captain", houseId: new ObjectId(houseId) });
-    const token = generateToken({ userId: user.insertedId.toString(), username: "cap", role: "house_captain", houseId });
-    
+    const user = await Users.create({
+      username: `cap-${Date.now()}`,
+      password: "hash",
+      role: "house_captain",
+      houseId: new ObjectId(houseId),
+    });
+    const token = generateToken({
+      userId: user.insertedId.toString(),
+      username: "cap",
+      role: "house_captain",
+      houseId,
+    });
+
     return { houseId, token };
   }
 
@@ -32,19 +54,34 @@ describe("Round Lifecycle Management", () => {
     const { Participants } = await import("@/lib/models/participants");
     const { Rounds } = await import("@/lib/models/rounds");
     const { ObjectId } = await import("mongodb");
-    
+
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Test", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "active", timerEnd: new Date(Date.now() + 10000), finalized: false });
-    
-    return { participantId: p.insertedId.toString(), roundId: r.insertedId.toString() };
+    const p = await Participants.create({
+      name: "Test",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() + 10000),
+      finalized: false,
+    });
+
+    return {
+      participantId: p.insertedId.toString(),
+      roundId: r.insertedId.toString(),
+    };
   }
 
   async function placeBid(token: string, roundId: string, amount: number) {
     const { POST } = await import("@/app/api/bids/route");
     const req = new Request("http://localhost/api/bids", {
       method: "POST",
-      headers: new Headers({ "content-type": "application/json", authorization: `Bearer ${token}` }),
+      headers: new Headers({
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+      }),
       body: JSON.stringify({ roundId, amount, previousAmount: null }),
     });
     return POST(req as unknown as import("next/server").NextRequest);
@@ -56,7 +93,9 @@ describe("Round Lifecycle Management", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${admin}` }),
     });
-    return POST(req as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: roundId }) });
+    return POST(req as unknown as import("next/server").NextRequest, {
+      params: Promise.resolve({ id: roundId }),
+    });
   }
 
   async function restartRound(admin: string, roundId: string) {
@@ -65,7 +104,9 @@ describe("Round Lifecycle Management", () => {
       method: "POST",
       headers: new Headers({ authorization: `Bearer ${admin}` }),
     });
-    return POST(req as unknown as import("next/server").NextRequest, { params: Promise.resolve({ id: roundId }) });
+    return POST(req as unknown as import("next/server").NextRequest, {
+      params: Promise.resolve({ id: roundId }),
+    });
   }
 
   it("complete lifecycle: scheduled → active → completed", async () => {
@@ -75,20 +116,35 @@ describe("Round Lifecycle Management", () => {
     const { ObjectId } = await import("mongodb");
 
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Lifecycle", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    
+    const p = await Participants.create({
+      name: "Lifecycle",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+
     // Scheduled
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "scheduled", timerEnd: null, finalized: false });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "scheduled",
+      timerEnd: null,
+      finalized: false,
+    });
     let round = await Rounds.getById(r.insertedId.toString());
     expect(round?.status).toBe("scheduled");
 
     // Active
-    await Rounds.update(r.insertedId.toString(), { status: "active", timerEnd: new Date(Date.now() + 5000) });
+    await Rounds.update(r.insertedId.toString(), {
+      status: "active",
+      timerEnd: new Date(Date.now() + 5000),
+    });
     round = await Rounds.getById(r.insertedId.toString());
     expect(round?.status).toBe("active");
 
     // Completed
-    await Rounds.update(r.insertedId.toString(), { status: "completed", finalized: true });
+    await Rounds.update(r.insertedId.toString(), {
+      status: "completed",
+      finalized: true,
+    });
     round = await Rounds.getById(r.insertedId.toString());
     expect(round?.status).toBe("completed");
     expect(round?.finalized).toBe(true);
@@ -195,7 +251,7 @@ describe("Round Lifecycle Management", () => {
     ]);
 
     // Both bids should succeed
-    const [r1, r2] = await Promise.all(results.map(r => r.json()));
+    const [r1, r2] = await Promise.all(results.map((r) => r.json()));
     expect(r1.success).toBe(true);
     expect(r2.success).toBe(true);
   });
@@ -208,8 +264,17 @@ describe("Round Lifecycle Management", () => {
 
     const { token } = await createHouseAndCaptain();
     const team = await Teams.create({ rank: 1 });
-    const p = await Participants.create({ name: "Expired", rollNumber: `25K-${Date.now()}`, teamId: new ObjectId(team.insertedId.toString()) });
-    const r = await Rounds.create({ participantId: new ObjectId(p.insertedId.toString()), status: "active", timerEnd: new Date(Date.now() - 1000), finalized: false });
+    const p = await Participants.create({
+      name: "Expired",
+      rollNumber: `25K-${Date.now()}`,
+      teamId: new ObjectId(team.insertedId.toString()),
+    });
+    const r = await Rounds.create({
+      participantId: new ObjectId(p.insertedId.toString()),
+      status: "active",
+      timerEnd: new Date(Date.now() - 1000),
+      finalized: false,
+    });
 
     const res = await placeBid(token, r.insertedId.toString(), 100);
     const json = await res.json();
