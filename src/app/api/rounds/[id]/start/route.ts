@@ -88,8 +88,19 @@ export async function POST(
         });
 
       if (scheduledRounds.length === 0) {
+        // Check if there are completed rounds that could be restarted
+        const completedRounds = allRounds.filter((r) => r.status === "completed");
+        console.log(`No scheduled rounds. Total rounds: ${allRounds.length}, Completed: ${completedRounds.length}`);
+        
         return NextResponse.json(
-          { error: "No scheduled rounds available to start" },
+          { 
+            error: "No scheduled rounds available to start",
+            debug: {
+              totalRounds: allRounds.length,
+              scheduledRounds: 0,
+              completedRounds: completedRounds.length
+            }
+          },
           { status: 404 }
         );
       }
@@ -98,6 +109,7 @@ export async function POST(
       let nextRound = null;
       let team = null;
       let roundNumber = 0;
+      const skippedTeams: string[] = [];
 
       for (let i = 0; i < scheduledRounds.length; i++) {
         const round = scheduledRounds[i];
@@ -108,6 +120,7 @@ export async function POST(
             "Team not found for round:",
             round._id?.toString()
           );
+          skippedTeams.push(`Round ${i + 1}: Team not found`);
           continue;
         }
 
@@ -119,6 +132,7 @@ export async function POST(
             "(Team already assigned to house:",
             t.houseId.toString() + ")"
           );
+          skippedTeams.push(`Team ${t.rank}: Already sold to house ${t.houseId.toString()}`);
           continue;
         }
 
@@ -136,8 +150,15 @@ export async function POST(
       }
 
       if (!nextRound || !team) {
+        console.log("No unsold teams found. Skipped teams:", skippedTeams);
         return NextResponse.json(
-          { error: "No unsold teams available for bidding" },
+          { 
+            error: "No unsold teams available for bidding",
+            debug: {
+              scheduledRounds: scheduledRounds.length,
+              skippedTeams
+            }
+          },
           { status: 404 }
         );
       }
@@ -167,7 +188,8 @@ export async function POST(
     // Get round duration from config
     const { Config } = await import("@/lib/models/config");
     const config = await Config.get();
-    const durationMs = config.roundDurationSeconds * 1000;
+    // Add 3 second buffer to compensate for network/processing latency
+    const durationMs = (config.roundDurationSeconds + 3) * 1000;
     const timerEnd = new Date(Date.now() + durationMs);
 
     // Update the round

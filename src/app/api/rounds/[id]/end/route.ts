@@ -56,11 +56,11 @@ export async function POST(
     // This is the definitive list of final bids.
     const bids = await Bids.getLatestBidPerHouseForRound(id);
 
-    // 🚫 No bids case — mark as completed & skipped (eligible for second pass)
+    // 🚫 No bids case — reset to scheduled so it can be started again
     if (bids.length === 0) {
       await Rounds.update(id, {
-        status: "completed",
-        timerEnd: new Date(),
+        status: "scheduled",
+        timerEnd: null,
         finalized: false,
         winningBid: undefined,
         skipped: true,
@@ -70,7 +70,7 @@ export async function POST(
         success: true,
         winningBid: null,
         allBids: [],
-        message: "Round completed with no bids (skipped).",
+        message: "Round ended with no bids. Reset to scheduled for retry.",
       });
     }
 

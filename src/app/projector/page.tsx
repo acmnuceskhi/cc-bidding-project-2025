@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 
 interface Team {
@@ -42,10 +42,66 @@ interface Status {
   winner?: WinnerData;
 }
 
-// Waiting Screen Component with Video
+// Waiting Screen Component with Video and Typewriter
 function WaitingScreen() {
+  const [displayText, setDisplayText] = useState("");
+  const [audioStarted, setAudioStarted] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fullText = "Waiting for admin to start the next round...";
+
+  // Function to start audio
+  const startAudio = () => {
+    if (!audioStarted && !audioRef.current) {
+      const audio = new Audio("/oogway-ascends.mp3");
+      audio.loop = true;
+      audio.volume = 0.5;
+      audioRef.current = audio;
+      
+      audio.play().then(() => {
+        console.log("🎵 Music started!");
+        setAudioStarted(true);
+      }).catch((err) => {
+        console.log("Audio play failed:", err);
+      });
+    }
+  };
+
+  useEffect(() => {
+    // Typewriter effect
+    let currentIndex = 0;
+    const typingInterval = setInterval(() => {
+      if (currentIndex <= fullText.length) {
+        setDisplayText(fullText.slice(0, currentIndex));
+        currentIndex++;
+      } else {
+        clearInterval(typingInterval);
+      }
+    }, 80); // 80ms per character
+
+    // Add event listeners for any user interaction
+    const events = ['click', 'touchstart', 'keydown', 'mousemove'];
+    events.forEach(event => {
+      document.addEventListener(event, startAudio, { once: true });
+    });
+
+    return () => {
+      clearInterval(typingInterval);
+      events.forEach(event => {
+        document.removeEventListener(event, startAudio);
+      });
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-black relative flex items-center justify-center overflow-hidden">
+    <div 
+      className="min-h-screen bg-black relative flex items-center justify-center overflow-hidden cursor-pointer"
+      onClick={startAudio}
+      onTouchStart={startAudio}
+    >
       {/* Full Screen Video */}
       <video
         autoPlay
@@ -57,14 +113,20 @@ function WaitingScreen() {
         <source src="/waiting-video.mp4" type="video/mp4" />
       </video>
 
-      {/* Optional overlay text (you can remove this if you want just the video) */}
-      <div className="relative z-10 text-center">
-        <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#000000]">
+      {/* Overlay with typewriter text */}
+      <div className="relative z-10 text-center px-8">
+        <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#000000] animate-pulse">
           CC Bidding System
         </h1>
-        <p className="text-3xl sm:text-4xl text-white drop-shadow-[0_0_20px_#000000]">
-          Waiting for admin to start the next round...
+        <p className="text-3xl sm:text-4xl text-white drop-shadow-[0_0_20px_#000000] font-mono min-h-[3rem]">
+          {displayText}
+          <span className="animate-pulse">|</span>
         </p>
+        {!audioStarted && displayText.length > 0 && (
+          <p className="text-sm text-gray-400 mt-8 animate-pulse">
+            Click or tap anywhere to enable sound
+          </p>
+        )}
       </div>
     </div>
   );
