@@ -33,7 +33,7 @@ export default function AdminLayout({
   const tabs = [
     { name: "Overview", path: "/admin/overview", icon: "📊" },
     { name: "Houses", path: "/admin/houses", icon: "🏯" },
-    { name: "Players", path: "/admin/players", icon: "🥋" },
+    { name: "Teams", path: "/admin/teams", icon: "🥋" },
     { name: "Rounds", path: "/admin/rounds", icon: "⏱️" },
   ];
 
