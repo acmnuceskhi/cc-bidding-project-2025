@@ -4,6 +4,7 @@ import "./globals.css";
 // import NavigationLoader from "@/components/NavigationLoader";
 import TopLoadingBar from "@/components/TopLoadingBar";
 import { ToastProvider } from "@/components/ToastProvider";
+import { Suspense } from "react";
 
 // Optional full screen loader implemented by NavigationLoader
 
@@ -32,7 +33,9 @@ export default function RootLayout({
       >
         <ToastProvider>
           {/* <NavigationLoader /> */}
-          <TopLoadingBar />
+          <Suspense fallback={null}>
+            <TopLoadingBar />
+          </Suspense>
           {children}
         </ToastProvider>
       </body>
