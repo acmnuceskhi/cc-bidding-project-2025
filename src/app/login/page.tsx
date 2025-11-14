@@ -150,15 +150,15 @@ export default function LoginPage() {
           </p>
           <div className="space-y-1 text-xs">
             <p>
-              <strong>Admin:</strong> admin / admin123
+              <strong>Admin:</strong> admin
             </p>
             <p className="mt-2 font-semibold text-[#00A6FF] drop-shadow-[0_0_3px_#FFD700]">
               House Captains:
             </p>
-            <p>captain_lord_shen / captain123</p>
-            <p>captain_dragon_warrior / captain123</p>
-            <p>captain_master_oogway / captain123</p>
-            <p>captain_tai_lung / captain123</p>
+            <p>captain_lord_shen</p>
+            <p>captain_dragon_warrior</p>
+            <p>captain_master_oogway</p>
+            <p>captain_tai_lung</p>
           </div>
         </div>
       </div>
