@@ -364,35 +364,55 @@ export default function OverviewPage() {
     new Promise((resolve) => setTimeout(resolve, ms));
 
   const handleReStartRound = async () => {
-    if (!activeRound?._id) return;
-    const res = await fetchWithAuth(
-      `/api/rounds/${activeRound._id.toString()}/restart`,
-      { method: "POST" }
-    );
-    const response = await res.json();
-    if (response.canRestart === true) {
-      await delay(5000);
-      if (isStartingRound) return;
-      setIsStartingRound(true);
-      try {
-        const response = await fetchWithAuth(
-          `/api/rounds/${activeRound._id.toString()}/start`,
-          {
-            method: "POST",
-          }
-        );
-        const result = await response.json();
-        if (!response.ok) {
-          setIsStartingRound(false);
-          alert(result.error || result.message || "Failed to start round");
-          return;
-        }
-        setIsStartingRound(false);
-      } catch (e: any) {
-        console.error(e);
-        alert(e.message || "Failed to start round");
-        setIsStartingRound(false);
+    if (!activeRound?._id) {
+      alert("No active round to restart");
+      return;
+    }
+
+    if (isStartingRound) return;
+    setIsStartingRound(true);
+
+    try {
+      // Step 1: Restart the round (refund bids, reset state)
+      const restartRes = await fetchWithAuth(
+        `/api/rounds/${activeRound._id.toString()}/restart`,
+        { method: "POST" }
+      );
+      const restartData = await restartRes.json();
+
+      if (!restartRes.ok) {
+        throw new Error(restartData.error || "Failed to restart round");
       }
+
+      if (!restartData.canRestart) {
+        alert(restartData.message || "Round cannot be restarted");
+        setIsStartingRound(false);
+        return;
+      }
+
+      // Step 2: Wait a moment for the restart to complete
+      await delay(1000);
+
+      // Step 3: Start the round again
+      const startRes = await fetchWithAuth(
+        `/api/rounds/${activeRound._id.toString()}/start`,
+        { method: "POST" }
+      );
+      const startData = await startRes.json();
+
+      if (!startRes.ok) {
+        throw new Error(startData.error || startData.message || "Failed to start round");
+      }
+
+      // Step 4: Refresh the overview data
+      await fetchOverviewData();
+      
+      alert("Round restarted successfully!");
+    } catch (e: any) {
+      console.error("Error restarting round:", e);
+      alert(e.message || "Failed to restart round");
+    } finally {
+      setIsStartingRound(false);
     }
   };
 
