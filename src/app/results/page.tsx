@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
-interface Participant {
-  _id: string;
-  name: string;
-  picture?: string;
+interface Team {
+  teamId: string;
+  rank: number;
+  batch: string;
+  memberCount: number;
   houseId?: string;
+  successfulAttempts?: number;
+  totalPoints?: number;
 }
 
-interface PlayerWithDetails extends Participant {
-  participantId: string;
+interface TeamWithDetails extends Team {
   status: "available" | "sold";
   soldTo?: string;
   soldToHouseName?: string;
@@ -28,37 +30,37 @@ interface House {
   color?: string;
 }
 
-interface HouseWithPlayers extends House {
-  players: PlayerWithDetails[];
+interface HouseWithTeams extends House {
+  teams: TeamWithDetails[];
 }
 
 export default function FinalTeamsPage() {
-  const [houses, setHouses] = useState<HouseWithPlayers[]>([]);
+  const [houses, setHouses] = useState<HouseWithTeams[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
-        const [housesRes, participantsRes] = await Promise.all([
+        const [housesRes, teamsRes] = await Promise.all([
           fetchWithAuth("/api/houses", { method: "GET" }),
-          fetchWithAuth("/api/participants", { method: "GET" }),
+          fetchWithAuth("/api/teams", { method: "GET" }),
         ]);
 
-        const [housesData, participantsData]: [House[], PlayerWithDetails[]] =
-          await Promise.all([housesRes.json(), participantsRes.json()]);
+        const [housesData, teamsData]: [House[], TeamWithDetails[]] =
+          await Promise.all([housesRes.json(), teamsRes.json()]);
 
-        // Assign participants to their respective houses
-        const housesWithPlayers: HouseWithPlayers[] = housesData.map(
+        // Assign teams to their respective houses
+        const housesWithTeams: HouseWithTeams[] = housesData.map(
           (house) => ({
             ...house,
-            players: participantsData.filter(
-              (p) => p.houseId && String(p.houseId) === String(house._id)
+            teams: teamsData.filter(
+              (t) => t.houseId && String(t.houseId) === String(house._id)
             ),
           })
         );
 
-        setHouses(housesWithPlayers);
+        setHouses(housesWithTeams);
       } catch (error) {
         console.error("Failed to fetch final teams data:", error);
       } finally {
@@ -99,34 +101,48 @@ export default function FinalTeamsPage() {
                   House of {house.name}
                 </h2>
 
-                {house.players.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-2 text-sm text-gray-200">
-                    {house.players.map((player, pIndex) => (
+                {house.teams.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3 text-sm text-gray-200">
+                    {house.teams.map((team, tIndex) => (
                       <div
                         key={
-                          player.participantId ||
-                          `player-${player.name}-${pIndex}`
+                          team.teamId ||
+                          `team-${team.rank}-${tIndex}`
                         }
-                        className="p-2 bg-black/30 rounded-md border border-white/10 hover:bg-black/50 transition-all"
+                        className="p-3 bg-black/30 rounded-lg border border-white/10 hover:bg-black/50 transition-all"
                       >
-                        {player.picture ? (
-                          <div className="flex items-center space-x-2">
-                            <img
-                              src={player.picture}
-                              alt={player.name}
-                              className="w-8 h-8 rounded-full border border-white/40"
-                            />
-                            <span>{player.name}</span>
+                        <div className="flex items-center space-x-3">
+                          {/* Team Rank Badge */}
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center flex-shrink-0 border-2 border-white/40">
+                            <span className="text-lg font-bold text-black">#{team.rank}</span>
                           </div>
-                        ) : (
-                          <span>{player.name}</span>
-                        )}
+                          <div className="flex-1">
+                            <div className="font-bold text-white">Team #{team.rank}</div>
+                            <div className="text-xs text-gray-300">
+                              Batch: {team.batch} • {team.memberCount} members
+                            </div>
+                            {(team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
+                              <div className="flex gap-3 mt-1 text-xs">
+                                {team.successfulAttempts !== undefined && (
+                                  <span className="text-green-400">
+                                    ✓ {team.successfulAttempts} solved
+                                  </span>
+                                )}
+                                {team.totalPoints !== undefined && (
+                                  <span className="text-yellow-400">
+                                    ★ {team.totalPoints} pts
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <p className="text-gray-400 italic mt-2">
-                    No players assigned yet
+                    No teams assigned yet
                   </p>
                 )}
               </div>

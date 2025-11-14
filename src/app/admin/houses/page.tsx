@@ -2,25 +2,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-// import { House } from "@/lib/models/houses";
-import { Participant } from "@/lib/models/participants";
-import { fetchWithAuth } from "@/lib/fetchWithAuth"; // make sure this exists
+import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
-interface PlayerWithPrice extends Participant {
-  purchasePrice?: number;
+interface Team {
+  teamId: string;
+  rank: number;
+  batch: string;
+  memberCount: number;
+  houseId?: string;
 }
 
-interface filteredParticipant {
-  participantId: string;
-  name: string;
-  picture?: string;
-  houseId: string;
+interface TeamWithPrice extends Team {
   purchasePrice?: number;
 }
 
 interface Round {
   _id: string;
-  participantId: string;
+  teamId: string;
   winningHouseId: string;
   winningBid: number;
 }
@@ -34,8 +32,8 @@ interface House {
 
 export default function HousesPage() {
   const [houses, setHouses] = useState<House[]>([]);
-  const [housePlayers, setHousePlayers] = useState<
-    Record<string, filteredParticipant[]>
+  const [houseTeams, setHouseTeams] = useState<
+    Record<string, TeamWithPrice[]>
   >({});
   const [hasActiveRound, setHasActiveRound] = useState(false);
   const [editingHouse, setEditingHouse] = useState<string | null>(null);
@@ -75,12 +73,11 @@ export default function HousesPage() {
         const statusData = await statusResponse.json();
         setHasActiveRound(statusData.roundStatus === "active");
 
-        // Fetch participants
-        const participantsResponse = await fetchWithAuth("/api/participants", {
+        // Fetch teams
+        const teamsResponse = await fetchWithAuth("/api/teams", {
           method: "GET",
         });
-        const participantsData: filteredParticipant[] =
-          await participantsResponse.json();
+        const teamsData: Team[] = await teamsResponse.json();
 
         // Fetch rounds
         const roundsResponse = await fetchWithAuth("/api/rounds", {
@@ -88,50 +85,56 @@ export default function HousesPage() {
         });
         const roundsData: Round[] = await roundsResponse.json();
 
-        // Create a map of participantId -> winning bid
-        const participantPriceMap: Record<string, number> = {};
+        // Ensure roundsData is an array
+        if (!Array.isArray(roundsData)) {
+          console.error("Rounds API did not return an array:", roundsData);
+          return;
+        }
+
+        // Create a map of teamId -> winning bid
+        const teamPriceMap: Record<string, number> = {};
         roundsData.forEach((round) => {
-          const pid =
-            typeof round.participantId === "object"
-              ? round.participantId
-              : round.participantId;
-          if (pid) {
-            participantPriceMap[pid] = round.winningBid ?? 0; // fallback to 0 if undefined
+          const tid =
+            typeof round.teamId === "object"
+              ? round.teamId
+              : round.teamId;
+          if (tid) {
+            teamPriceMap[tid] = round.winningBid ?? 0;
           }
         });
 
-        // Group participants by houseId
-        const grouped: Record<string, filteredParticipant[]> = {};
+        // Group teams by houseId
+        const grouped: Record<string, TeamWithPrice[]> = {};
         housesData.forEach((house) => {
           const houseId =
             typeof house.houseId === "object" ? house.houseId : house.houseId;
           if (houseId) grouped[houseId] = [];
         });
 
-        participantsData.forEach((p) => {
-          if (p.houseId) {
+        teamsData.forEach((t) => {
+          if (t.houseId) {
             const houseKey =
-              typeof p.houseId === "object" ? p.houseId : p.houseId;
+              typeof t.houseId === "object" ? t.houseId : t.houseId;
             if (!houseKey) return;
 
             if (!grouped[houseKey]) grouped[houseKey] = [];
 
-            const participantId =
-              typeof p.participantId === "object"
-                ? p.participantId
-                : p.participantId;
+            const teamId =
+              typeof t.teamId === "object"
+                ? t.teamId
+                : t.teamId;
             grouped[houseKey].push({
-              ...p,
-              purchasePrice: participantId
-                ? participantPriceMap[participantId] || 0
+              ...t,
+              purchasePrice: teamId
+                ? teamPriceMap[teamId] || 0
                 : 0,
             });
           }
         });
 
-        setHousePlayers(grouped);
+        setHouseTeams(grouped);
       } catch (err) {
-        console.error("Failed to fetch houses, participants, or rounds", err);
+        console.error("Failed to fetch houses, teams, or rounds", err);
       }
     };
 
@@ -199,13 +202,13 @@ export default function HousesPage() {
           🏯 House Rosters
         </h1>
         <p className="text-gray-300">
-          View all houses and their acquired warriors
+          View all houses and their acquired teams
         </p>
       </div>
 
       <div className="space-y-6">
         {houses.map((house, index) => {
-          const players = housePlayers[house.houseId?.toString() || ""] || [];
+          const teams = houseTeams[house.houseId?.toString() || ""] || [];
           const totalSpent = house.totalBudget - house.remainingBudget;
           const percentage = house.totalBudget
             ? (house.remainingBudget / house.totalBudget) * 100
@@ -233,7 +236,7 @@ export default function HousesPage() {
                       {house.name}
                     </h2>
                     <p className="text-gray-200 text-lg">
-                      {players.length} warrior{players.length !== 1 ? "s" : ""}{" "}
+                      {teams.length} team{teams.length !== 1 ? "s" : ""}{" "}
                       recruited
                     </p>
                   </div>
@@ -264,39 +267,39 @@ export default function HousesPage() {
                   </div>
                 </div>
 
-                {/* Players Grid */}
-                {players.length > 0 ? (
+                {/* Teams Grid */}
+                {teams.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {players.map((player, idx) => (
+                    {teams.map((team, idx) => (
                       <div
                         key={
-                          player.participantId ||
-                          `player-${house.houseId}-${idx}`
+                          team.teamId ||
+                          `team-${house.houseId}-${idx}`
                         }
                         className="bg-black/60 rounded-xl p-4 border-2 border-[#FFD700]/50 hover:border-[#FFD700] transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(255,215,0,0.2)] hover:shadow-[0_0_25px_rgba(255,215,0,0.4)] backdrop-blur-sm"
                       >
                         <div className="flex items-center gap-4">
-                          {player.picture && (
-                            <img
-                              src={player.picture}
-                              alt={player.name}
-                              className="w-16 h-16 rounded-full border-2 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.5)]"
-                            />
-                          )}
+                          {/* Team Rank Badge */}
+                          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center border-2 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.5)] flex-shrink-0">
+                            <span className="text-2xl font-bold text-black">#{team.rank}</span>
+                          </div>
                           <div className="flex-1">
                             <h3 className="text-lg font-bold text-white drop-shadow-[0_0_10px_#000000]">
-                              {player.name}
+                              Team #{team.rank}
                             </h3>
-                            {player.purchasePrice !== undefined && (
+                            <p className="text-sm text-gray-300">
+                              Batch: {team.batch}
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {team.memberCount} members
+                            </p>
+                            {team.purchasePrice !== undefined && (
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-xl sm:text-2xl font-bold text-green-400 drop-shadow-[0_0_10px_#22C55E]">
-                                  ${player.purchasePrice}
+                                  ${team.purchasePrice}
                                 </span>
                               </div>
                             )}
-                            <p className="text-xs text-gray-300 mt-1">
-                              Acquired Warrior
-                            </p>
                           </div>
                         </div>
                       </div>
@@ -305,7 +308,7 @@ export default function HousesPage() {
                 ) : (
                   <div className="text-center py-12 bg-black/40 rounded-xl border-2 border-dashed border-gray-600 backdrop-blur-sm">
                     <p className="text-xl text-gray-400">
-                      No warriors recruited yet
+                      No teams recruited yet
                     </p>
                     <p className="text-sm text-gray-500 mt-2">
                       Start bidding to build your roster!

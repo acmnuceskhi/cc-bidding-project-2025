@@ -17,7 +17,7 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "CC Bidding System",
   description:
-    "College Championship Bidding Platform - Real-time auction system for participant selection",
+    "College Championship Bidding Platform - Real-time auction system for team selection",
 };
 
 export default function RootLayout({

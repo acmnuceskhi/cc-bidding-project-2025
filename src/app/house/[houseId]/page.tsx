@@ -4,14 +4,18 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { House } from "@/lib/models/houses";
-import { Participant } from "@/lib/models/participants";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useToast } from "@/components/ToastProvider";
 
-interface ParticipantWithDetails extends Participant {
-  batch?: string;
-  universityId?: string;
+interface Team {
+  teamId: string;
+  rank: number;
+  batch: string;
+  memberCount: number;
+  successfulAttempts?: number;
+  totalPoints?: number;
+  timeTaken?: number;
 }
 
 interface HouseApiResponse {
@@ -24,7 +28,7 @@ interface HouseApiResponse {
 interface filteredRound {
   _id: string;
   roundId: string;
-  participantId: string;
+  teamId: string;
   status: "scheduled" | "active" | "completed";
   timerEnd?: string;
   scheduledStart?: string;
@@ -39,8 +43,8 @@ export default function HouseDashboard() {
   const [activeRound, setActiveRound] = useState<
     (filteredRound & { roundNumber?: number }) | null
   >(null);
-  const [currentParticipant, setCurrentParticipant] =
-    useState<ParticipantWithDetails | null>(null);
+  const [currentTeam, setCurrentTeam] =
+    useState<Team | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [currentBid, setCurrentBid] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -95,18 +99,18 @@ export default function HouseDashboard() {
             setActiveRound({
               _id: statusData.roundId,
               roundId: statusData.roundId,
-              participantId: statusData.participant?.participantId || "",
+              teamId: statusData.team?.teamId || "",
               status: "active",
               timerEnd: serverTimerEnd.toISOString(),
               roundNumber: statusData.roundNumber,
             });
 
-            setCurrentParticipant(statusData.participant || null);
+            setCurrentTeam(statusData.team || null);
 
-            if (selectedHouse && statusData.participant?.participantId) {
+            if (selectedHouse && statusData.team?.teamId) {
               try {
                 const canBidRes = await fetchWithAuth(
-                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?participantId=${statusData.participant.participantId}`,
+                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?teamId=${statusData.team.teamId}`,
                   { cache: "no-store" }
                 );
                 const canBidData = await canBidRes.json();
@@ -143,12 +147,12 @@ export default function HouseDashboard() {
             }
           } else {
             setActiveRound(null);
-            setCurrentParticipant(null);
+            setCurrentTeam(null);
             setCurrentBid(null);
           }
         } else {
           setActiveRound(null);
-          setCurrentParticipant(null);
+          setCurrentTeam(null);
           setCurrentBid(null);
           setTimeLeft(0);
         }
@@ -156,7 +160,7 @@ export default function HouseDashboard() {
         console.error("Failed to fetch house data:", error);
         setHouse(null);
         setActiveRound(null);
-        setCurrentParticipant(null);
+        setCurrentTeam(null);
         setTimeLeft(0);
       }
     };
@@ -180,7 +184,7 @@ export default function HouseDashboard() {
   const toast = useToast();
 
   const placeBid = async () => {
-    if (!activeRound || !currentParticipant || !house || bidAmount <= 0) return;
+    if (!activeRound || !currentTeam || !house || bidAmount <= 0) return;
     setLoading(true);
 
     const toastId = toast.show("Placing bid…", { type: "info" });
@@ -365,7 +369,7 @@ export default function HouseDashboard() {
             </div>
           </div>
 
-          {activeRound && currentParticipant ? (
+          {activeRound && currentTeam ? (
             <div className="space-y-6 sm:space-y-8">
               {/* Enhanced Round Info */}
               <div className="bg-gradient-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
@@ -398,52 +402,53 @@ export default function HouseDashboard() {
                 </div>
               </div>
 
-              {/* Enhanced Player Info */}
+              {/* Enhanced Team Info */}
               <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
-                  🥋 WARRIOR UP FOR BIDDING
+                  👥 TEAM UP FOR BIDDING
                 </h2>
                 <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
-                  {/* Player Picture */}
+                  {/* Team Rank Badge */}
                   <div className="relative flex-shrink-0">
-                    {currentParticipant.picture ? (
-                      <img
-                        src={currentParticipant.picture}
-                        alt={currentParticipant.name}
-                        className="w-32 h-32 sm:w-48 sm:h-48 object-cover rounded-full border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]"
-                      />
-                    ) : (
-                      <div className="w-32 h-32 sm:w-48 sm:h-48 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)] flex items-center justify-center">
-                        <span className="text-4xl sm:text-6xl">👤</span>
-                      </div>
-                    )}
-                    {currentParticipant.batch && (
-                      <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-4 sm:px-6 py-2 rounded-full border-2 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]">
-                        <span className="text-[#FFD700] font-bold text-sm sm:text-lg">
-                          {currentParticipant.batch}
-                        </span>
-                      </div>
-                    )}
+                    <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
+                      <span className="text-5xl sm:text-7xl font-bold text-black">#{currentTeam.rank}</span>
+                    </div>
+                    <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-4 sm:px-6 py-2 rounded-full border-2 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]">
+                      <span className="text-[#FFD700] font-bold text-sm sm:text-lg">
+                        Batch {currentTeam.batch}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Player Details */}
+                  {/* Team Details */}
                   <div className="flex-1 space-y-3 text-center sm:text-left w-full">
                     <h3 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF]">
-                      {currentParticipant.name}
+                      Team #{currentTeam.rank}
                     </h3>
-                    {currentParticipant.universityId && (
-                      <div className="flex items-center justify-center sm:justify-start gap-3">
-                        <span className="bg-[#FFD700]/20 text-[#FFD700] px-4 py-2 rounded-lg font-bold text-lg sm:text-xl border border-[#FFD700]/50 shadow-[0_0_15px_rgba(255,215,0,0.3)]">
-                          🎓 {currentParticipant.universityId}
-                        </span>
-                      </div>
-                    )}
-                    {currentParticipant.batch && (
-                      <div className="text-lg sm:text-xl text-gray-300">
-                        📚 Year:{" "}
-                        <span className="text-[#FFD700] font-semibold">
-                          {currentParticipant.batch}
-                        </span>
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                      <span className="bg-[#FFD700]/20 text-[#FFD700] px-4 py-2 rounded-lg font-bold text-lg sm:text-xl border border-[#FFD700]/50 shadow-[0_0_15px_rgba(255,215,0,0.3)]">
+                        👥 {currentTeam.memberCount} members
+                      </span>
+                      <span className="bg-[#FFD700]/20 text-[#FFD700] px-4 py-2 rounded-lg font-bold text-lg sm:text-xl border border-[#FFD700]/50 shadow-[0_0_15px_rgba(255,215,0,0.3)]">
+                        📚 Batch {currentTeam.batch}
+                      </span>
+                    </div>
+                    
+                    {/* Optional Team Performance Stats */}
+                    {(currentTeam.successfulAttempts !== undefined || currentTeam.totalPoints !== undefined) && (
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-4">
+                        {currentTeam.successfulAttempts !== undefined && (
+                          <div className="bg-green-900/30 border border-green-500/50 rounded-lg px-4 py-2">
+                            <div className="text-xs text-green-300">Problems Solved</div>
+                            <div className="text-2xl font-bold text-green-400">{currentTeam.successfulAttempts}</div>
+                          </div>
+                        )}
+                        {currentTeam.totalPoints !== undefined && (
+                          <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg px-4 py-2">
+                            <div className="text-xs text-yellow-300">Total Points</div>
+                            <div className="text-2xl font-bold text-[#FFD700]">{currentTeam.totalPoints}</div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

@@ -1,16 +1,17 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { House } from "@/lib/models/houses";
-import { Participant } from "@/lib/models/participants";
+import { Team } from "@/lib/models/teams";
 import { Round } from "@/lib/models/rounds";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 
 interface WinnerData {
-  participantName: string;
-  participantPicture?: string;
+  teamName: string;
+  teamBatch?: string;
+  memberCount?: number;
   houseName: string;
   amount: number;
 }
@@ -20,8 +21,8 @@ export default function OverviewPage() {
   const [activeRound, setActiveRound] = useState<Round | null>(null);
   // Track last active round ID to detect silent transitions
   const lastActiveRoundIdRef = useRef<string | null>(null);
-  const [currentParticipant, setCurrentParticipant] =
-    useState<Participant | null>(null);
+  const [currentTeam, setCurrentTeam] =
+    useState<Team | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [roundNumber, setRoundNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -32,14 +33,14 @@ export default function OverviewPage() {
   // Prevent repeatedly showing the winner modal across polling cycles
   const winnerShownRef = useRef<boolean>(false);
 
-  // Use ref to capture current participant without causing re-renders
-  const currentParticipantRef = useRef<Participant | null>(null);
+  // Use ref to capture current team without causing re-renders
+  const currentTeamRef = useRef<Team | null>(null);
   // Server time hook not needed directly; countdown uses its own
 
-  // Update ref when currentParticipant changes
+  // Update ref when currentTeam changes
   useEffect(() => {
-    currentParticipantRef.current = currentParticipant;
-  }, [currentParticipant]);
+    currentTeamRef.current = currentTeam;
+  }, [currentTeam]);
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -87,15 +88,16 @@ export default function OverviewPage() {
           "🏆 Server detected round end with winner:",
           statusData.winner
         );
-        // Use participant from current state ref OR from status data
+        // Use team from current state ref OR from status data
 
-        const participant =
-          currentParticipantRef.current || statusData.participant;
-        console.log("📝 Using participant for winner modal:", participant);
+        const team =
+          currentTeamRef.current || statusData.team;
+        console.log("📝 Using team for winner modal:", team);
 
         setWinnerData({
-          participantName: participant?.name || "Unknown",
-          participantPicture: participant?.picture,
+          teamName: `Team ${team?.rank || "?"}`,
+          teamBatch: team?.batch,
+          memberCount: team?.memberCount,
           houseName: statusData.winner.houseName,
           amount: statusData.winner.amount,
         });
@@ -122,14 +124,14 @@ export default function OverviewPage() {
         if (serverTimerEnd) {
           setActiveRound({
             _id: statusData.roundId,
-            participantId: statusData.participant.participantId,
+            teamId: statusData.team?.teamId,
             status: statusData.roundStatus,
             timerEnd: serverTimerEnd,
             bids: [],
           } as any);
           lastActiveRoundIdRef.current = statusData.roundId;
 
-          setCurrentParticipant(statusData.participant || null);
+          setCurrentTeam(statusData.team || null);
           setRoundNumber(statusData.roundNumber || null);
           winnerShownRef.current = false;
 
@@ -164,7 +166,7 @@ export default function OverviewPage() {
           }
         } else {
           setActiveRound(null);
-          setCurrentParticipant(null);
+          setCurrentTeam(null);
           setCurrentBids([]);
           setRoundNumber(null);
         }
@@ -219,25 +221,28 @@ export default function OverviewPage() {
                     }
                   }
                 }
-                const participantsResp = await fetchWithAuth(
-                  "/api/participants",
+                const teamsResp = await fetchWithAuth(
+                  "/api/teams",
                   { cache: "no-store" }
                 );
-                let participantName = "Unknown";
-                let participantPicture: string | undefined = undefined;
-                if (participantsResp.ok) {
-                  const participantsList = await participantsResp.json();
-                  const pMatch = participantsList.find(
-                    (p: any) => p.participantId === targetRound.participantId
+                let teamName = "Unknown Team";
+                let teamBatch: string | undefined = undefined;
+                let memberCount: number | undefined = undefined;
+                if (teamsResp.ok) {
+                  const teamsList = await teamsResp.json();
+                  const tMatch = teamsList.find(
+                    (t: any) => t.teamId === targetRound.teamId
                   );
-                  if (pMatch) {
-                    participantName = pMatch.name;
-                    participantPicture = pMatch.picture;
+                  if (tMatch) {
+                    teamName = `Team ${tMatch.rank}`;
+                    teamBatch = tMatch.batch;
+                    memberCount = tMatch.memberCount;
                   }
                 }
                 setWinnerData({
-                  participantName,
-                  participantPicture,
+                  teamName,
+                  teamBatch,
+                  memberCount,
                   houseName,
                   amount: targetRound.winningBid,
                 });
@@ -260,7 +265,7 @@ export default function OverviewPage() {
           }
         }
         setActiveRound(null);
-        setCurrentParticipant(null);
+        setCurrentTeam(null);
         setRoundNumber(null);
       }
     } catch (error) {
@@ -329,10 +334,11 @@ export default function OverviewPage() {
           "Manual end - showing winner modal for:",
           result.winningBid
         );
-        const participant = currentParticipantRef.current;
+        const team = currentTeamRef.current;
         setWinnerData({
-          participantName: participant?.name || "Unknown",
-          participantPicture: participant?.picture,
+          teamName: `Team ${team?.rank || "?"}`,
+          teamBatch: team?.batch,
+          memberCount: undefined, // Will need to calculate if needed
           houseName: result.winningBid.houseName,
           amount: result.winningBid.amount,
         });
@@ -348,7 +354,7 @@ export default function OverviewPage() {
       }
 
       setActiveRound(null);
-      setCurrentParticipant(null);
+      setCurrentTeam(null);
       setTimeLeft(0);
 
       setTimeout(async () => {
@@ -416,10 +422,6 @@ export default function OverviewPage() {
     }
   };
 
-  const handleViewFullStats = () => {
-    window.location.href = "/rounds";
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen text-yellow-400 text-3xl">
@@ -465,24 +467,22 @@ export default function OverviewPage() {
               </div>
             </div>
 
-            {currentParticipant && (
+            {currentTeam && (
               <div className="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-xl p-6 text-center">
                 <h3 className="text-xl sm:text-2xl font-bold text-black mb-4">
-                  🥋 Current Warrior
+                  👥 Current Team
                 </h3>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-                  {currentParticipant.picture && (
-                    <img
-                      src={currentParticipant.picture}
-                      alt={currentParticipant.name}
-                      className="w-24 h-24 rounded-full border-4 border-black shadow-lg"
-                    />
-                  )}
-                  <div className="text-center sm:text-left">
+                <div className="flex flex-col items-center justify-center gap-4">
+                  <div className="text-center">
                     <p className="text-2xl sm:text-3xl font-bold text-black">
-                      {currentParticipant.name}
+                      Team #{currentTeam.rank || roundNumber || "?"}
                     </p>
-                    <p className="text-black text-opacity-80">
+                    {currentTeam.batch && (
+                      <p className="text-lg text-black text-opacity-90">
+                        Batch: {currentTeam.batch}
+                      </p>
+                    )}
+                    <p className="text-black text-opacity-80 mt-2">
                       Awaiting house bids...
                     </p>
                   </div>
@@ -634,16 +634,20 @@ export default function OverviewPage() {
               </h1>
 
               <div className="bg-black/60 rounded-2xl p-8 mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)]">
-                {winnerData.participantPicture && (
-                  <img
-                    src={winnerData.participantPicture}
-                    alt={winnerData.participantName}
-                    className="w-32 h-32 sm:w-48 sm:h-48 rounded-full border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)] mx-auto mb-6"
-                  />
-                )}
-                <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4 drop-shadow-[0_0_20px_#FFFFFF]">
-                  {winnerData.participantName}
+                <div className="text-7xl mb-6">👥</div>
+                <h2 className="text-4xl sm:text-5xl font-bold text-white mb-2 drop-shadow-[0_0_20px_#FFFFFF]">
+                  {winnerData.teamName}
                 </h2>
+                {winnerData.teamBatch && (
+                  <p className="text-xl text-gray-300 mb-2">
+                    Batch {winnerData.teamBatch}
+                  </p>
+                )}
+                {winnerData.memberCount && (
+                  <p className="text-lg text-gray-400 mb-4">
+                    {winnerData.memberCount} members
+                  </p>
+                )}
                 <p className="text-2xl sm:text-3xl text-gray-300">
                   has been won by
                 </p>

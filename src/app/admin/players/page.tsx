@@ -2,25 +2,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Participant } from "@/lib/models/participants";
-// import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
-interface PlayerWithDetails extends Participant {
-  participantId: string;
+interface TeamWithDetails {
+  teamId: string;
+  rank: number;
+  batch?: string;
+  memberCount: number;
   status: "available" | "sold";
-  soldTo?: string;
   soldToHouseName?: string;
   soldPrice?: number;
   roundNumber?: number;
+  houseId?: string;
 }
 
 interface Round {
   _id: string;
-  participantId: string;
-  winningHouseId?: string;
+  teamId: string;
   winningBid?: number;
   roundNumber: number;
+  finalized?: boolean;
 }
 
 interface House {
@@ -30,11 +31,19 @@ interface House {
   remainingBudget: number;
 }
 
-export default function PlayersPage() {
-  const [players, setPlayers] = useState<PlayerWithDetails[]>([]);
+interface Team {
+  teamId: string;
+  rank: number;
+  batch?: string;
+  memberCount: number;
+  houseId?: string;
+}
+
+export default function TeamsPage() {
+  const [teams, setTeams] = useState<TeamWithDetails[]>([]);
   const [sortBy, setSortBy] = useState<
-    "round" | "price-asc" | "price-desc" | "name"
-  >("round");
+    "round" | "price-asc" | "price-desc" | "rank"
+  >("rank");
   const [filterStatus, setFilterStatus] = useState<
     "all" | "available" | "sold"
   >("all");
@@ -56,51 +65,63 @@ export default function PlayersPage() {
     async function fetchData() {
       try {
         // --- Fetch all data in parallel ---
-        const [participantsRes, roundsRes, housesRes] = await Promise.all([
-          fetchWithAuth("/api/participants", { method: "GET" }),
+        const [teamsRes, roundsRes, housesRes] = await Promise.all([
+          fetchWithAuth("/api/teams", { method: "GET" }),
           fetchWithAuth("/api/rounds", { method: "GET" }),
           fetchWithAuth("/api/houses", { method: "GET" }),
         ]);
 
-        const [participants, rounds, houses] = await Promise.all([
-          participantsRes.json(),
+        const [teamsData, rounds, houses] = await Promise.all([
+          teamsRes.json(),
           roundsRes.json(),
           housesRes.json(),
         ]);
 
-        // --- Build player data ---
-        const playersData: PlayerWithDetails[] = participants.map(
-          (participant: PlayerWithDetails) => {
+        // Ensure all data are arrays
+        if (!Array.isArray(teamsData) || !Array.isArray(rounds) || !Array.isArray(houses)) {
+          console.error("API did not return arrays:", { teamsData, rounds, houses });
+          setTeams([]);
+          return;
+        }
+
+        // --- Build team data ---
+        const teamsWithDetails: TeamWithDetails[] = teamsData.map(
+          (team: Team) => {
             const round = rounds.find(
-              (r: Round) => r.participantId === participant.participantId
+              (r: Round) => r.teamId === team.teamId
             );
 
-            if (round && participant.houseId && round.finalized) {
+            if (team.houseId) {
               const house = houses.find(
                 (h: House) =>
-                  h.houseId?.toString() === participant.houseId?.toString()
+                  h.houseId?.toString() === team.houseId?.toString()
               );
-              // const winningBid;
               return {
-                ...participant,
+                teamId: team.teamId,
+                rank: team.rank,
+                batch: team.batch,
+                memberCount: team.memberCount,
                 status: "sold",
-                soldTo: round.winningHouseId,
                 soldToHouseName: house ? house.name : "Unknown",
-                soldPrice: round.winningBid,
-                roundNumber: round.roundNumber,
+                soldPrice: round?.winningBid,
+                roundNumber: round?.roundNumber,
+                houseId: team.houseId,
               };
             } else {
               return {
-                ...participant,
+                teamId: team.teamId,
+                rank: team.rank,
+                batch: team.batch,
+                memberCount: team.memberCount,
                 status: "available",
               };
             }
           }
         );
 
-        setPlayers(playersData);
+        setTeams(teamsWithDetails);
       } catch (error) {
-        console.error("Failed to fetch players data:", error);
+        console.error("Failed to fetch teams data:", error);
       }
     }
 
@@ -108,10 +129,10 @@ export default function PlayersPage() {
   }, []);
 
   // --- Sorting + Filtering logic ---
-  const getSortedPlayers = () => {
-    const filtered = players.filter((p) => {
+  const getSortedTeams = () => {
+    const filtered = teams.filter((t) => {
       if (filterStatus === "all") return true;
-      return p.status === filterStatus;
+      return t.status === filterStatus;
     });
 
     return [...filtered].sort((a, b) => {
@@ -122,26 +143,26 @@ export default function PlayersPage() {
           return (a.soldPrice || 0) - (b.soldPrice || 0);
         case "price-desc":
           return (b.soldPrice || 0) - (a.soldPrice || 0);
-        case "name":
-          return a.name.localeCompare(b.name);
+        case "rank":
+          return a.rank - b.rank;
         default:
           return 0;
       }
     });
   };
 
-  const sortedPlayers = getSortedPlayers();
-  const availableCount = players.filter((p) => p.status === "available").length;
-  const soldCount = players.filter((p) => p.status === "sold").length;
+  const sortedTeams = getSortedTeams();
+  const availableCount = teams.filter((t) => t.status === "available").length;
+  const soldCount = teams.filter((t) => t.status === "sold").length;
 
   // --- UI remains identical ---
   return (
     <div className="space-y-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">
-          🥋 All Warriors
+          👥 All Teams
         </h1>
-        <p className="text-gray-300">Complete roster of participants</p>
+        <p className="text-gray-300">Complete roster of qualified teams</p>
       </div>
 
       {/* Filters and sorting */}
@@ -163,7 +184,7 @@ export default function PlayersPage() {
                 }`}
               >
                 {status === "all"
-                  ? `All (${players.length})`
+                  ? `All (${teams.length})`
                   : status === "available"
                     ? `Available (${availableCount})`
                     : `Recruited (${soldCount})`}
@@ -178,26 +199,26 @@ export default function PlayersPage() {
               onChange={(e) => setSortBy(e.target.value as any)}
               className="bg-gray-800/90 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-2 font-semibold focus:outline-none focus:ring-2 focus:ring-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.2)]"
             >
+              <option value="rank">Rank (Best to Worst)</option>
               <option value="round">Round Number</option>
               <option value="price-desc">Price (High to Low)</option>
               <option value="price-asc">Price (Low to High)</option>
-              <option value="name">Name (A-Z)</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Players Grid */}
+      {/* Teams Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {sortedPlayers.map((player, index) => {
+        {sortedTeams.map((team, index) => {
           const backgroundImage =
-            player.status === "sold" && player.soldToHouseName
-              ? getHouseBackground(player.soldToHouseName)
+            team.status === "sold" && team.soldToHouseName
+              ? getHouseBackground(team.soldToHouseName)
               : "/temple-out.jpg";
 
           return (
             <div
-              key={player._id?.toString() || `player-${index}`}
+              key={team.teamId || `team-${index}`}
               className="relative rounded-xl p-6 border-2 shadow-lg transform hover:scale-105 transition-all overflow-hidden"
               style={{
                 backgroundImage: `url('${backgroundImage}')`,
@@ -208,44 +229,50 @@ export default function PlayersPage() {
               {/* Opacity overlay */}
               <div
                 className={`absolute inset-0 ${
-                  player.status === "available"
+                  team.status === "available"
                     ? "bg-gray-900/80 backdrop-blur-[2px]"
                     : "bg-black/70 backdrop-blur-[2px]"
                 }`}
               ></div>
 
-              {/* Neon border for sold players */}
-              {player.status === "sold" && (
+              {/* Neon border for sold teams */}
+              {team.status === "sold" && (
                 <div className="absolute inset-0 border-2 border-green-500 shadow-[0_0_25px_rgba(34,197,94,0.5)]"></div>
               )}
-              {player.status === "available" && (
+              {team.status === "available" && (
                 <div className="absolute inset-0 border-2 border-gray-500"></div>
               )}
 
               {/* Content */}
               <div className="relative z-10">
                 <div className="flex items-center gap-4 mb-4">
-                  {player.picture && (
-                    <img
-                      src={player.picture}
-                      alt={player.name}
-                      className="w-20 h-20 rounded-full border-4 border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)]"
-                    />
-                  )}
+                  <div className="w-20 h-20 rounded-full border-4 border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)] bg-gradient-to-br from-yellow-600 to-orange-600 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-black">#{team.rank}</div>
+                    </div>
+                  </div>
                   <div className="flex-1">
                     <h3 className="text-xl font-bold text-white drop-shadow-[0_0_10px_#000000]">
-                      {player.name}
+                      Team #{team.rank}
                     </h3>
-                    {player.roundNumber && (
+                    {team.batch && (
                       <p className="text-sm text-gray-300">
-                        Round {player.roundNumber}
+                        Batch {team.batch}
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-400">
+                      {team.memberCount} members
+                    </p>
+                    {team.roundNumber && (
+                      <p className="text-sm text-gray-300">
+                        Round {team.roundNumber}
                       </p>
                     )}
                   </div>
                 </div>
 
                 <div className="pt-4 border-t-2 border-gray-600">
-                  {player.status === "available" ? (
+                  {team.status === "available" ? (
                     <div className="text-center">
                       <span className="inline-block bg-blue-600/90 text-white px-4 py-2 rounded-full font-bold shadow-[0_0_20px_rgba(59,130,246,0.5)]">
                         ✨ Available
@@ -257,12 +284,12 @@ export default function PlayersPage() {
                       <div className="flex items-center justify-between bg-black/60 rounded-lg p-3 border border-[#FFD700]/30">
                         <div>
                           <p className="font-bold text-[#FFD700] text-lg drop-shadow-[0_0_10px_#FFD700]">
-                            {player.soldToHouseName}
+                            {team.soldToHouseName}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="text-2xl font-bold text-green-400 drop-shadow-[0_0_10px_#22C55E]">
-                            ${player.soldPrice}
+                            ${team.soldPrice}
                           </p>
                         </div>
                       </div>
@@ -275,10 +302,10 @@ export default function PlayersPage() {
         })}
       </div>
 
-      {sortedPlayers.length === 0 && (
+      {sortedTeams.length === 0 && (
         <div className="text-center py-12 bg-black/40 rounded-xl border-2 border-dashed border-gray-600 backdrop-blur-sm">
           <p className="text-xl text-gray-400">
-            No warriors match your filters
+            No teams match your filters
           </p>
         </div>
       )}

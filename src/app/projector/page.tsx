@@ -3,10 +3,14 @@
 import { useState, useEffect } from "react";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 
-interface Participant {
-  participantId: string;
-  name: string;
-  picture?: string;
+interface Team {
+  teamId: string;
+  rank: number;
+  batch: string;
+  memberCount: number;
+  successfulAttempts?: number;
+  totalPoints?: number;
+  timeTaken?: number;
 }
 
 interface WinnerData {
@@ -31,7 +35,7 @@ interface Status {
   roundStatus: "active" | "idle";
   roundId?: string;
   roundNumber?: number;
-  participant?: Participant;
+  team?: Team;
   timerEnd?: string;
   bidsPlaced?: Bid[];
   roundEnded?: boolean;
@@ -72,7 +76,7 @@ export default function ProjectorDisplay() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [showWinner, setShowWinner] = useState(false);
   const [winnerData, setWinnerData] = useState<WinnerData | null>(null);
-  const [participant, setParticipant] = useState<Participant | null>(null);
+  const [team, setTeam] = useState<Team | null>(null);
   const [lastRoundId, setLastRoundId] = useState<string | null>(null);
 
   // Server time hook not required directly; countdown uses hook
@@ -101,16 +105,16 @@ export default function ProjectorDisplay() {
           const lastRound = completedRounds[0]; // Most recent
 
           if (lastRound.winningBid) {
-            // Fetch participant
-            const participantRes = await fetch("/api/participants");
-            if (participantRes.ok) {
-              const participants = await participantRes.json();
-              const roundParticipant = participants.find(
-                (p: Participant) => p.participantId === lastRound.participantId
+            // Fetch team
+            const teamRes = await fetch("/api/teams");
+            if (teamRes.ok) {
+              const teams = await teamRes.json();
+              const roundTeam = teams.find(
+                (t: Team) => t.teamId === lastRound.teamId
               );
 
-              if (roundParticipant) {
-                setParticipant(roundParticipant);
+              if (roundTeam) {
+                setTeam(roundTeam);
               }
             }
 
@@ -181,9 +185,9 @@ export default function ProjectorDisplay() {
         setHouses([]);
       }
 
-      // Update participant and timer
-      if (statusData.roundStatus === "active" && statusData.participant) {
-        setParticipant(statusData.participant);
+      // Update team and timer
+      if (statusData.roundStatus === "active" && statusData.team) {
+        setTeam(statusData.team);
         setLastRoundId(statusData.roundId || null);
         // timeLeft is driven by synchronized countdown hook
       } else {
@@ -193,7 +197,7 @@ export default function ProjectorDisplay() {
       // Check for winner announcement (direct from API)
       if (statusData.roundEnded && statusData.winner) {
         console.log("🏆 Winner detected from API:", statusData.winner);
-        console.log("📝 Participant:", participant);
+        console.log("📝 Team:", team);
         setWinnerData(statusData.winner);
         setShowWinner(true);
         setLastRoundId(null); // Reset for next round
@@ -264,17 +268,38 @@ export default function ProjectorDisplay() {
             🏆 SOLD! 🏆
           </h1>
 
-          {participant?.picture && (
-            <img
-              src={participant.picture}
-              alt={participant.name}
-              className="w-48 h-48 sm:w-64 sm:h-64 object-cover rounded-full mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]"
-            />
-          )}
+          {/* Team Rank Badge */}
+          <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]">
+            <span className="text-9xl sm:text-[12rem] font-bold text-black">#{team?.rank || "?"}</span>
+          </div>
 
-          <h2 className="text-5xl sm:text-7xl font-bold mb-8 text-white drop-shadow-[0_0_30px_#000000]">
-            {participant?.name || "Participant"}
+          <h2 className="text-5xl sm:text-7xl font-bold mb-4 text-white drop-shadow-[0_0_30px_#000000]">
+            Team #{team?.rank || "?"}
           </h2>
+          <p className="text-3xl sm:text-4xl text-white/90 mb-2 drop-shadow-[0_0_20px_#000000]">
+            Batch: {team?.batch || "N/A"}
+          </p>
+          <p className="text-2xl sm:text-3xl text-white/80 mb-8 drop-shadow-[0_0_20px_#000000]">
+            {team?.memberCount || 0} members
+          </p>
+
+          {/* Team Stats */}
+          {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
+            <div className="flex justify-center gap-6 mb-8">
+              {team.successfulAttempts !== undefined && (
+                <div className="bg-black/60 rounded-xl px-6 py-3 border-2 border-[#FFD700]/50 backdrop-blur-md">
+                  <div className="text-sm text-gray-300">Problems Solved</div>
+                  <div className="text-3xl font-bold text-[#FFD700]">{team.successfulAttempts}</div>
+                </div>
+              )}
+              {team.totalPoints !== undefined && (
+                <div className="bg-black/60 rounded-xl px-6 py-3 border-2 border-[#FFD700]/50 backdrop-blur-md">
+                  <div className="text-sm text-gray-300">Total Points</div>
+                  <div className="text-3xl font-bold text-[#FFD700]">{team.totalPoints}</div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="text-4xl sm:text-5xl mb-8 text-white drop-shadow-[0_0_20px_#000000]">
             has been won by
@@ -348,31 +373,49 @@ export default function ProjectorDisplay() {
           </div>
         </div>
 
-        {/* Participant in Center */}
+        {/* Team in Center */}
         <div className="flex-1 flex items-center justify-center px-4 py-8">
           <div className="max-w-7xl w-full">
-            {/* Participant Card */}
+            {/* Team Card */}
             <div className="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-3xl p-8 sm:p-12 max-w-3xl mx-auto backdrop-blur-md border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.5)] mb-8">
               <h2 className="text-3xl sm:text-4xl font-bold mb-6 text-center text-black">
-                🥋 Current Warrior
+                👥 Current Team
               </h2>
               <div className="flex flex-col items-center gap-6">
-                {participant?.picture ? (
-                  <img
-                    src={participant.picture}
-                    alt={participant.name}
-                    className="w-32 h-32 sm:w-48 sm:h-48 object-cover rounded-full border-4 border-black shadow-[0_0_30px_rgba(0,0,0,0.8)]"
-                  />
-                ) : (
-                  <div className="w-32 h-32 sm:w-48 sm:h-48 bg-gradient-to-br from-gray-600 to-gray-800 rounded-full border-4 border-black shadow-[0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center">
-                    <span className="text-6xl sm:text-8xl">👤</span>
-                  </div>
-                )}
+                {/* Team Rank Badge */}
+                <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-full bg-gradient-to-br from-black to-gray-900 flex items-center justify-center border-4 border-black shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+                  <span className="text-7xl sm:text-9xl font-bold text-[#FFD700]">#{team?.rank || "?"}</span>
+                </div>
                 <div className="text-center">
                   <h3 className="text-4xl sm:text-6xl font-bold text-black mb-2">
-                    {participant?.name || "Loading..."}
+                    Team #{team?.rank || "?"}
                   </h3>
-                  <p className="text-xl sm:text-2xl text-black/80">
+                  <p className="text-2xl sm:text-3xl text-black/80 mb-1">
+                    Batch: {team?.batch || "N/A"}
+                  </p>
+                  <p className="text-xl sm:text-2xl text-black/70 mb-4">
+                    {team?.memberCount || 0} members
+                  </p>
+                  
+                  {/* Team Performance Stats */}
+                  {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
+                    <div className="flex justify-center gap-4 mt-4">
+                      {team.successfulAttempts !== undefined && (
+                        <div className="bg-black/30 rounded-lg px-4 py-2 border border-black/50">
+                          <div className="text-xs text-black/70">Problems Solved</div>
+                          <div className="text-2xl font-bold text-black">{team.successfulAttempts}</div>
+                        </div>
+                      )}
+                      {team.totalPoints !== undefined && (
+                        <div className="bg-black/30 rounded-lg px-4 py-2 border border-black/50">
+                          <div className="text-xs text-black/70">Total Points</div>
+                          <div className="text-2xl font-bold text-black">{team.totalPoints}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <p className="text-xl sm:text-2xl text-black/80 mt-4">
                     Awaiting house bids...
                   </p>
                 </div>

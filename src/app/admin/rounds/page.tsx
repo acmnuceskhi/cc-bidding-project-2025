@@ -23,8 +23,8 @@ interface House {
 interface RoundWithDetails {
   _id: string;
   roundNumber: number; // can be indexed or derived
-  participantName: string;
-  participantPicture?: string;
+  teamRank: number;
+  teamBatch?: string;
   status: "not_started" | "active" | "completed"; // UI-friendly status
   winnerHouse?: string;
   winningBid?: number;
@@ -34,7 +34,7 @@ interface RoundWithDetails {
 interface filteredRound {
   _id: string; // matches MongoDB _id
   roundId: string; // matches MongoDB _id
-  participantId: string;
+  teamId: string;
   status: "scheduled" | "active" | "completed"; // matches schema
   timerEnd?: string; // string from API, parse to Date
   scheduledStart?: string; // string from API, parse to Date
@@ -42,11 +42,13 @@ interface filteredRound {
   winningBid?: number;
 }
 
-interface filteredParticipant {
-  participantId: string;
-  name: string;
-  picture?: string;
-  houseId: string;
+interface filteredTeam {
+  teamId: string;
+  rank: number;
+  batch?: string;
+  successfulAttempts: number;
+  totalPoints: number;
+  houseId?: string;
 }
 
 export default function RoundsPage() {
@@ -77,15 +79,31 @@ export default function RoundsPage() {
       const roundsRes = await fetchWithAuth("/api/rounds");
       const roundsData: filteredRound[] = await roundsRes.json();
 
-      // Fetch participants and houses
-      const [participantsRes, housesRes] = await Promise.all([
-        fetchWithAuth("/api/participants"),
+      // Ensure roundsData is an array
+      if (!Array.isArray(roundsData)) {
+        console.error("Rounds API did not return an array:", roundsData);
+        setRounds([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch teams and houses
+      const [teamsRes, housesRes] = await Promise.all([
+        fetchWithAuth("/api/teams"),
         fetchWithAuth("/api/houses"),
       ]);
 
-      const participantsData: filteredParticipant[] =
-        await participantsRes.json();
+      const teamsData: filteredTeam[] =
+        await teamsRes.json();
       const housesData: House[] = await housesRes.json();
+
+      // Ensure teamsData and housesData are arrays
+      if (!Array.isArray(teamsData) || !Array.isArray(housesData)) {
+        console.error("Teams or Houses API did not return arrays");
+        setRounds([]);
+        setLoading(false);
+        return;
+      }
 
       // Sort the API rounds before mapping
       // const sortedRoundsData = roundsData.sort((a, b) => {
@@ -97,8 +115,8 @@ export default function RoundsPage() {
 
       // Map rounds to RoundWithDetails
       const mapped: RoundWithDetails[] = roundsData.map((round, index) => {
-        const participant = participantsData.find(
-          (p) => p.participantId === round.participantId
+        const team = teamsData.find(
+          (t) => t.teamId === round.teamId
         );
 
         const now = new Date();
@@ -121,14 +139,14 @@ export default function RoundsPage() {
         }
 
         const house = housesData.find(
-          (h) => String(h.houseId) === String(participant?.houseId)
+          (h) => String(h.houseId) === String(team?.houseId)
         );
 
         return {
           _id: round._id || round.roundId,
           roundNumber: index + 1,
-          participantName: participant?.name ?? "Unknown",
-          participantPicture: participant?.picture,
+          teamRank: team?.rank ?? 0,
+          teamBatch: team?.batch,
           status,
           timerEnd: timerEndDate,
           winningBid: round.winningBid,
@@ -299,18 +317,22 @@ export default function RoundsPage() {
                     </span>
                   </div>
 
-                  {round.participantPicture && (
-                    <img
-                      src={round.participantPicture}
-                      alt={round.participantName}
-                      className="w-20 h-20 rounded-full border-4 border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)]"
-                    />
-                  )}
+                  <div className="w-20 h-20 rounded-full border-4 border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)] bg-gradient-to-br from-yellow-600 to-orange-600 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-black">#{round.teamRank}</div>
+                      {round.teamBatch && <div className="text-xs text-black">{round.teamBatch}</div>}
+                    </div>
+                  </div>
 
                   <div>
                     <h3 className="text-2xl font-bold text-white mb-1 drop-shadow-[0_0_10px_#000000]">
-                      {round.participantName}
+                      Team #{round.teamRank}
                     </h3>
+                    {round.teamBatch && (
+                      <p className="text-sm text-gray-200 mb-1">
+                        Batch {round.teamBatch}
+                      </p>
+                    )}
                     {round.status === "completed" && round.winnerHouse && (
                       <p className="text-lg text-gray-200">
                         Sold to{" "}
@@ -389,11 +411,19 @@ export default function RoundsPage() {
             </h2>
             <div className="space-y-4 text-lg">
               <p>
-                <strong className="text-[#FFD700]">Participant:</strong>{" "}
+                <strong className="text-[#FFD700]">Team:</strong>{" "}
                 <span className="text-white">
-                  {selectedRound.participantName}
+                  Team #{selectedRound.teamRank}
                 </span>
               </p>
+              {selectedRound.teamBatch && (
+                <p>
+                  <strong className="text-[#FFD700]">Batch:</strong>{" "}
+                  <span className="text-white">
+                    {selectedRound.teamBatch}
+                  </span>
+                </p>
+              )}
               {selectedRound.winnerHouse && (
                 <p>
                   <strong className="text-[#FFD700]">Winner House:</strong>{" "}
