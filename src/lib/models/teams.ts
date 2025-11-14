@@ -19,17 +19,26 @@ export interface Team {
 
 const collectionName = "teams";
 
+// Ensure indexes on startup
+async function ensureIndexes() {
+  try {
+    const client = await clientPromise;
+    const collection = client.db().collection<Team>(collectionName);
+    
+    // Index on rank for sorting teams by performance
+    await collection.createIndex({ rank: 1 });
+    
+    // Index on totalPoints for alternative sorting
+    await collection.createIndex({ totalPoints: -1 });
+    
+    console.log("Teams indexes created successfully");
+  } catch (err) {
+    console.error("Failed to create index on teams:", err);
+  }
+}
+ensureIndexes();
+
 export const Teams = {
-  // Ensure indexes useful for queries/sorting
-  async ensureIndexes() {
-    try {
-      const client = await clientPromise;
-      const collection = client.db().collection<Team>(collectionName);
-      await collection.createIndex({ rank: 1 });
-    } catch (err) {
-      console.error("Failed to create index on teams:", err);
-    }
-  },
   // Fetch all team documents
   async getAll(): Promise<Team[]> {
     const client = await clientPromise;

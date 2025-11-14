@@ -18,6 +18,22 @@ export interface House {
 // Name of the MongoDB collection
 const collectionName = "houses";
 
+// Ensure indexes on startup
+async function ensureIndexes() {
+  try {
+    const client = await clientPromise;
+    const collection = client.db().collection<House>(collectionName);
+
+    // Index on name for lookups and sorting
+    await collection.createIndex({ name: 1 });
+
+    console.log("Houses indexes created successfully");
+  } catch (err) {
+    console.error("Failed to create indexes on houses:", err);
+  }
+}
+ensureIndexes();
+
 // House object containing CRUD operations
 export const Houses = {
   // Fetch all houses from the database

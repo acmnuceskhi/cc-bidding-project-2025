@@ -36,6 +36,13 @@ async function ensureIndexes() {
     // Index on passPhase for phase analytics
     await collection.createIndex({ passPhase: 1 });
 
+    // Compound index for status + passPhase queries (used in status endpoint)
+    await collection.createIndex({ status: 1, passPhase: 1 });
+
+    // Compound index for filtering completed/skipped rounds
+    await collection.createIndex({ status: 1, finalized: 1 });
+    await collection.createIndex({ status: 1, skipped: 1 });
+
     console.log("Rounds indexes created successfully");
   } catch (err) {
     console.error("Failed to create indexes on rounds:", err);

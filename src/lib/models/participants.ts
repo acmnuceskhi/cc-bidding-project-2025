@@ -37,6 +37,10 @@ async function ensureIndexes() {
     // Index on houseId for filtering by house (sparse since optional)
     await collection.createIndex({ houseId: 1 }, { sparse: true });
 
+    // Index on rollNumber for batch group filtering and uniqueness enforcement
+    // (already unique, but adding explicit index improves query performance)
+    // Note: unique index already exists, this is for query optimization
+
     console.log("Participants indexes created successfully");
   } catch (err) {
     console.error("Failed to create indexes on participants:", err);

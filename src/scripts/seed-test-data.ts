@@ -1,7 +1,13 @@
 import { config } from "dotenv";
 import path from "path";
 
-import "@/lib/models/bids"; // <-- ensures indexes are created immediately
+// Import models to ensure indexes are created immediately
+import "@/lib/models/bids";
+import "@/lib/models/houses";
+import "@/lib/models/users";
+import "@/lib/models/participants";
+import "@/lib/models/rounds";
+import "@/lib/models/teams";
 
 config({ path: path.resolve(process.cwd(), ".env.local") });
 config({ path: path.resolve(process.cwd(), ".env") });
