@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
-import { Participants } from "@/lib/models/participants";
+import { Teams } from "@/lib/models/teams";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
@@ -25,31 +25,31 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { participantId } = body;
+    const { teamId } = body;
 
     // Validate input
-    if (!participantId) {
+    if (!teamId) {
       return NextResponse.json(
-        { error: "Missing required field: participantId" },
+        { error: "Missing required field: teamId" },
         { status: 400 }
       );
     }
 
-    // Check if participant exists
-    const participant = await Participants.getById(participantId);
-    if (!participant) {
+    // Check if team exists
+    const team = await Teams.getById(teamId);
+    if (!team) {
       return NextResponse.json(
-        { error: "Participant not found" },
+        { error: "Team not found" },
         { status: 404 }
       );
     }
 
-    // Prevent creating new round if participant already finalized (has round.finalized = true)
-    const existingRounds = await Rounds.getByParticipant(participantId);
+    // Prevent creating new round if team already finalized (has round.finalized = true)
+    const existingRounds = await Rounds.getByTeam(teamId);
     const hasFinalized = existingRounds.some((r) => r.finalized === true);
     if (hasFinalized) {
       return NextResponse.json(
-        { error: "Cannot create new round: participant already assigned" },
+        { error: "Cannot create new round: team already assigned" },
         { status: 400 }
       );
     }
@@ -57,12 +57,12 @@ export async function POST(request: NextRequest) {
     // Keep scheduledStart logic commented for now
     // const scheduledStart = body.scheduledStart ? new Date(body.scheduledStart) : new Date();
 
-    const participantObjId = new ObjectId(participantId.toString());
+    const teamObjId = new ObjectId(teamId.toString());
 
     // Full manual admin controls for now
     // Create the round
     const round = {
-      participantId: participantObjId,
+      teamId: teamObjId,
       status: "scheduled" as const, // rounds should start as scheduled
       scheduledStart: null, // placeholder; admin will start manually
       timerEnd: null, // timer set when round starts
@@ -108,8 +108,9 @@ export async function GET(request: NextRequest) {
 
     // Transform rounds to match the expected response format
     const formattedRounds = rounds.map((round) => ({
+      _id: round._id?.toString(),
       roundId: round._id?.toString(),
-      participantId: round.participantId.toString(),
+      teamId: round.teamId.toString(),
       status: round.status,
       finalized: !!round.finalized,
       timerEnd: round.timerEnd ? round.timerEnd.toISOString() : null,

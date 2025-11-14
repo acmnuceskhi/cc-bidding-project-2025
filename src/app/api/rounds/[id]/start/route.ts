@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
-import { Participants } from "@/lib/models/participants";
+import { Teams } from "@/lib/models/teams";
 import { verifyAuth, hasRole } from "@/lib/auth";
 
 // interface filteredRound {
@@ -94,47 +94,50 @@ export async function POST(
         );
       }
 
-      // Find the first scheduled round with a participant that hasn't been sold yet
+      // Find the first scheduled round with a team that hasn't been sold yet
       let nextRound = null;
-      let participant = null;
+      let team = null;
+      let roundNumber = 0;
 
-      for (const round of scheduledRounds) {
-        const p = await Participants.getById(round.participantId.toString());
+      for (let i = 0; i < scheduledRounds.length; i++) {
+        const round = scheduledRounds[i];
+        const t = await Teams.getById(round.teamId.toString());
 
-        if (!p) {
+        if (!t) {
           console.log(
-            "Participant not found for round:",
+            "Team not found for round:",
             round._id?.toString()
           );
           continue;
         }
 
-        // Check if participant already has a house (already sold)
-        if (p.houseId) {
+        // Check if team already has a house (already sold)
+        if (t.houseId) {
           console.log(
-            "Skipping participant",
-            p.name,
-            "- already assigned to house:",
-            p.houseId.toString()
+            "Skipping round",
+            i + 1,
+            "(Team already assigned to house:",
+            t.houseId.toString() + ")"
           );
           continue;
         }
 
-        // Found an unsold participant
+        // Found an unsold team
         nextRound = round;
-        participant = p;
+        team = t;
+        roundNumber = i + 1;
         console.log(
-          "Starting next scheduled round:",
-          round._id?.toString(),
-          "for participant:",
-          p.name
+          "Starting round",
+          roundNumber,
+          "(Round ID:",
+          round._id?.toString() + ")"
         );
         break;
       }
 
-      if (!nextRound || !participant) {
+      if (!nextRound || !team) {
         return NextResponse.json(
-          { error: "No unsold participants available for bidding" },
+          { error: "No unsold teams available for bidding" },
           { status: 404 }
         );
       }

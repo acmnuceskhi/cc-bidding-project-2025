@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
+import { Teams } from "@/lib/models/teams";
 import { Participants } from "@/lib/models/participants";
 import { Bids } from "@/lib/models/bids";
 
@@ -9,11 +10,21 @@ export async function GET() {
     // Get the currently active round (assuming only one active round at a time)
     const activeRounds = await Rounds.getActive();
 
-    // Always compute phase counts and unsold participants for dashboard context
-    const [allRoundsForCounts, unsoldParticipants] = await Promise.all([
+    // Fetch all participants once for member count calculations
+    const allParticipants = await Participants.getAll();
+    
+    // Helper function to get member count for a team
+    const getMemberCount = (teamId: string) => {
+      return allParticipants.filter(
+        (p) => p.teamId?.toString() === teamId
+      ).length;
+    };
+
+    // Always compute phase counts and unsold teams for dashboard context
+    const [allRoundsForCounts, unsoldTeams] = await Promise.all([
       Rounds.getAll(),
-      Participants.getAll().then((list) =>
-        list.filter((p) => !(p as any).houseId)
+      Teams.getAll().then((list) =>
+        list.filter((t) => !(t as any).houseId)
       ),
     ]);
 
@@ -39,16 +50,17 @@ export async function GET() {
     if (activeRounds.length === 0) {
       return NextResponse.json({
         roundId: null,
-        participant: null,
+        team: null,
         roundStatus: "idle",
         timerRemaining: 0,
         bidsPlaced: [],
         serverTime: Date.now(),
         phaseCounts: counts,
-        unsoldParticipants: unsoldParticipants.map((p) => ({
-          participantId: p._id?.toString(),
-          name: p.name,
-          picture: (p as any).picture ?? null,
+        unsoldTeams: unsoldTeams.map((t) => ({
+          teamId: t._id?.toString(),
+          rank: t.rank,
+          batch: t.batch ?? null,
+          memberCount: getMemberCount(t._id?.toString() || ""),
         })),
       });
     }
@@ -191,12 +203,22 @@ export async function GET() {
               { session }
             );
 
-            // Assign participant if sold
+            // Assign team and all its participants if sold
             if (winningHouse) {
+              // Assign the team
+              await db
+                .collection("teams")
+                .updateOne(
+                  { _id: new ObjectId(activeRound.teamId) },
+                  { $set: { houseId: winningHouse._id } },
+                  { session }
+                );
+              
+              // Assign all participants in the team
               await db
                 .collection("participants")
-                .updateOne(
-                  { _id: new ObjectId(activeRound.participantId) },
+                .updateMany(
+                  { teamId: new ObjectId(activeRound.teamId) },
                   { $set: { houseId: winningHouse._id } },
                   { session }
                 );
@@ -234,9 +256,9 @@ export async function GET() {
       }
     }
 
-    // Fetch participant info
-    const participant = await Participants.getById(
-      activeRound.participantId.toString()
+    // Fetch team info
+    const team = await Teams.getById(
+      activeRound.teamId.toString()
     );
 
     // Fetch all bids for the current round (not participant — as per logical flow)
@@ -263,11 +285,14 @@ export async function GET() {
 
     return NextResponse.json({
       roundId: activeRound._id?.toString(),
-      participant: participant
+      team: team
         ? {
-            participantId: participant._id?.toString(),
-            name: participant.name,
-            picture: participant.picture ?? null,
+            teamId: team._id?.toString(),
+            rank: team.rank,
+            batch: team.batch ?? null,
+            memberCount: getMemberCount(team._id?.toString() || ""),
+            successfulAttempts: team.successfulAttempts,
+            totalPoints: team.totalPoints,
           }
         : null,
       roundStatus: activeRound.status,
@@ -277,10 +302,11 @@ export async function GET() {
       bidsPlaced,
       serverTime: Date.now(),
       phaseCounts: counts,
-      unsoldParticipants: unsoldParticipants.map((p) => ({
-        participantId: p._id?.toString(),
-        name: p.name,
-        picture: (p as any).picture ?? null,
+      unsoldTeams: unsoldTeams.map((t) => ({
+        teamId: t._id?.toString(),
+        rank: t.rank,
+        batch: t.batch ?? null,
+        memberCount: getMemberCount(t._id?.toString() || ""),
       })),
     });
   } catch (error) {

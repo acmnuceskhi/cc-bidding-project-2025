@@ -1,7 +1,6 @@
 import { Server as HTTPServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { Rounds } from "./models/rounds";
-import { Participants } from "./models/participants";
 
 import { RoundResult } from "@/types";
 
@@ -17,7 +16,7 @@ export type AppState =
   | {
       screen: "bidding";
       roundId: string;
-      participantId: string;
+      teamId: string;
       timeLeft: number;
     }
   | {
@@ -56,8 +55,9 @@ export function initializeSocket(httpServer: HTTPServer) {
         const round = await Rounds.getById(roundId);
 
         if (round) {
-          const participant = await Participants.getById(
-            round.participantId.toString()
+          const Teams = (await import("./models/teams")).Teams;
+          const team = await Teams.getById(
+            round.teamId.toString()
           );
 
           const timeLeft = round.timerEnd
@@ -67,7 +67,7 @@ export function initializeSocket(httpServer: HTTPServer) {
           currentState = {
             screen: "bidding",
             roundId: roundId,
-            participantId: round.participantId.toString(),
+            teamId: round.teamId.toString(),
             timeLeft,
           };
 
@@ -75,7 +75,7 @@ export function initializeSocket(httpServer: HTTPServer) {
           io?.emit("state-update", currentState);
           io?.emit("round-started", {
             roundId,
-            participant,
+            team,
             timerEnd: round.timerEnd ?? null,
           });
         }

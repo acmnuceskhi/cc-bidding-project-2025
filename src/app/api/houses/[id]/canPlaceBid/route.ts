@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/auth";
 import { Houses } from "@/lib/models/houses";
-import { Participants } from "@/lib/models/participants";
+import { Teams } from "@/lib/models/teams";
+import { Config } from "@/lib/models/config";
 import { ObjectId } from "mongodb";
-import { getBatchGroup } from "@/lib/utils";
 
 /**
- * GET /api/houses/[id]/canPlaceBid?participantId=<participantId>
- * Checks if the specified house can place a bid on a given participant.
- * Enforces a rule: A house can have at most 3 members from the same batch year (22–25).
+ * GET /api/houses/[id]/canPlaceBid?teamId=<teamId>
+ * Checks if the specified house can place a bid on a given team.
+ * Enforces a rule: A house can have at most N teams from the same batch (configurable via maxTeamsPerBatch).
  */
 export async function GET(
   request: NextRequest,
@@ -35,47 +35,49 @@ export async function GET(
 
     // Parse query parameter
     const { searchParams } = new URL(request.url);
-    const participantId = searchParams.get("participantId");
+    const teamId = searchParams.get("teamId");
 
-    if (!participantId || !ObjectId.isValid(participantId)) {
+    if (!teamId || !ObjectId.isValid(teamId)) {
       return NextResponse.json(
-        { error: "Invalid or missing participantId" },
+        { error: "Invalid or missing teamId" },
         { status: 400 }
       );
     }
 
-    // Validate house and participant existence
+    // Validate house and team existence
     const house = await Houses.getById(id);
     if (!house) {
       return NextResponse.json({ error: "House not found" }, { status: 404 });
     }
 
-    const participant = await Participants.getById(participantId);
-    if (!participant || !participant.rollNumber) {
+    const team = await Teams.getById(teamId);
+    if (!team || !team.batch) {
       return NextResponse.json(
-        { error: "Participant not found or missing rollNumber" },
+        { error: "Team not found or missing batch" },
         { status: 404 }
       );
     }
 
-    // Determine batch group for the participant and count house members in that group
-    const participantGroup = getBatchGroup(participant.rollNumber);
-    const houseMembers = await Participants.getByHouse(id);
-    const sameBatchCount = houseMembers.filter(
-      (member) => getBatchGroup(member.rollNumber) === participantGroup
+    // Get the configurable batch limit
+    const maxTeamsPerBatch = await Config.getMaxTeamsPerBatch();
+
+    // Count teams from the same batch already assigned to this house
+    const allTeams = await Teams.getAll();
+    const houseTeamsInSameBatch = allTeams.filter(
+      (t) => t.houseId?.toString() === id && t.batch === team.batch
     ).length;
 
-    if (sameBatchCount >= 3) {
+    if (houseTeamsInSameBatch >= maxTeamsPerBatch) {
       return NextResponse.json({
         canBid: false,
-        message: `House '${house.name}' already has 3 participants from batch group '${participantGroup}'.`,
+        message: `House '${house.name}' already has ${maxTeamsPerBatch} teams from batch '${team.batch}'.`,
       });
     }
 
     // ✅ Eligible to place bid
     return NextResponse.json({
       canBid: true,
-      message: `House '${house.name}' can bid on this participant.`,
+      message: `House '${house.name}' can bid on this team.`,
     });
   } catch (error) {
     console.error("Error in can-bid API:", error);

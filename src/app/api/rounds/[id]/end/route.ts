@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Houses } from "@/lib/models/houses";
 import { Bids } from "@/lib/models/bids";
+import { Teams } from "@/lib/models/teams";
+import { Participants } from "@/lib/models/participants";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
@@ -133,16 +135,27 @@ export async function POST(
           { session }
         );
 
-        // Assign participant only if sold
+        // Assign team and all its participants only if sold
         if (winningHouse) {
+          // Assign the team to the winning house
           await db
-            .collection("participants")
+            .collection("teams")
             .updateOne(
-              { _id: new ObjectId(round.participantId) },
+              { _id: new ObjectId(round.teamId) },
               { $set: { houseId: winningHouse._id } },
               { session }
             );
-          message = `Participant won by ${winningHouse.name} with bid $${winningBid!.amount}`;
+
+          // Assign all participants of the team to the winning house
+          await db
+            .collection("participants")
+            .updateMany(
+              { teamId: new ObjectId(round.teamId) },
+              { $set: { houseId: winningHouse._id } },
+              { session }
+            );
+
+          message = `Team won by ${winningHouse.name} with bid $${winningBid!.amount}`;
         } else {
           message = "Round ended with no bids";
         }

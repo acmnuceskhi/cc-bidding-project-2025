@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
 import { Rounds } from "@/lib/models/rounds";
-import { Participants } from "@/lib/models/participants";
-import { getBatchGroup } from "@/lib/utils";
+import { Teams } from "@/lib/models/teams";
+import { Config } from "@/lib/models/config";
 import { verifyAuth } from "@/lib/auth";
 
 // POST /api/bids - Place a bid
@@ -138,23 +138,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🧍 Get participant being bid on
-    const participant = await Participants.getById(
-      round.participantId.toString()
-    );
-    if (!participant || !participant.rollNumber) {
+    // 🧑‍🤝‍🧑 Get team being bid on
+    const team = await Teams.getById(round.teamId.toString());
+    if (!team || !team.batch) {
       return NextResponse.json(
         {
           success: false,
-          error: "PARTICIPANT_NOT_FOUND",
-          message: "Participant not found or missing university ID",
+          error: "TEAM_NOT_FOUND",
+          message: "Team not found or missing batch information",
         },
         { status: 404 }
       );
     }
 
-    // 🎓 Determine batch group (25, 24, 23, or senior for all others)
-    const participantGroup = getBatchGroup(participant.rollNumber);
+    // 🎓 Team batch for limit checking
+    const teamBatch = team.batch;
 
     // If amount === 0, interpret as an explicit "skip" (captain not interested).
     // Do NOT create/update a bid document, and do NOT enforce batch limits.
@@ -166,52 +164,29 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 👥 Get all participants already assigned to this house (only relevant for real bids)
-    const houseMembers = await Participants.getByHouse(houseId);
+    // 👥 Get all teams already assigned to this house and get max teams per batch from config
+    const [houseTeams, config] = await Promise.all([
+      Teams.getAll().then((allTeams) =>
+        allTeams.filter(
+          (t) => t.houseId && t.houseId.toString() === houseId
+        )
+      ),
+      Config.get(),
+    ]);
 
-    // 🏷️ In second pass, only houses below minimum roster may bid
+    // 🏷️ In second pass, remove minimum roster check (no longer applicable for team-based bidding)
     const passPhase = round.passPhase ?? 1;
-    if (passPhase === 2) {
-      const counts: Record<string, number> = {
-        "25": 0,
-        "24": 0,
-        "23": 0,
-        senior: 0,
-      };
-      for (const m of houseMembers) {
-        const grp = getBatchGroup(m.rollNumber);
-        if (grp === "25" || grp === "24" || grp === "23") counts[grp]++;
-        else counts.senior++;
-      }
-      const hasMinimumRoster =
-        counts["25"] >= 3 &&
-        counts["24"] >= 3 &&
-        counts["23"] >= 3 &&
-        counts.senior >= 3;
-      if (hasMinimumRoster) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "PASS2_NOT_ELIGIBLE",
-            message: `House '${house.name}' already meets minimum roster (3 per batch, total 12). Bidding in pass 2 is not allowed.`,
-          },
-          { status: 403 }
-        );
-      }
-    }
 
-    // Count how many existing members are in the same batch group
-    const sameBatchCount = houseMembers.filter(
-      (p) => getBatchGroup(p.rollNumber) === participantGroup
-    ).length;
+    // Count how many existing teams are in the same batch
+    const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
 
-    // ❌ Enforce the 3-per-batch limit for actual bids
-    if (sameBatchCount >= 3) {
+    // ❌ Enforce the maxTeamsPerBatch limit for actual bids
+    if (sameBatchCount >= config.maxTeamsPerBatch) {
       return NextResponse.json(
         {
           success: false,
           error: "BATCH_LIMIT_REACHED",
-          message: `House '${house.name}' already has 3 members from batch group '${participantGroup}'.`,
+          message: `House '${house.name}' already has ${config.maxTeamsPerBatch} teams from batch '${teamBatch}'.`,
         },
         { status: 403 }
       );
@@ -221,12 +196,7 @@ export async function POST(request: NextRequest) {
 
     // Place or update the bid (NO budget deduction here)
     // Budget is only deducted when the round ends and they win
-    await Bids.upsertBid(
-      roundId,
-      houseId,
-      round.participantId.toString(),
-      amount
-    );
+    await Bids.upsertBid(roundId, houseId, round.teamId.toString(), amount);
 
     return NextResponse.json({
       success: true,
@@ -262,15 +232,15 @@ export async function GET(request: NextRequest) {
 
     const { payload } = authResult;
     const { searchParams } = new URL(request.url);
-    const participantId = searchParams.get("participantId");
+    const teamId = searchParams.get("teamId");
     const houseId = searchParams.get("houseId");
     const roundId = searchParams.get("roundId");
 
     let bids;
     if (roundId) {
       bids = await Bids.getByRound(roundId);
-    } else if (participantId) {
-      bids = await Bids.getByParticipant(participantId);
+    } else if (teamId) {
+      bids = await Bids.getByTeam(teamId);
     } else if (houseId) {
       // Check if user can access this house's bids
       if (payload.role !== "admin" && payload.houseId !== houseId) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Rounds, type Round } from "@/lib/models/rounds";
+import { Teams } from "@/lib/models/teams";
 import { Participants } from "@/lib/models/participants";
 import clientPromise from "@/lib/mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
@@ -55,10 +56,10 @@ export async function POST(
     }
 
     // Determine winning bid refund eligibility (escrow only deducted winner)
-    const participant = await Participants.getById(
-      round.participantId.toString()
+    const team = await Teams.getById(
+      round.teamId.toString()
     );
-    const winningHouseId = participant?.houseId?.toString();
+    const winningHouseId = team?.houseId?.toString();
 
     const client = await clientPromise;
     const session = client.startSession();
@@ -96,12 +97,12 @@ export async function POST(
       await session.withTransaction(async () => {
         const db = client.db();
 
-        // Re-read participant inside the transaction to get current assignment
-        const participantDoc = await db
-          .collection("participants")
-          .findOne({ _id: new ObjectId(round.participantId) }, { session });
-        const currentWinningHouseId = participantDoc?.houseId
-          ? participantDoc.houseId.toString()
+        // Re-read team inside the transaction to get current assignment
+        const teamDoc = await db
+          .collection("teams")
+          .findOne({ _id: new ObjectId(round.teamId) }, { session });
+        const currentWinningHouseId = teamDoc?.houseId
+          ? teamDoc.houseId.toString()
           : undefined;
 
         // Read current round state for pass phase logic
@@ -161,12 +162,22 @@ export async function POST(
           .deleteMany({ roundId: new ObjectId(id) }, { session });
         numBids = deleteRes.deletedCount ?? 0;
 
-        // Unassign participant from house if they were assigned
+        // Unassign team and all its participants from house if they were assigned
         if (currentWinningHouseId) {
+          // Unassign the team
+          await db
+            .collection("teams")
+            .updateOne(
+              { _id: new ObjectId(round.teamId) },
+              { $unset: { houseId: "" } },
+              { session }
+            );
+          
+          // Unassign all participants in the team
           await db
             .collection("participants")
-            .updateOne(
-              { _id: new ObjectId(round.participantId) },
+            .updateMany(
+              { teamId: new ObjectId(round.teamId) },
               { $unset: { houseId: "" } },
               { session }
             );
