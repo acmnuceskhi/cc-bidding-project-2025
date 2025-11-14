@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { fetchPublic } from "@/lib/fetchPublic";
 
 interface Team {
   teamId: string;
@@ -43,8 +43,8 @@ export default function FinalTeamsPage() {
       try {
         setLoading(true);
         const [housesRes, teamsRes] = await Promise.all([
-          fetchWithAuth("/api/houses", { method: "GET" }),
-          fetchWithAuth("/api/teams", { method: "GET" }),
+          fetchPublic("/api/houses", { method: "GET" }),
+          fetchPublic("/api/teams", { method: "GET" }),
         ]);
 
         const [housesData, teamsData]: [House[], TeamWithDetails[]] =
