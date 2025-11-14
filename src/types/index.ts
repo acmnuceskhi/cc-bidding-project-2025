@@ -20,10 +20,10 @@ export interface ProjectorStatus {
     timerEnd: string;
     timeLeft: number;
   } | null;
-  currentParticipant: {
+  currentTeam: {
     id: string;
-    name: string;
-    picture?: string;
+    rank: number;
+    batch?: string;
   } | null;
   housesWithBids: {
     id: string;

@@ -93,7 +93,7 @@ async function cleanTestHouses() {
 
     // Delete test rounds
     const roundsResult = await db.collection("rounds").deleteMany({
-      participantId: { $in: [] }, // Will delete orphaned rounds
+      teamId: { $in: [] }, // Will delete orphaned rounds
     });
     console.log(`\u2705 Deleted ${roundsResult.deletedCount} test rounds`);
 

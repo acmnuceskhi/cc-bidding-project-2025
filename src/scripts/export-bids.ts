@@ -2,7 +2,7 @@
  * Export Bids Script
  *
  * Dumps full bid history to a CSV file including enrichment fields.
- * Columns: bidId,roundId,houseId,houseName,participantId,participantName,amount,timestampISO
+ * Columns: bidId,roundId,houseId,houseName,teamId,teamRank,amount,timestampISO
  *
  * Usage:
  *   npx tsx src/scripts/export-bids.ts                # auto file name
@@ -41,28 +41,27 @@ async function exportBids() {
     const db = client.db();
     console.log("✅ Connected. Fetching data...");
 
-    const [bids, housesArr, participantsArr, roundsArr] = await Promise.all([
+    const [bids, housesArr, teamsArr, roundsArr] = await Promise.all([
       db.collection("bids").find({}).sort({ timestamp: 1 }).toArray(),
       db.collection("houses").find({}).toArray(),
-      db.collection("participants").find({}).toArray(),
+      db.collection("teams").find({}).toArray(),
       db.collection("rounds").find({}).toArray(),
     ]);
 
     type HouseDoc = { _id: ObjectId; name: string };
-    type ParticipantDoc = { _id: ObjectId; name?: string };
+    type TeamDoc = { _id: ObjectId; rank: number };
     const houses = new Map<string, HouseDoc>();
-    const participants = new Map<string, ParticipantDoc>();
+    const teams = new Map<string, TeamDoc>();
     const rounds = new Map<string, { _id: ObjectId }>();
     for (const h of housesArr) {
       const name: string = typeof h.name === "string" ? h.name : "";
       houses.set(h._id.toString(), { _id: h._id as ObjectId, name });
     }
-    for (const p of participantsArr) {
-      const pname: string | undefined =
-        typeof p.name === "string" ? p.name : undefined;
-      participants.set(p._id.toString(), {
-        _id: p._id as ObjectId,
-        name: pname,
+    for (const t of teamsArr) {
+      const rank: number = typeof t.rank === "number" ? t.rank : 0;
+      teams.set(t._id.toString(), {
+        _id: t._id as ObjectId,
+        rank: rank,
       });
     }
     for (const r of roundsArr) {
@@ -75,8 +74,8 @@ async function exportBids() {
       "roundId",
       "houseId",
       "houseName",
-      "participantId",
-      "participantName",
+      "teamId",
+      "teamRank",
       "amount",
       "timestampISO",
     ];
@@ -92,20 +91,20 @@ async function exportBids() {
         bid.houseId instanceof ObjectId
           ? bid.houseId.toString()
           : String(bid.houseId);
-      const participantId =
-        bid.participantId instanceof ObjectId
-          ? bid.participantId.toString()
-          : String(bid.participantId);
+      const teamId =
+        bid.teamId instanceof ObjectId
+          ? bid.teamId.toString()
+          : String(bid.teamId);
       const house = houses.get(houseId);
-      const participant = participants.get(participantId);
+      const team = teams.get(teamId);
       rows.push(
         [
           escapeCsv(bid._id?.toString()),
           escapeCsv(roundId),
           escapeCsv(houseId),
           escapeCsv(house?.name ?? ""),
-          escapeCsv(participantId),
-          escapeCsv(participant?.name ?? ""),
+          escapeCsv(teamId),
+          escapeCsv(team?.rank ?? ""),
           escapeCsv(bid.amount),
           escapeCsv(new Date(bid.timestamp).toISOString()),
         ].join(",")

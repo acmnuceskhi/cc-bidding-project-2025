@@ -129,18 +129,18 @@ async function fullReset() {
     let roundStartTime = new Date();
     const biddingDuration = 40 * 1000;
     const resultDuration = 10 * 1000;
-    for (const pid of participantIds) {
+    for (const tid of teamIds) {
       const scheduledStart = new Date(roundStartTime.getTime());
       const timerEnd = new Date(scheduledStart.getTime() + biddingDuration);
       await Rounds.create({
-        participantId: pid,
+        teamId: tid,
         status: "scheduled",
         scheduledStart,
         timerEnd,
       });
       roundStartTime = new Date(timerEnd.getTime() + resultDuration);
     }
-    console.log(`   ✅ Created ${participantIds.length} scheduled rounds\n`);
+    console.log(`   ✅ Created ${teamIds.length} scheduled rounds\n`);
 
     // Summary
     console.log("✨ Full reset complete!\n");
@@ -148,7 +148,7 @@ async function fullReset() {
     console.log(`  - ${houseIds.length} houses created`);
     console.log(`  - ${teamIds.length} teams (ranked) created`);
     console.log(`  - ${participantIds.length} participants created`);
-    console.log(`  - ${participantIds.length} scheduled rounds created`);
+    console.log(`  - ${teamIds.length} scheduled rounds created`);
     console.log("\n📝 Login credentials:");
     console.log("  Admin:");
     console.log("    Username: admin");
