@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: cc-bidding-project
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false  # Set this in Render Dashboard
+      - key: JWT_SECRET
+        sync: false  # Set this in Render Dashboard - generate a secure random value
+    healthCheckPath: /api/ping
