@@ -1,5 +1,13 @@
 # Auction Scripts
 
+**Related Documentation:**
+
+- [Root README](../../README.md) - Project overview
+- [ONBOARDING.md](../../ONBOARDING.md) - Environment setup (`.env.local` configuration)
+- [PROJECT_FLOW.md](../../PROJECT_FLOW.md) - Data models and auction logic
+
+---
+
 > Utility scripts to manage data for the CC Bidding System. All scripts load `.env.local` / `.env` and exit 0 on success, 1 on failure.
 
 ## Scripts
@@ -8,7 +16,7 @@
 
 Resets auction state while keeping core entities.
 
-- Sets every round to `scheduled` (keeps original `scheduledStart`)
+- Sets every round to `scheduled` status
 - Deletes all bids
 - Restores each house's `remainingBudget` to `totalBudget`
 - Clears participant `houseId`
@@ -19,24 +27,22 @@ Run:
 npm run reset-auction
 ```
 
+---
+
 ### full-reset
 
 Drops all collections and reseeds canonical demo data.
 
 - 4 houses (1000 credits each)
-- Ranked Round‑1 teams (rank 1..4)
-- 48 participants (with roll numbers + team assignment)
-- Users: 1 admin + 4 captains
-- Scheduled rounds with `scheduledStart` + `timerEnd`
+- 16 teams with Round 1 stats (ranks 1-16)
+- 48 participants (3 per team with roll numbers)
+- Users: 1 admin + 4 house captains
+- Scheduled rounds
 
 Credentials:
 
 - Admin: `admin / admin123`
-- Captains:
-  - `captain_lord_shen / captain123`
-  - `captain_dragon_warrior / captain123`
-  - `captain_master_oogway / captain123`
-  - `captain_tai_lung / captain123`
+- Captains: `captain_<housename> / captain123` (check output for house names)
 
 Run:
 
@@ -44,9 +50,11 @@ Run:
 npm run full-reset
 ```
 
+---
+
 ### seed-test-data
 
-Seeds test dataset (same credential scheme as full-reset) without dropping collections first. Useful after manual tweaks.
+Seeds test dataset without dropping collections first. Useful for development.
 Run:
 
 ```powershell

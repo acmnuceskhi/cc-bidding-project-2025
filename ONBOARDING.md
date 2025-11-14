@@ -1,5 +1,13 @@
 # CC Bidding Project — Onboarding & Contributor Guide
 
+**Quick Navigation:**
+
+- [README.md](./README.md) - Project overview
+- [PROJECT_FLOW.md](./PROJECT_FLOW.md) - System workflows and architecture
+- [API.md](./API.md) - API endpoint documentation
+
+---
+
 ## Quick start
 
 1. Clone the repo:
@@ -32,7 +40,7 @@
 ## Editing the frontend
 
 - Edit pages under `src/app/`. A page is a folder with `page.tsx` (server component) and optional client components.
-- `src/app/page.tsx` is the root page. `src/app/dashboard/page.tsx` is the dashboard page (example).
+- `src/app/page.tsx` is the root landing page.
 
 ## Database
 
