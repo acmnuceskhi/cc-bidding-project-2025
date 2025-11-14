@@ -1,12 +1,13 @@
 describe("Rounds model basic operations", () => {
   it("should create and fetch an active round", async () => {
     const { Rounds } = await import("@/lib/models/rounds");
+    const { ObjectId } = await import("mongodb");
 
     await Rounds.create({
-      participantId: "000000000000000000000001",
+      participantId: new ObjectId("000000000000000000000001"),
       status: "active",
       timerEnd: new Date(Date.now() + 60000),
-    } as any);
+    });
 
     const active = await Rounds.getActive();
     expect(active.length).toBe(1);
