@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: AuctionConfig = {
   _id: CONFIG_ID,
 
   // Team and batch constraints
-  maxTeamsPerBatch: 3,
+  maxTeamsPerBatch: 1, // Each house can win only 1 team per batch (22k, 23k, 24k, 25k)
 
   // Round timing settings
   roundDurationSeconds: 120, // 2 minutes per round

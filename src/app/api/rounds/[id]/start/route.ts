@@ -164,10 +164,11 @@ export async function POST(
       );
     }
 
-    // Define timer durations
-    // const BIDDING_DURATION_MS = 40000;
-    // const RESULT_DURATION_MS = 20000;
-    const timerEnd = new Date(Date.now() + 60 * 1000);
+    // Get round duration from config
+    const { Config } = await import("@/lib/models/config");
+    const config = await Config.get();
+    const durationMs = config.roundDurationSeconds * 1000;
+    const timerEnd = new Date(Date.now() + durationMs);
 
     // Update the round
     const result = await Rounds.update(targetRoundId, {

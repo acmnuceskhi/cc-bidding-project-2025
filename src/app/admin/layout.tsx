@@ -35,6 +35,7 @@ export default function AdminLayout({
     { name: "Houses", path: "/admin/houses", icon: "🏯" },
     { name: "Teams", path: "/admin/teams", icon: "🥋" },
     { name: "Rounds", path: "/admin/rounds", icon: "⏱️" },
+    { name: "Config", path: "/admin/config", icon: "⚙️" },
   ];
 
   const isActiveTab = (path: string) => {

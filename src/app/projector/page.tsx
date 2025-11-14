@@ -81,7 +81,7 @@ export default function ProjectorDisplay() {
 
   // Server time hook not required directly; countdown uses hook
 
-  // Synced countdown derived from server time
+  // Client-side countdown using device time
   const { remainingMs: projRemaining } = useSynchronizedCountdown(
     status?.roundStatus === "active" && status?.timerEnd
       ? status.timerEnd

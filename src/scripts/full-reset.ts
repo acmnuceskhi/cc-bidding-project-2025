@@ -152,7 +152,7 @@ async function fullReset() {
     console.log("\n📝 Login credentials:");
     console.log("  Admin:");
     console.log("    Username: admin");
-    console.log("    Password: password123");
+    console.log("    Password: admin123");
     console.log("\n  House Captains:");
     (await Houses.getAll()).forEach((house) => {
       console.log(`    ${house.name}:`);

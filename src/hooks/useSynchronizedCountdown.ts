@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { useServerTime } from "@/hooks/useServerTime";
 
 /**
- * useSynchronizedCountdown
- * Millisecond countdown synced to server time.
- * Prevents infinite update loops by only setting state when the value actually changes
- * and by keeping a single rAF loop alive across renders.
+ * useCountdown
+ * Client-side countdown using device time.
+ * Calculates remaining time based on timerEnd timestamp and local device clock.
  */
-export function useSynchronizedCountdown(timerEndISO?: string | null) {
-  const { serverNow } = useServerTime();
+export function useCountdown(timerEndISO?: string | null) {
   const [remainingMs, setRemainingMs] = useState<number>(0);
   const endMsRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -28,7 +25,8 @@ export function useSynchronizedCountdown(timerEndISO?: string | null) {
       const endMs = endMsRef.current;
       let nextRemaining = 0;
       if (endMs) {
-        const now = serverNow();
+        // Use client device time (Date.now())
+        const now = Date.now();
         nextRemaining = Math.max(0, endMs - now);
       }
       // Only update state when the second changes (floor value differs)
@@ -58,3 +56,6 @@ export function useSynchronizedCountdown(timerEndISO?: string | null) {
   const seconds = Math.floor(remainingMs / 1000);
   return { remainingMs, seconds };
 }
+
+// Export with old name for backward compatibility
+export const useSynchronizedCountdown = useCountdown;
