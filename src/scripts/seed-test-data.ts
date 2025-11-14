@@ -3,6 +3,7 @@ import path from "path";
 
 // Import models to ensure indexes are created immediately
 import "@/lib/models/bids";
+import "@/lib/models/config";
 import "@/lib/models/houses";
 import "@/lib/models/users";
 import "@/lib/models/participants";
@@ -13,6 +14,7 @@ config({ path: path.resolve(process.cwd(), ".env.local") });
 config({ path: path.resolve(process.cwd(), ".env") });
 
 import clientPromise from "@/lib/mongodb";
+import { Config } from "@/lib/models/config";
 import { Houses } from "@/lib/models/houses";
 import { Participants, Participant } from "@/lib/models/participants";
 import { Rounds } from "@/lib/models/rounds";
@@ -44,6 +46,7 @@ export async function initializeData() {
     }
 
     // Remove previous test data
+    await db.collection("config").deleteMany({});
     await db.collection("houses").deleteMany({});
     await db.collection("participants").deleteMany({});
     await db.collection("bids").deleteMany({});
@@ -51,6 +54,16 @@ export async function initializeData() {
     await db.collection("users").deleteMany({});
     await db.collection("teams").deleteMany({});
     console.log("Cleared previous data.");
+
+    // Initialize global auction configuration
+    await Config.update({
+      maxTeamsPerBatch: 3,
+      roundDurationSeconds: 60,
+      countdownWarningSeconds: 30,
+      autoStartNextRound: false,
+      delayBetweenRoundsSeconds: 5, // Only applies when autoStartNextRound is true
+    });
+    console.log("Initialized auction configuration.");
 
     // Houses
     const houses = [
@@ -66,8 +79,9 @@ export async function initializeData() {
       houseIds.push(result.insertedId);
     }
 
-    // Round-1 dummy teams with dummy stats
+    // Round-1 qualified teams with stats (only qualified teams in DB)
     const teamIds: ObjectId[] = [];
+    const batches = ["2025", "2024", "2023", "2022"];
     // Create 16 teams (we expect ~48 participants, ~3 per team)
     for (let i = 1; i <= 16; i++) {
       // Each team attempts 5 problems in total. Randomize successful attempts
@@ -87,19 +101,23 @@ export async function initializeData() {
         () => Math.floor(Math.random() * (300 - 30 + 1)) + 30 // 30-300s per problem
       );
 
+      // Assign batch for display grouping during bidding
+      const batch = batches[i % batches.length];
+
       const result = await Teams.create({
         successfulAttempts,
         unsuccessfulAttempts,
         totalPoints,
         totalPenalty,
         timeTakenPerProblem,
+        batch,
         // Rank is mandatory and pre-hardcoded; here we assign deterministic rank by loop order
         // Adjust as needed to match your real pre-auction data
         rank: i,
       });
 
       teamIds.push(result.insertedId);
-      console.log(`Created Team ${i} with coherent stats`);
+      console.log(`Created Team ${i} (Batch ${batch}) with coherent stats`);
     }
 
     // Participants (48 total)
@@ -173,19 +191,19 @@ export async function initializeData() {
       console.warn("Failed to recompute team ranks:", err);
     }
 
-    // Rounds: one scheduled for each participant
+    // Rounds: one scheduled for each team (team-based bidding)
     console.log("Creating rounds...");
 
     let roundStartTime = new Date(); // start now
     const biddingDuration = 40 * 1000; // bidding 40 seconds in ms
     const resultDuration = 10 * 1000; // post-bidding result 10 seconds in ms
 
-    for (let i = 0; i < participantIds.length; i++) {
+    for (let i = 0; i < teamIds.length; i++) {
       const scheduledStart = new Date(roundStartTime.getTime());
       const timerEnd = new Date(scheduledStart.getTime() + biddingDuration);
 
       await Rounds.create({
-        participantId: participantIds[i],
+        teamId: teamIds[i],
         status: "scheduled",
         passPhase: 1,
         scheduledStart,
@@ -195,7 +213,7 @@ export async function initializeData() {
       // Next round starts after bidding + result display
       roundStartTime = new Date(timerEnd.getTime() + resultDuration);
     }
-    console.log("Rounds created.");
+    console.log("Rounds created (team-based bidding).");
 
     // Users (simple test credentials)
     await Users.create({
