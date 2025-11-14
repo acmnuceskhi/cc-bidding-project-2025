@@ -4,12 +4,12 @@ import { ObjectId, InsertOneResult, UpdateResult, DeleteResult } from "mongodb";
 // Interface representing a Round document in MongoDB
 export interface Round {
   _id?: ObjectId; // MongoDB document ID
-  participantId: ObjectId; // ID of the participant up for bidding
+  teamId: ObjectId; // ID of the team up for bidding (replaces participantId)
   status: "scheduled" | "active" | "completed"; // Round status flag
   passPhase?: 1 | 2; // Auction pass phase
   timerEnd?: Date | null; // Timestamp when round ends, optional to allow manual admin control
   scheduledStart?: Date | null; // Round scheduled start time
-  finalized?: boolean; // To indicate participant sold or up for next pass
+  finalized?: boolean; // To indicate team sold or up for next pass
   winningBid?: number; // Final winning bid amount, if any
   skipped?: boolean; // Indicates round completed with no bids (eligible for second pass)
   // bids: Bid[]; Removed since redundant; bids.ts already present
@@ -24,8 +24,8 @@ async function ensureIndexes() {
     const client = await clientPromise;
     const collection = client.db().collection<Round>(collectionName);
 
-    // Index on participantId for frequent lookups
-    await collection.createIndex({ participantId: 1 });
+    // Index on teamId for frequent lookups (replaces participantId)
+    await collection.createIndex({ teamId: 1 });
 
     // Index on status for filtering active rounds
     await collection.createIndex({ status: 1 });
@@ -59,9 +59,9 @@ export const Rounds = {
   async create(round: Round): Promise<InsertOneResult<Round>> {
     const client = await clientPromise;
 
-    // Convert participantId if coming as string
-    if (typeof round.participantId === "string") {
-      round.participantId = new ObjectId(round.participantId);
+    // Convert teamId if coming as string
+    if (typeof round.teamId === "string") {
+      round.teamId = new ObjectId(round.teamId);
     }
 
     // Default passPhase to 1 when not provided
@@ -91,9 +91,9 @@ export const Rounds = {
   ): Promise<UpdateResult<Round>> {
     const client = await clientPromise;
 
-    // Convert participantId if passed
-    if (update.participantId && typeof update.participantId === "string") {
-      update.participantId = new ObjectId(update.participantId);
+    // Convert teamId if passed
+    if (update.teamId && typeof update.teamId === "string") {
+      update.teamId = new ObjectId(update.teamId);
     }
 
     // If updating time, ensure Date type
@@ -147,13 +147,13 @@ export const Rounds = {
       .toArray();
   },
 
-  // Fetch all rounds for a specific participant
-  async getByParticipant(participantId: string): Promise<Round[]> {
+  // Fetch all rounds for a specific team
+  async getByTeam(teamId: string): Promise<Round[]> {
     const client = await clientPromise;
     return client
       .db()
       .collection<Round>(collectionName)
-      .find({ participantId: new ObjectId(participantId) })
+      .find({ teamId: new ObjectId(teamId) })
       .sort({ timerEnd: -1 })
       .toArray();
   },

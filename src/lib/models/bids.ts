@@ -6,7 +6,7 @@ export interface Bid {
   _id?: ObjectId; // MongoDB document ID
   roundId: ObjectId; // ID of the round this bid belongs to
   houseId: ObjectId; // ID of the house placing the bid
-  participantId: ObjectId; // ID of the participant being bid on
+  teamId: ObjectId; // ID of the team being bid on (replaces participantId)
   amount: number; // Bid amount
   timestamp: Date; // Time when bid was placed
 }
@@ -24,7 +24,7 @@ async function ensureIndexes() {
     // Supporting indexes for queries
     await col.createIndex({ roundId: 1 });
     await col.createIndex({ houseId: 1 });
-    await col.createIndex({ participantId: 1 });
+    await col.createIndex({ teamId: 1 }); // Changed from participantId
 
     // Compound index for amount+timestamp queries (for finding winning bids)
     await col.createIndex({ roundId: 1, amount: -1, timestamp: 1 });
@@ -61,8 +61,8 @@ export const Bids = {
     if (typeof bid.houseId === "string") {
       bid.houseId = new ObjectId(bid.houseId);
     }
-    if (typeof bid.participantId === "string") {
-      bid.participantId = new ObjectId(bid.participantId);
+    if (typeof bid.teamId === "string") {
+      bid.teamId = new ObjectId(bid.teamId);
     }
 
     // Store valid Date objects
@@ -80,15 +80,15 @@ export const Bids = {
   },
 
   /**
-   * Fetch all bids for a specific participant
-   * @param participantId - ObjectId as string
+   * Fetch all bids for a specific team
+   * @param teamId - ObjectId as string
    */
-  async getByParticipant(participantId: string): Promise<Bid[]> {
+  async getByTeam(teamId: string): Promise<Bid[]> {
     const client = await clientPromise;
     return client
       .db()
       .collection<Bid>(collectionName)
-      .find({ participantId: new ObjectId(participantId) })
+      .find({ teamId: new ObjectId(teamId) })
       .sort({ timestamp: -1 })
       .toArray();
   },
@@ -144,14 +144,14 @@ export const Bids = {
    * If no bid exists, it creates a new bid entry.
    * @param roundId - The ID of the round.
    * @param houseId - The ID of the house.
-   * @param participantId - The ID of the participant.
+   * @param teamId - The ID of the team.
    * @param amount - The bid amount.
    * @returns A promise that resolves to the upserted bid document.
    */
   async upsertBid(
     roundId: string,
     houseId: string,
-    participantId: string,
+    teamId: string,
     amount: number
   ): Promise<Bid> {
     const client = await clientPromise;
@@ -164,7 +164,7 @@ export const Bids = {
       $set: {
         roundId: new ObjectId(roundId),
         houseId: new ObjectId(houseId),
-        participantId: new ObjectId(participantId),
+        teamId: new ObjectId(teamId),
         amount,
         timestamp: new Date(),
       },

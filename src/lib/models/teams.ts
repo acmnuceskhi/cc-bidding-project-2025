@@ -2,19 +2,24 @@ import clientPromise from "@/lib/mongodb";
 import { ObjectId, InsertOneResult, UpdateResult } from "mongodb";
 
 /**
- * Represents round 1 team and its shared performance stats
- * Multiple participants reference this via 'teamId' to avoid data duplication
+ * Represents a team (2-3 members) from round 1.
+ * Only qualified teams for round 2 will be in the database.
+ * Multiple participants reference this via 'teamId' to avoid data duplication.
  */
 export interface Team {
   _id?: ObjectId;
 
-  // Round 1 stats (awaiting final format)
+  // Round 1 stats
   rank: number; // team position; 1 = best
   successfulAttempts: number; // Successful problem attempts
   unsuccessfulAttempts: number; // Unsuccessful problem attempts
   totalPoints: number; // Total points earned
   totalPenalty: number; // Total penalty time
   timeTakenPerProblem: number[]; // Time taken per problem (index = problem number)
+
+  // Round 2 bidding info
+  batch?: string; // Batch identifier (e.g., "2022", "2023") for display grouping
+  houseId?: ObjectId; // ID of the house that won this team (assigned after bidding)
 }
 
 const collectionName = "teams";
@@ -30,6 +35,12 @@ async function ensureIndexes() {
 
     // Index on totalPoints for alternative sorting
     await collection.createIndex({ totalPoints: -1 });
+
+    // Index on batch for grouping teams during bidding
+    await collection.createIndex({ batch: 1 });
+
+    // Index on houseId for querying teams assigned to a house (sparse since assigned after bidding)
+    await collection.createIndex({ houseId: 1 }, { sparse: true });
 
     console.log("Teams indexes created successfully");
   } catch (err) {
@@ -57,6 +68,8 @@ export const Teams = {
         totalPoints: team.totalPoints ?? 0,
         totalPenalty: team.totalPenalty ?? 0,
         timeTakenPerProblem: team.timeTakenPerProblem ?? [],
+        batch: team.batch,
+        houseId: team.houseId,
         rank:
           typeof team.rank === "number"
             ? team.rank

@@ -8,15 +8,9 @@ export interface Participant {
   rollNumber: string; // Participant's roll number (used to determine batch as well)
   picture?: string; // URL to participant's picture
 
-  houseId?: ObjectId; // ID of the house assigned (ObjectId reference)
+  houseId?: ObjectId; // ID of the house assigned (set when their team is won)
 
   teamId: ObjectId; // ID of the Round 1 team assigned (ObjectId reference)
-
-  roundStats?: {
-    roundId: ObjectId; // Round ID (ObjectId reference)
-    bidAmount: number; // Amount bid in this round
-    winner: boolean;
-  }[]; // Whether participant won this round
 }
 
 // Name of MongoDB collection
@@ -129,17 +123,6 @@ export const Participants = {
       if (exists === 0) {
         throw new Error("Invalid teamId: No such team exists");
       }
-    }
-
-    // RoundId conversion
-    if (update.roundStats) {
-      update.roundStats = update.roundStats.map((stat) => ({
-        ...stat,
-        roundId:
-          typeof stat.roundId === "string"
-            ? new ObjectId(stat.roundId)
-            : stat.roundId,
-      }));
     }
 
     if (update.rollNumber) {
