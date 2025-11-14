@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
+import { FullPageSpinner } from "@/components/Spinner";
 
 export default function AdminLayout({
   children,
@@ -44,17 +45,7 @@ export default function AdminLayout({
   };
 
   if (!mounted || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-yellow-400 mx-auto mb-4"></div>
-          <h2 className="text-2xl font-semibold text-white mb-2">
-            Loading Admin Panel
-          </h2>
-          <p className="text-gray-300">Please wait...</p>
-        </div>
-      </div>
-    );
+    return <FullPageSpinner message="Loading admin panel..." />;
   }
 
   return (
@@ -72,7 +63,7 @@ export default function AdminLayout({
 
       {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Enhanced Header */}
+        {/* Enhanced Header - This will scroll */}
         <div className="bg-black/60 shadow-lg border-b-2 border-[#FFD700]/50 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -104,8 +95,8 @@ export default function AdminLayout({
           </div>
         </div>
 
-        {/* Enhanced Tab Navigation - Centered */}
-        <div className="bg-black/40 border-b-2 border-[#FFD700]/50 backdrop-blur-md">
+        {/* Enhanced Tab Navigation - This will be sticky */}
+        <div className="sticky top-0 z-20 bg-black/40 border-b-2 border-[#FFD700]/50 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex justify-center space-x-1 sm:space-x-2 overflow-x-auto">
               {tabs.map((tab) => (
@@ -127,9 +118,9 @@ export default function AdminLayout({
         </div>
 
         {/* Content */}
-        <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 sm:py-8 overflow-y-auto">
+        <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 sm:py-8">
           {children}
-        </div>
+        </main>
       </div>
     </div>
   );

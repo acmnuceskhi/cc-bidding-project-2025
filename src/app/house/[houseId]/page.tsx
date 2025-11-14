@@ -7,6 +7,7 @@ import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useToast } from "@/components/ToastProvider";
+import { FullPageSpinner } from "@/components/Spinner";
 
 interface Team {
   teamId: string;
@@ -51,6 +52,8 @@ export default function HouseDashboard() {
   const [loading, setLoading] = useState(false);
   const [canBid, setCanBid] = useState<boolean>(true);
   const [canBidMessage, setCanBidMessage] = useState<string>("");
+  const [initialLoading, setInitialLoading] = useState<boolean>(true);
+  const [isPolling, setIsPolling] = useState<boolean>(false);
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -64,8 +67,13 @@ export default function HouseDashboard() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchData = async (isInitialLoad = false) => {
       try {
+        if (isInitialLoad) {
+          setInitialLoading(true);
+        } else {
+          setIsPolling(true);
+        }
         const housesResponse = await fetchWithAuth("/api/houses", {
           cache: "no-store",
         });
@@ -162,13 +170,19 @@ export default function HouseDashboard() {
         setActiveRound(null);
         setCurrentTeam(null);
         setTimeLeft(0);
+      } finally {
+        if (isInitialLoad) {
+          setInitialLoading(false);
+        } else {
+          setIsPolling(false);
+        }
       }
     };
 
-    fetchData();
+    fetchData(true);
 
     const pollInterval = setInterval(() => {
-      fetchData();
+      fetchData(false);
     }, 3000);
 
     return () => clearInterval(pollInterval);
@@ -272,6 +286,14 @@ export default function HouseDashboard() {
 
   const formatTime = (ms: number) => `${Math.floor(ms / 1000)}s`;
 
+  if (initialLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <FullPageSpinner message="Loading house..." />
+      </div>
+    );
+  }
+
   if (!house) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
@@ -372,7 +394,7 @@ export default function HouseDashboard() {
 
           {activeRound && currentTeam ? (
             <div className="space-y-6 sm:space-y-8">
-              {/* Enhanced Round Info */}
+              {/* Enhanced Round & Team Info */}
               <div className="bg-gradient-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0 mb-6">
                   <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
@@ -391,7 +413,7 @@ export default function HouseDashboard() {
                 </div>
 
                 {/* Timer Progress Bar */}
-                <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden">
+                <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden mb-8">
                   <div
                     className={`h-full rounded-full transition-all shadow-[0_0_15px_currentColor] ${
                       isTimeRunningOut ? "bg-red-500" : "bg-green-500"
@@ -401,57 +423,49 @@ export default function HouseDashboard() {
                     }}
                   ></div>
                 </div>
-              </div>
 
-              {/* Enhanced Team Info */}
-              <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+                {/* Team Info Section */}
                 <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
                   👥 TEAM UP FOR BIDDING
                 </h2>
-                <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
+                <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8">
                   {/* Team Rank Badge */}
-                  <div className="relative flex-shrink-0">
-                    <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
-                      <span className="text-5xl sm:text-7xl font-bold text-black">#{currentTeam.rank}</span>
-                    </div>
-                    <div className="absolute -bottom-4 left-1/2 transform -translate-x-1/2 bg-black px-4 sm:px-6 py-2 rounded-full border-2 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]">
-                      <span className="text-[#FFD700] font-bold text-sm sm:text-lg">
-                        Batch {currentTeam.batch}
-                      </span>
+                  <div className="relative shrink-0 mx-auto sm:mx-0">
+                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-gradient-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
+                      <span className="text-5xl sm:text-6xl font-bold text-black">#{currentTeam.rank}</span>
                     </div>
                   </div>
 
                   {/* Team Details */}
-                  <div className="flex-1 space-y-3 text-center sm:text-left w-full">
-                    <h3 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF]">
+                  <div className="flex-1 space-y-4 w-full">
+                    <h3 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] text-center sm:text-left">
                       Team #{currentTeam.rank}
                     </h3>
+                    
+                    {/* Upper Row: Batch, Rank in Batch, Points */}
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                      <span className="bg-[#FFD700]/20 text-[#FFD700] px-4 py-2 rounded-lg font-bold text-lg sm:text-xl border border-[#FFD700]/50 shadow-[0_0_15px_rgba(255,215,0,0.3)]">
-                        👥 {currentTeam.memberCount} members
-                      </span>
-                      <span className="bg-[#FFD700]/20 text-[#FFD700] px-4 py-2 rounded-lg font-bold text-lg sm:text-xl border border-[#FFD700]/50 shadow-[0_0_15px_rgba(255,215,0,0.3)]">
+                      <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
                         📚 Batch {currentTeam.batch}
                       </span>
+                      <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                        🏆 Rank #{currentTeam.rank}
+                      </span>
+                      {currentTeam.totalPoints !== undefined && (
+                        <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                          ⭐ {currentTeam.totalPoints} pts
+                        </span>
+                      )}
                     </div>
                     
-                    {/* Optional Team Performance Stats */}
-                    {(currentTeam.successfulAttempts !== undefined || currentTeam.totalPoints !== undefined) && (
-                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mt-4">
-                        {currentTeam.successfulAttempts !== undefined && (
-                          <div className="bg-green-900/30 border border-green-500/50 rounded-lg px-4 py-2">
-                            <div className="text-xs text-green-300">Problems Solved</div>
-                            <div className="text-2xl font-bold text-green-400">{currentTeam.successfulAttempts}</div>
-                          </div>
-                        )}
-                        {currentTeam.totalPoints !== undefined && (
-                          <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg px-4 py-2">
-                            <div className="text-xs text-yellow-300">Total Points</div>
-                            <div className="text-2xl font-bold text-[#FFD700]">{currentTeam.totalPoints}</div>
-                          </div>
-                        )}
+                    {/* Lower Row: Member count and team info */}
+                    <div className="bg-black/40 rounded-lg p-4 border border-[#FFD700]/30">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[#FFD700] font-bold text-lg">👥 {currentTeam.memberCount} Members</span>
                       </div>
-                    )}
+                      <div className="text-gray-300 text-sm">
+                        Ready for bidding
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -486,6 +500,11 @@ export default function HouseDashboard() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setBidAmount(val === "" ? 0 : parseInt(val, 10));
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !loading && bidAmount > 0 && bidAmount <= house.remainingBudget) {
+                              placeBid();
+                            }
                           }}
                           className="flex-1 bg-gray-900/80 border-2 border-[#FFD700]/50 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-white text-xl sm:text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.2)]"
                           placeholder="Enter bid amount"

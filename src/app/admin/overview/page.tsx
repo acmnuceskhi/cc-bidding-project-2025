@@ -12,6 +12,7 @@ import { FullPageSpinner } from "@/components/Spinner";
 interface WinnerData {
   teamName: string;
   teamBatch?: string;
+  teamRank?: number;
   memberCount?: number;
   houseName: string;
   amount: number;
@@ -98,6 +99,7 @@ export default function OverviewPage() {
         setWinnerData({
           teamName: `Team ${team?.rank || "?"}`,
           teamBatch: team?.batch,
+          teamRank: team?.rank,
           memberCount: team?.memberCount,
           houseName: statusData.winner.houseName,
           amount: statusData.winner.amount,
@@ -228,6 +230,7 @@ export default function OverviewPage() {
                 );
                 let teamName = "Unknown Team";
                 let teamBatch: string | undefined = undefined;
+                let teamRank: number | undefined = undefined;
                 let memberCount: number | undefined = undefined;
                 if (teamsResp.ok) {
                   const teamsList = await teamsResp.json();
@@ -237,12 +240,14 @@ export default function OverviewPage() {
                   if (tMatch) {
                     teamName = `Team ${tMatch.rank}`;
                     teamBatch = tMatch.batch;
+                    teamRank = tMatch.rank;
                     memberCount = tMatch.memberCount;
                   }
                 }
                 setWinnerData({
                   teamName,
                   teamBatch,
+                  teamRank,
                   memberCount,
                   houseName,
                   amount: targetRound.winningBid,
@@ -339,6 +344,7 @@ export default function OverviewPage() {
         setWinnerData({
           teamName: `Team ${team?.rank || "?"}`,
           teamBatch: team?.batch,
+          teamRank: team?.rank,
           memberCount: undefined, // Will need to calculate if needed
           houseName: result.winningBid.houseName,
           amount: result.winningBid.amount,
@@ -465,21 +471,16 @@ export default function OverviewPage() {
             </div>
 
             {currentTeam && (
-              <div className="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-xl p-6 text-center">
-                <h3 className="text-xl sm:text-2xl font-bold text-black mb-4">
+              <div className="bg-black/60 rounded-xl p-6 text-center border-2 border-[#FFD700]/50 shadow-[0_0_25px_rgba(255,215,0,0.3)] backdrop-blur-md">
+                <h3 className="text-xl sm:text-2xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_15px_#FFD700]">
                   👥 Current Team
                 </h3>
                 <div className="flex flex-col items-center justify-center gap-4">
                   <div className="text-center">
-                    <p className="text-2xl sm:text-3xl font-bold text-black">
-                      Team #{currentTeam.rank || roundNumber || "?"}
+                    <p className="text-2xl sm:text-3xl font-bold text-white">
+                      {currentTeam.batch ? `Batch ${currentTeam.batch} #${currentTeam.rank || roundNumber || "?"}` : `Team #${currentTeam.rank || roundNumber || "?"}`}
                     </p>
-                    {currentTeam.batch && (
-                      <p className="text-lg text-black text-opacity-90">
-                        Batch: {currentTeam.batch}
-                      </p>
-                    )}
-                    <p className="text-black text-opacity-80 mt-2">
+                    <p className="text-gray-300 mt-2">
                       Awaiting house bids...
                     </p>
                   </div>
@@ -489,7 +490,7 @@ export default function OverviewPage() {
 
             {/* Current Bids Display */}
             {activeRound && currentBids.length > 0 && (
-              <div className="bg-gradient-to-r from-purple-900/60 to-indigo-900/60 rounded-xl p-6 border-2 border-[#FFD700]/50 shadow-[0_0_25px_rgba(255,215,0,0.3)] backdrop-blur-md mt-6">
+              <div className="bg-black/60 rounded-xl p-6 border-2 border-[#FFD700]/50 shadow-[0_0_25px_rgba(255,215,0,0.3)] backdrop-blur-md mt-6">
                 <h3 className="text-xl sm:text-2xl font-bold text-[#FFD700] mb-4 text-center drop-shadow-[0_0_15px_#FFD700]">
                   💰 Current Bids
                 </h3>
@@ -620,41 +621,41 @@ export default function OverviewPage() {
 
       {/* Winner Modal - Neon Theme */}
       {showWinnerModal && winnerData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
-          <div className="bg-gradient-to-br from-black via-gray-900 to-black rounded-3xl p-8 sm:p-12 border-4 border-[#FFD700] shadow-[0_0_60px_rgba(255,215,0,0.6)] max-w-4xl w-full mx-4 relative overflow-hidden">
-            {/* Neon grid overlay */}
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70008_1px,transparent_1px),linear-gradient(to_bottom,#FFD70008_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-30"></div>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.4)] max-w-2xl w-full mx-4 relative overflow-hidden animate-slide-up">
+            {/* Subtle grid overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70005_1px,transparent_1px),linear-gradient(to_bottom,#FFD70005_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-20"></div>
 
             <div className="relative z-10 text-center">
-              <h1 className="text-5xl sm:text-7xl font-bold text-[#FFD700] mb-8 drop-shadow-[0_0_30px_#FFD700] animate-pulse">
+              <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_20px_#FFD700]">
                 🏆 SOLD! 🏆
               </h1>
 
-              <div className="bg-black/60 rounded-2xl p-8 mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)]">
-                <div className="text-7xl mb-6">👥</div>
-                <h2 className="text-4xl sm:text-5xl font-bold text-white mb-2 drop-shadow-[0_0_20px_#FFFFFF]">
+              <div className="bg-black/40 rounded-xl p-6 mb-6 border border-[#FFD700]/40 shadow-[0_0_20px_rgba(255,215,0,0.2)]">
+                <div className="text-5xl mb-4">👥</div>
+                <h2 className="text-3xl sm:text-4xl font-bold text-white mb-2 drop-shadow-[0_0_15px_#FFFFFF]">
                   {winnerData.teamName}
                 </h2>
-                {winnerData.teamBatch && (
-                  <p className="text-xl text-gray-300 mb-2">
-                    Batch {winnerData.teamBatch}
+                {winnerData.teamBatch && winnerData.teamRank && (
+                  <p className="text-lg text-gray-300 mb-2">
+                    Batch {winnerData.teamBatch} #{winnerData.teamRank}
                   </p>
                 )}
                 {winnerData.memberCount && (
-                  <p className="text-lg text-gray-400 mb-4">
+                  <p className="text-sm text-gray-400 mb-3">
                     {winnerData.memberCount} members
                   </p>
                 )}
-                <p className="text-2xl sm:text-3xl text-gray-300">
+                <p className="text-xl text-gray-300">
                   has been won by
                 </p>
               </div>
 
-              <div className="bg-gradient-to-r from-green-900/80 to-emerald-900/80 rounded-2xl p-8 border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.4)]">
-                <h3 className="text-4xl sm:text-6xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_25px_#FFD700]">
+              <div className="bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-xl p-6 border-2 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+                <h3 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-3 drop-shadow-[0_0_20px_#FFD700]">
                   🏯 {winnerData.houseName}
                 </h3>
-                <div className="text-4xl sm:text-5xl font-bold text-white drop-shadow-[0_0_20px_#FFFFFF]">
+                <div className="text-3xl sm:text-4xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF]">
                   for ${winnerData.amount}
                 </div>
               </div>
@@ -664,7 +665,7 @@ export default function OverviewPage() {
                   setShowWinnerModal(false);
                   setWinnerData(null);
                 }}
-                className="mt-8 bg-[#FFD700] hover:bg-[#FFB800] text-black font-bold py-3 px-8 rounded-lg text-xl transition-all shadow-[0_0_25px_rgba(255,215,0,0.5)] hover:shadow-[0_0_35px_rgba(255,215,0,0.7)] transform hover:scale-105"
+                className="mt-6 bg-[#FFD700] hover:bg-[#FFB800] text-black font-bold py-2 px-6 rounded-lg text-lg transition-all shadow-[0_0_20px_rgba(255,215,0,0.4)] hover:shadow-[0_0_30px_rgba(255,215,0,0.6)] transform hover:scale-105"
               >
                 Close
               </button>
@@ -672,6 +673,33 @@ export default function OverviewPage() {
           </div>
         </div>
       )}
+      
+      <style jsx>{`
+        @keyframes slide-up {
+          from {
+            transform: translateY(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.4s ease-out;
+        }
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

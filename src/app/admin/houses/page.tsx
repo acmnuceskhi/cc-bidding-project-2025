@@ -35,6 +35,7 @@ export default function HousesPage() {
   const [houseTeams, setHouseTeams] = useState<
     Record<string, TeamWithPrice[]>
   >({});
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [hasActiveRound, setHasActiveRound] = useState(false);
   const [editingHouse, setEditingHouse] = useState<string | null>(null);
   const [budgetInput, setBudgetInput] = useState<{
@@ -59,6 +60,7 @@ export default function HousesPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setIsInitialLoad(true);
         // Fetch houses
         const housesResponse = await fetchWithAuth("/api/houses", {
           method: "GET",
@@ -135,6 +137,8 @@ export default function HousesPage() {
         setHouseTeams(grouped);
       } catch (err) {
         console.error("Failed to fetch houses, teams, or rounds", err);
+      } finally {
+        setIsInitialLoad(false);
       }
     };
 
