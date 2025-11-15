@@ -1,18 +1,22 @@
-// Shared Socket.IO instance for use in both server.js and API routes
+// Shared Socket.IO instance for use in both server.ts and API routes
 // This allows API routes to emit socket events
-// Re-export from the JavaScript version to ensure both share the same module instance
 
-const socketInstance = require("./socket-instance.js");
+import type { Server as SocketIOServer } from "socket.io";
 
-export function setSocketInstance(io: any) {
-  socketInstance.setSocketInstance(io);
+let ioInstance: SocketIOServer | null = null;
+
+export function setSocketInstance(io: SocketIOServer) {
+  ioInstance = io;
 }
 
-export function getSocketInstance() {
-  return socketInstance.getSocketInstance();
+export function getSocketInstance(): SocketIOServer | null {
+  return ioInstance;
 }
 
 export function emitSocketEvent(event: string, data: any) {
-  socketInstance.emitSocketEvent(event, data);
+  if (ioInstance) {
+    ioInstance.emit(event, data);
+  } else if (process.env.NODE_ENV === "development") {
+    console.warn(`Socket.IO instance not available. Event "${event}" not emitted.`);
+  }
 }
-

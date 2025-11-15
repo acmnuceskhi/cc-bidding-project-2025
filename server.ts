@@ -1,8 +1,12 @@
-const { createServer } = require("http");
-const { parse } = require("url");
-const next = require("next");
-const { Server } = require("socket.io");
-const { setSocketInstance } = require("./src/lib/socket-instance");
+import { createServer } from "http";
+import { parse } from "url";
+import next from "next";
+import { Server } from "socket.io";
+import { setSocketInstance } from "@/lib/socket-instance";
+import { Rounds } from "@/lib/models/rounds";
+import { Teams } from "@/lib/models/teams";
+import { Bids } from "@/lib/models/bids";
+import { Houses } from "@/lib/models/houses";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -15,11 +19,6 @@ const handle = app.getRequestHandler();
 // Build current state from database (stateless approach)
 async function buildStateFromDB() {
   try {
-    const { Rounds } = require("./src/lib/models/rounds");
-    const { Teams } = require("./src/lib/models/teams");
-    const { Bids } = require("./src/lib/models/bids");
-    const { Houses } = require("./src/lib/models/houses");
-
     const activeRounds = await Rounds.getActive();
 
     if (activeRounds.length === 0) {
@@ -230,3 +229,4 @@ app.prepare().then(() => {
     });
   });
 });
+
