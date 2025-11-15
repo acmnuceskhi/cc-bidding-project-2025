@@ -8,6 +8,7 @@ import { Round } from "@/lib/models/rounds";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { FullPageSpinner } from "@/components/Spinner";
+import { useSocket } from "@/hooks/useSocket";
 
 interface WinnerData {
   teamName: string;
@@ -38,6 +39,9 @@ export default function OverviewPage() {
   // Use ref to capture current team without causing re-renders
   const currentTeamRef = useRef<Team | null>(null);
   // Server time hook not needed directly; countdown uses its own
+
+  // Socket.IO integration for real-time updates
+  const { socket, isConnected } = useSocket();
 
   // Update ref when currentTeam changes
   useEffect(() => {
@@ -320,9 +324,65 @@ export default function OverviewPage() {
 
   useEffect(() => {
     fetchOverviewData(true);
-    const pollInterval = setInterval(() => fetchOverviewData(false), 2000);
-    return () => clearInterval(pollInterval);
-  }, [fetchOverviewData]);
+    
+    // Only set up polling if socket is NOT connected
+    // When socket is connected, we rely on socket events for updates
+    let pollInterval: NodeJS.Timeout | null = null;
+    
+    if (!isConnected) {
+      pollInterval = setInterval(() => fetchOverviewData(false), 2000);
+    }
+    
+    // Listen to socket events for real-time updates
+    if (socket) {
+      const handleRoundStarted = () => {
+        // Round started - fetch to get updated state
+        fetchOverviewData(false);
+      };
+
+      const handleRoundEnded = () => {
+        // Round ended - fetch to get winner details
+        fetchOverviewData(false);
+      };
+
+      const handleStateUpdate = () => {
+        // State update - fetch to get latest data
+        // Debounce: use a small delay to avoid rapid fetches
+        setTimeout(() => {
+          fetchOverviewData(false);
+        }, 1000);
+      };
+
+      const handleBidNotification = () => {
+        // Bid placed - fetch to get updated bids
+        // Debounce: use a small delay to avoid rapid fetches
+        setTimeout(() => {
+          fetchOverviewData(false);
+        }, 1000);
+      };
+
+      socket.on("round-started", handleRoundStarted);
+      socket.on("round-ended", handleRoundEnded);
+      socket.on("state-update", handleStateUpdate);
+      socket.on("bid-notification", handleBidNotification);
+
+      return () => {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+        socket.off("round-started", handleRoundStarted);
+        socket.off("round-ended", handleRoundEnded);
+        socket.off("state-update", handleStateUpdate);
+        socket.off("bid-notification", handleBidNotification);
+      };
+    }
+    
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [fetchOverviewData, isConnected, socket]);
 
   const { remainingMs: syncedRemainingMs } = useSynchronizedCountdown(
     activeRound?.timerEnd ? activeRound.timerEnd.toISOString() : null

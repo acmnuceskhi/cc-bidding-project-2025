@@ -511,6 +511,12 @@ export default function ProjectorDisplay() {
             scheduleNextPoll();
           });
         }, pollDelayRef.current);
+      } else {
+        // Socket is connected - clear any pending polls
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
       }
     };
 
