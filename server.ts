@@ -7,6 +7,7 @@ import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
+import { buildProjectorData } from "@/lib/socket-projector-data";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -149,8 +150,13 @@ app.prepare().then(() => {
     }
 
     try {
+      // Send both legacy state-update and new projector-update
       const currentState = await buildStateFromDB();
       socket.emit("state-update", currentState);
+      
+      // Also send full projector data for projector page
+      const projectorData = await buildProjectorData();
+      socket.emit("projector-update", projectorData);
     } catch (error) {
       if (dev) {
         console.error("Error sending initial state:", error);
@@ -159,6 +165,15 @@ app.prepare().then(() => {
         screen: "waiting",
         message: "Waiting for admin to start...",
       });
+      // Try to send projector data even on error (may have partial data)
+      try {
+        const projectorData = await buildProjectorData();
+        socket.emit("projector-update", projectorData);
+      } catch (projectorError) {
+        if (dev) {
+          console.error("Error sending initial projector data:", projectorError);
+        }
+      }
     }
 
     socket.on("bid-placed", (data) => {

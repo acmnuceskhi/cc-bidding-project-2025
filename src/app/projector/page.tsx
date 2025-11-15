@@ -535,6 +535,232 @@ export default function ProjectorDisplay() {
 
     // Listen to socket events for real-time updates
     if (socket) {
+      // Handle projector-update event with full data (status + houses)
+      // This eliminates the need for HTTP requests when socket is connected
+      const handleProjectorUpdate = (data: {
+        status: {
+          roundId: string | null;
+          team: {
+            teamId: string;
+            rank: number;
+            batch: string | null;
+            memberCount: number;
+            successfulAttempts?: number;
+            totalPoints?: number;
+          } | null;
+          roundStatus: "active" | "idle";
+          roundNumber?: number;
+          timerRemaining: number;
+          timerEnd?: string;
+          bidsPlaced: Array<{ houseId: string; amount: number }>;
+          roundEnded?: boolean;
+          winner?: {
+            houseName: string;
+            amount: number;
+          };
+        };
+        houses: Array<{
+          _id: string;
+          houseId: string;
+          name: string;
+          remainingBudget: number;
+          totalBudget: number;
+        }>;
+      }) => {
+        if (process.env.NODE_ENV === "development") {
+          console.log("📡 Projector-update received via socket:", data);
+        }
+
+        // Update houses
+        setHouses(data.houses);
+
+        // Update status
+        const statusData: Status = {
+          roundStatus: data.status.roundStatus,
+          roundId: data.status.roundId || undefined,
+          roundNumber: data.status.roundNumber,
+          team: data.status.team
+            ? {
+                teamId: data.status.team.teamId,
+                rank: data.status.team.rank,
+                batch: data.status.team.batch || "",
+                memberCount: data.status.team.memberCount,
+                successfulAttempts: data.status.team.successfulAttempts,
+                totalPoints: data.status.team.totalPoints,
+              }
+            : undefined,
+          timerEnd: data.status.timerEnd,
+          bidsPlaced: data.status.bidsPlaced,
+          roundEnded: data.status.roundEnded,
+          winner: data.status.winner
+            ? {
+                houseName: data.status.winner.houseName,
+                amount: data.status.winner.amount,
+              }
+            : undefined,
+        };
+        setStatus(statusData);
+
+        // Update team
+        if (data.status.team) {
+          setTeam({
+            teamId: data.status.team.teamId,
+            rank: data.status.team.rank,
+            batch: data.status.team.batch || "",
+            memberCount: data.status.team.memberCount,
+            successfulAttempts: data.status.team.successfulAttempts,
+            totalPoints: data.status.team.totalPoints,
+          });
+          if (data.status.roundId) {
+            setLastRoundId(data.status.roundId);
+          }
+        }
+
+        // Handle bid states and winner display (similar to fetchData logic)
+        if (statusData.roundStatus === "active" && statusData.team) {
+          winnerShownRef.current = false;
+
+          // Track bid states
+          const bidsPlaced = statusData.bidsPlaced || [];
+          setHouseBidStates((prevStates) => {
+            const newStates: Record<string, HouseBidState> = {};
+
+            data.houses.forEach((house) => {
+              const houseId = house.houseId || house._id;
+              if (!houseId) return;
+
+              const bid = bidsPlaced.find(
+                (b) => b.houseId === houseId || b.houseId === house._id
+              );
+              const prevState = prevStates[houseId];
+
+              if (!bid) {
+                newStates[houseId] = {
+                  status: "no-bid",
+                  showFlash: false,
+                };
+              } else if (!prevState || prevState.status === "no-bid") {
+                // First bid
+                newStates[houseId] = {
+                  status: "bid-placed",
+                  showFlash: true,
+                  previousAmount: bid.amount,
+                };
+                if (bidSoundRef.current) {
+                  try {
+                    bidSoundRef.current.currentTime = 0;
+                    void bidSoundRef.current.play();
+                  } catch (e) {
+                    console.warn("Bid sound play failed", e);
+                  }
+                }
+                setTimeout(() => {
+                  setHouseBidStates((prev) => ({
+                    ...prev,
+                    [houseId]: { ...prev[houseId], showFlash: false },
+                  }));
+                }, 2000);
+              } else if (prevState.previousAmount !== bid.amount) {
+                // Bid updated
+                newStates[houseId] = {
+                  status: "bid-updated",
+                  showFlash: true,
+                  previousAmount: bid.amount,
+                };
+                if (bidSoundRef.current) {
+                  try {
+                    bidSoundRef.current.currentTime = 0;
+                    void bidSoundRef.current.play();
+                  } catch (e) {
+                    console.warn("Bid sound play failed", e);
+                  }
+                }
+                setTimeout(() => {
+                  setHouseBidStates((prev) => ({
+                    ...prev,
+                    [houseId]: { ...prev[houseId], showFlash: false },
+                  }));
+                }, 2000);
+              } else {
+                // No change
+                newStates[houseId] = prevState;
+              }
+            });
+
+            return newStates;
+          });
+        }
+
+        // Handle winner display
+        const hasWinnerFromStatus =
+          !!statusData.winner || statusData.roundEnded === true;
+
+        if (hasWinnerFromStatus && !winnerShownRef.current) {
+          if (process.env.NODE_ENV === "development") {
+            console.log("🏆 Projector: Showing winner from socket update");
+          }
+
+          // Fetch all bids for winner modal (still need this for full bid list)
+          const roundIdToFetch = statusData.roundId || lastRoundId;
+          if (roundIdToFetch) {
+            fetch(`/api/bids?roundId=${roundIdToFetch}`, { cache: "no-store" })
+              .then((bidsRes) => {
+                if (bidsRes.ok) {
+                  return bidsRes.json();
+                }
+                return [];
+              })
+              .then((bidsData) => {
+                const allBids = bidsData.map(
+                  (bid: { houseId: string; amount: number }) => {
+                    const house = data.houses.find(
+                      (h) =>
+                        h.houseId === bid.houseId || h._id === bid.houseId
+                    );
+                    return {
+                      houseId: bid.houseId,
+                      houseName: house?.name || "Unknown",
+                      amount: bid.amount,
+                    };
+                  }
+                ).sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
+
+                const derivedWinner: WinnerData = {
+                  houseName: statusData.winner?.houseName || "Unknown House",
+                  amount: statusData.winner?.amount || 0,
+                  allBids,
+                };
+
+                setWinnerData(derivedWinner);
+                lastCompletedWinnerRef.current = derivedWinner;
+                setShowWinner(true);
+                winnerShownRef.current = true;
+                setLastRoundId(null);
+
+                if (winnerSoundRef.current) {
+                  try {
+                    winnerSoundRef.current.currentTime = 0;
+                    void winnerSoundRef.current.play();
+                  } catch (e) {
+                    console.warn("Winner sound play failed", e);
+                  }
+                }
+
+                setTimeout(() => {
+                  setShowWinner(false);
+                  setWinnerData(null);
+                  if (winnerSoundRef.current) {
+                    winnerSoundRef.current.pause();
+                  }
+                }, 15000);
+              })
+              .catch((err) => {
+                console.error("Error fetching round bids:", err);
+              });
+          }
+        }
+      };
+
       const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
         // Immediately update bid state when a bid is placed
         if (data.roundId === status?.roundId) {
@@ -599,56 +825,36 @@ export default function ProjectorDisplay() {
         }
       };
 
+      // Legacy handlers - kept for backward compatibility but no longer fetch data
+      // projector-update event now provides all data needed
       const handleRoundStarted = (data?: { roundId: string; timerEnd: string }) => {
-        // Round started - fetch full data to get team info, house budgets, etc.
-        // Clear any pending polls since we're fetching now
+        // Clear any pending polls - projector-update will provide data
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
         }
-        // Fetch immediately to get all round data (only when socket connected, not polling)
-        if (isConnected) {
-          fetchData();
-        }
+        // No fetchData() call - wait for projector-update event
       };
 
       const handleRoundEnded = (data?: { roundId: string; winner: any; losers: any[] }) => {
-        // Round ended - fetch to get winner details and updated house budgets
+        // Clear any pending polls - projector-update will provide data
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
         }
-        // Fetch immediately to get final state (only when socket connected, not polling)
-        if (isConnected) {
-          fetchData();
-        }
+        // No fetchData() call - wait for projector-update event
       };
 
       const handleStateUpdate = (state: any) => {
-        // State update received - use it to update round state if it's bidding state
-        // But we still need to fetch for full data (house budgets, bid amounts)
-        // Only fetch when socket is connected (not when polling)
-        if (!isConnected) return;
-        
-        if (state.screen === "bidding" && state.roundId === status?.roundId) {
-          // Debounce: only fetch if we haven't fetched recently
-          if (pollTimeoutRef.current) {
-            clearTimeout(pollTimeoutRef.current);
-            pollTimeoutRef.current = null;
-          }
-          pollTimeoutRef.current = setTimeout(() => {
-            fetchData();
-          }, 2000); // 2s debounce for state updates
-        } else if (state.screen === "waiting" || state.screen === "results") {
-          // Round ended or waiting - fetch to get full state
-          if (pollTimeoutRef.current) {
-            clearTimeout(pollTimeoutRef.current);
-            pollTimeoutRef.current = null;
-          }
-          fetchData();
+        // State update received - projector-update will provide full data
+        // No fetchData() call - wait for projector-update event
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
         }
       };
 
+      socket.on("projector-update", handleProjectorUpdate);
       socket.on("bid-notification", handleBidNotification);
       socket.on("round-started", handleRoundStarted);
       socket.on("round-ended", handleRoundEnded);
@@ -658,6 +864,7 @@ export default function ProjectorDisplay() {
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current);
         }
+        socket.off("projector-update", handleProjectorUpdate);
         socket.off("bid-notification", handleBidNotification);
         socket.off("round-started", handleRoundStarted);
         socket.off("round-ended", handleRoundEnded);
