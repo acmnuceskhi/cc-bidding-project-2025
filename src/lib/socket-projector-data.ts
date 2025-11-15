@@ -149,12 +149,12 @@ export async function buildProjectorData(): Promise<ProjectorUpdate> {
 
     const status: ProjectorStatus = {
       roundId: activeRound._id?.toString() || null,
-      team: team
+      team: team && team._id
         ? {
-            teamId: team._id?.toString(),
+            teamId: team._id.toString(),
             rank: team.rank,
             batch: team.batch ?? null,
-            memberCount: getMemberCount(team._id?.toString() || ""),
+            memberCount: getMemberCount(team._id.toString()),
             successfulAttempts: team.successfulAttempts,
             totalPoints: team.totalPoints,
           }

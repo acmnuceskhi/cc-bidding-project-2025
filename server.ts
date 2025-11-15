@@ -112,7 +112,7 @@ async function buildStateFromDB() {
 app.prepare().then(() => {
   const httpServer = createServer(async (req, res) => {
     try {
-      const parsedUrl = parse(req.url, true);
+      const parsedUrl = parse(req.url || "/", true);
       await handle(req, res, parsedUrl);
     } catch (err) {
       if (dev) {
