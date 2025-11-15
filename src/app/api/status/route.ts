@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { Participants } from "@/lib/models/participants";
+import type { Participant } from "@/lib/models/participants";
 import { Bids } from "@/lib/models/bids";
 import { checkAndAutoEndExpiredRound } from "@/lib/round-auto-end";
 
@@ -9,7 +10,7 @@ import { checkAndAutoEndExpiredRound } from "@/lib/round-auto-end";
 let cache: {
   phaseCounts: any;
   unsoldTeams: any[];
-  participants: Participants[];
+  participants: Participant[];
   timestamp: number;
 } | null = null;
 
