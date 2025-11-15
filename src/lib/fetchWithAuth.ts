@@ -1,5 +1,11 @@
-// Request deduplication: track in-flight requests
-const inFlightRequests = new Map<string, Promise<Response>>();
+// Request deduplication: track in-flight requests and snapshot bodies once
+type ResponseSnapshot = {
+  status: number;
+  statusText: string;
+  headers: Array<[string, string]>;
+  body: ArrayBuffer;
+};
+const inFlightRequests = new Map<string, Promise<ResponseSnapshot>>();
 
 function getRequestKey(url: string, options: RequestInit): string {
   const method = options.method || "GET";
@@ -21,7 +27,14 @@ export async function fetchWithAuth(
   // Check if request is already in flight
   const existingRequest = inFlightRequests.get(requestKey);
   if (existingRequest) {
-    return existingRequest;
+    // Build a fresh Response from the cached snapshot
+    return existingRequest.then((snap) =>
+      new Response(snap.body.slice(0), {
+        status: snap.status,
+        statusText: snap.statusText,
+        headers: new Headers(snap.headers),
+      })
+    );
   }
 
   const token = sessionStorage.getItem("token");
@@ -33,11 +46,11 @@ export async function fetchWithAuth(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  const requestPromise = fetch(url, {
+  const requestPromise: Promise<ResponseSnapshot> = fetch(url, {
     ...options,
     headers,
   })
-    .then((res) => {
+    .then(async (res) => {
       // --- Handle expired / invalid token ---
       if (res.status === 401) {
         console.warn("[Auth] Token expired or invalid. Logging out.");
@@ -53,12 +66,33 @@ export async function fetchWithAuth(
         }
       }
 
+      // Snapshot the response body and headers once
+      let body: ArrayBuffer;
+      try {
+        body = await res.clone().arrayBuffer();
+      } catch (e) {
+        // If cloning fails for any reason, attempt to read directly
+        try {
+          body = await res.arrayBuffer();
+        } catch (err) {
+          // As a last resort, create an empty body
+          body = new ArrayBuffer(0);
+        }
+      }
+
+      const headersArray = Array.from(res.headers.entries());
+
       // Remove from in-flight after a short delay to allow deduplication window
       setTimeout(() => {
         inFlightRequests.delete(requestKey);
       }, 100);
 
-      return res;
+      return {
+        status: res.status,
+        statusText: res.statusText,
+        headers: headersArray,
+        body,
+      } as ResponseSnapshot;
     })
     .catch((error) => {
       inFlightRequests.delete(requestKey);
@@ -66,5 +100,12 @@ export async function fetchWithAuth(
     });
 
   inFlightRequests.set(requestKey, requestPromise);
-  return requestPromise;
+  // Return a fresh Response for the initial caller as well
+  return requestPromise.then((snap) =>
+    new Response(snap.body.slice(0), {
+      status: snap.status,
+      statusText: snap.statusText,
+      headers: new Headers(snap.headers),
+    })
+  );
 }

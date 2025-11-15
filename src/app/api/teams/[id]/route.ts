@@ -42,6 +42,7 @@ export async function GET(
 
     return NextResponse.json({
       teamId: team._id?.toString(),
+      name: team.name || null,
       rank: team.rank,
       batch: team.batch || null,
       successfulAttempts: team.successfulAttempts,
@@ -99,6 +100,7 @@ export async function PUT(
 
     const body = await request.json();
     const {
+      name,
       rank,
       batch,
       successfulAttempts,
@@ -110,6 +112,7 @@ export async function PUT(
 
     // Build update object with only provided fields
     const updateData: Record<string, unknown> = {};
+    if (name !== undefined) updateData.name = name;
     if (rank !== undefined) updateData.rank = rank;
     if (batch !== undefined) updateData.batch = batch;
     if (successfulAttempts !== undefined)

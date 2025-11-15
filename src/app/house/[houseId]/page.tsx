@@ -1,14 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { House } from "@/lib/models/houses";
+// import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useToast } from "@/components/ToastProvider";
 import { FullPageSpinner } from "@/components/Spinner";
 import { useSocket } from "@/hooks/useSocket";
+
+type Phase = "A" | "B" | "CA" | "CB" | "CC" | "CD";
 
 interface Team {
   teamId: string;
@@ -18,6 +19,8 @@ interface Team {
   successfulAttempts?: number;
   totalPoints?: number;
   timeTaken?: number;
+  name?: string | null;
+  members?: Array<{ participantId: string; name: string; rollNumber?: string; picture?: string | null }>;
 }
 
 interface HouseApiResponse {
@@ -41,12 +44,11 @@ export default function HouseDashboard() {
   const params = useParams();
   const houseId = params.houseId as string;
 
-  const [house, setHouse] = useState<House | null>(null);
+  const [house, setHouse] = useState<HouseApiResponse | null>(null);
   const [activeRound, setActiveRound] = useState<
     (filteredRound & { roundNumber?: number }) | null
   >(null);
-  const [currentTeam, setCurrentTeam] =
-    useState<Team | null>(null);
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [currentBid, setCurrentBid] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -54,10 +56,12 @@ export default function HouseDashboard() {
   const [canBid, setCanBid] = useState<boolean>(true);
   const [canBidMessage, setCanBidMessage] = useState<string>("");
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
+  const [phase, setPhase] = useState<Phase>("A");
+  const [allBids, setAllBids] = useState<Array<{ houseId: string; houseName: string; amount: number }>>([]);
   // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
-  const { socket, isConnected, currentState, emit, auctionState } = useSocket();
+  const { socket, auctionState } = useSocket();
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -70,8 +74,7 @@ export default function HouseDashboard() {
     return houseMap[houseName] || "/arena-background.jpg";
   };
 
-  useEffect(() => {
-    const fetchData = async (isInitialLoad = false) => {
+  const fetchData = useCallback(async (isInitialLoad = false) => {
       try {
         if (isInitialLoad) {
           setInitialLoading(true);
@@ -181,6 +184,9 @@ export default function HouseDashboard() {
           setCurrentTeam(null);
           setCurrentBid(null);
           setTimeLeft(0);
+          setCanBid(false);
+          setCanBidMessage("");
+          setBidAmount(0);
         }
 
       } catch (error) {
@@ -190,8 +196,131 @@ export default function HouseDashboard() {
           setInitialLoading(false);
         }
       }
+    }, [auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime, houseId]);
+
+  // Fetch on phase transitions
+  useEffect(() => {
+    const run = async () => {
+      const roundId = auctionState?.currentRound || "";
+      if (!auctionState) return;
+
+      if (phase === "CB" || phase === "CD") {
+        if (!roundId) return;
+        try {
+          const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
+          if (roundRes.ok) {
+            const r = await roundRes.json();
+            setActiveRound({
+              _id: roundId,
+              roundId,
+              teamId: r.teamId || "",
+              status: phase === "CD" ? "active" : "scheduled",
+              timerEnd: auctionState.currentRoundEndTime || undefined,
+              scheduledStart: auctionState.currentRoundStartTime || undefined,
+            });
+
+            if (r.teamId) {
+              try {
+                const teamRes = await fetchWithAuth(`/api/teams/${r.teamId}`, { cache: "no-store" });
+                if (teamRes.ok) {
+                  const t = await teamRes.json();
+                  setCurrentTeam({
+                    teamId: t.teamId,
+                    name: t.name || null,
+                    rank: t.rank,
+                    batch: t.batch,
+                    memberCount: t.memberCount,
+                    successfulAttempts: t.successfulAttempts,
+                    totalPoints: t.totalPoints,
+                    timeTaken: undefined,
+                    members: t.members || [],
+                  });
+                } else {
+                  setCurrentTeam(null);
+                }
+              } catch {
+                setCurrentTeam(null);
+              }
+
+              // Check bidding eligibility (only relevant in CD)
+              if (phase === "CD" && house) {
+                try {
+                  const canBidRes = await fetchWithAuth(
+                    `/api/houses/${house.houseId}/canPlaceBid?teamId=${r.teamId}`,
+                    { cache: "no-store" }
+                  );
+                  const canBidData = await canBidRes.json();
+                  setCanBid(!!canBidData.canBid);
+                  setCanBidMessage(canBidData.message || "");
+                } catch (err) {
+                  console.error("Failed to check canBid:", err);
+                  setCanBid(true);
+                }
+
+                // Fetch current bid for this house in this round
+                try {
+                  const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+                  const bidsData = await bidsRes.json();
+                  if (Array.isArray(bidsData)) {
+                    const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
+                    setCurrentBid(myBid ? myBid.amount : null);
+                  } else {
+                    setCurrentBid(null);
+                  }
+                } catch (error) {
+                  console.error("Failed to fetch current bid:", error);
+                  setCurrentBid(null);
+                }
+              } else {
+                setCanBid(false);
+                setCanBidMessage("");
+                setCurrentBid(null);
+              }
+            } else {
+              setCurrentTeam(null);
+            }
+          }
+        } catch {}
+      } else if (phase === "CC") {
+        // Results phase - load all bids for the last round
+        if (!roundId) {
+          setAllBids([]);
+          return;
+        }
+        try {
+          const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+          const bidsData = await bidsRes.json();
+          if (Array.isArray(bidsData)) {
+            setAllBids(
+              bidsData
+                .map((b: any) => ({ houseId: b.houseId, houseName: b.houseName, amount: b.amount }))
+                .sort((a: any, b: any) => b.amount - a.amount)
+            );
+          } else {
+            setAllBids([]);
+          }
+        } catch {
+          setAllBids([]);
+        }
+        // During CC, bids cannot be placed
+        setCanBid(false);
+        setCanBidMessage("");
+      } else {
+        // Phases A, B, CA — clear transient states
+        setActiveRound(null);
+        setCurrentTeam(null);
+        setCurrentBid(null);
+        setAllBids([]);
+        setCanBid(false);
+        setCanBidMessage("");
+      }
     };
 
+    run();
+    // Re-run on phase or current round id changes
+  }, [phase, auctionState, house, houseId]);
+
+  useEffect(() => {
     fetchData(true);
 
     // Listen to socket events for real-time updates
@@ -203,75 +332,69 @@ export default function HouseDashboard() {
         }
       };
 
-      const handleRoundStarted = () => {
-        // Refresh when a new round starts
-        fetchData(false);
-      };
-
-      const handleRoundEnded = () => {
-        // Refresh when round ends
-        fetchData(false);
-      };
-
-      const handleStateUpdate = () => {
-        // Refresh on state updates
+      const handleAuctionState = () => {
+        // Explicitly handle auction-state broadcasts as well
         fetchData(false);
       };
 
       socket.on("bid-notification", handleBidNotification);
-      socket.on("round-started", handleRoundStarted);
-      socket.on("round-ended", handleRoundEnded);
-      socket.on("state-update", handleStateUpdate);
+      socket.on("auction-state", handleAuctionState);
 
       return () => {
         socket.off("bid-notification", handleBidNotification);
-        socket.off("round-started", handleRoundStarted);
-        socket.off("round-ended", handleRoundEnded);
-        socket.off("state-update", handleStateUpdate);
+        socket.off("auction-state", handleAuctionState);
       };
     }
 
     return () => {};
-  }, [houseId, socket, auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime]);
+  }, [houseId, socket, auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime, fetchData, activeRound?.roundId]);
 
-  const startIso = auctionState?.currentRoundStartTime || null;
-  const endIso = auctionState?.currentRoundEndTime || null;
-  const nowMs = Date.now();
-  const startMs = startIso ? new Date(startIso).getTime() : null;
-  const endMs = endIso ? new Date(endIso).getTime() : null;
-  const isActive = !!(startMs && endMs && nowMs >= startMs && nowMs < endMs);
-  const isUpcoming = !!(startMs && nowMs < startMs);
-
-  const derivedEnd = endIso || null;
-  const { remainingMs: houseRemaining } = useSynchronizedCountdown(
-    derivedEnd
-  );
-
-  // Auction-level countdown (to show when no active round)
-  const auctionCountdownEnd = (() => {
-    if (!auctionState) return null;
-    const now = Date.now();
-    // Prefer round-specific start countdown if upcoming
-    const roundStartMs = auctionState.currentRoundStartTime
-      ? new Date(auctionState.currentRoundStartTime).getTime()
-      : null;
-    if (roundStartMs && now < roundStartMs) return auctionState.currentRoundStartTime;
-    const aStartMs = auctionState.auctionStartTime
-      ? new Date(auctionState.auctionStartTime).getTime()
-      : null;
-    const aEndMs = auctionState.auctionEndTime
-      ? new Date(auctionState.auctionEndTime).getTime()
-      : null;
-    if (aStartMs && now < aStartMs) return auctionState.auctionStartTime;
-    if (aEndMs && now < aEndMs) return auctionState.auctionEndTime;
-    return null;
-  })();
-  const { remainingMs: auctionRemainingMs } = useSynchronizedCountdown(
-    auctionCountdownEnd
-  );
+  // Phase computation loop (1s) using auctionState timestamps
   useEffect(() => {
-    setTimeLeft(houseRemaining);
-  }, [houseRemaining]);
+    let interval: NodeJS.Timeout | null = null;
+    const calc = () => {
+      const now = Date.now();
+      const aStart = auctionState?.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+      const aEnd = auctionState?.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
+      const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+      const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
+
+      let nextPhase: Phase = phase;
+      let nextTimeLeft = 0;
+
+      if (aStart && now < aStart) {
+        nextPhase = "A";
+        nextTimeLeft = aStart - now;
+      } else if (aEnd && now >= aEnd) {
+        nextPhase = "B";
+        nextTimeLeft = 0;
+      } else {
+        // Auction live window
+        if (rStart && now < rStart) {
+          nextPhase = "CB"; // Upcoming round
+          nextTimeLeft = rStart - now;
+        } else if (rStart && rEnd && now >= rStart && now < rEnd) {
+          nextPhase = "CD"; // Active round
+          nextTimeLeft = rEnd - now;
+        } else if (rEnd && now >= rEnd) {
+          nextPhase = "CC"; // Post-round results
+          nextTimeLeft = 0;
+        } else {
+          nextPhase = "CA"; // Waiting for next round during live auction
+          nextTimeLeft = 0;
+        }
+      }
+
+      setPhase(nextPhase);
+      setTimeLeft(nextTimeLeft);
+    };
+
+    calc();
+    interval = setInterval(calc, 1000);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [auctionState, phase]);
 
   const toast = useToast();
 
@@ -417,14 +540,19 @@ export default function HouseDashboard() {
                   <div className="mt-2 inline-block px-3 py-1 rounded-lg bg-black/40 border border-white/10 text-gray-100 text-sm">
                     {(() => {
                       const now = Date.now();
-                      const roundStartMs = auctionState.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
-                      if (roundStartMs && now < roundStartMs) return `Round starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
                       const aStartMs = auctionState.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
                       const aEndMs = auctionState.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
-                      if (aStartMs && now < aStartMs) return `Auction starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
-                      if (aEndMs && now < aEndMs) return `Auction live • ends in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
-                      if (aEndMs && now >= aEndMs) return "Auction finished";
-                      return "Auction status pending";
+                      if (phase === "CB") return `Round starts in ${Math.max(0, Math.floor(timeLeft / 1000))}s`;
+                      if (phase === "A") {
+                        if (aStartMs && now < aStartMs) return `Auction starts in ${Math.max(0, Math.floor((aStartMs - now) / 1000))}s`;
+                        return "Auction not started";
+                      }
+                      if (phase === "CA") {
+                        if (aEndMs && now < aEndMs) return `Auction live • ends in ${Math.max(0, Math.floor((aEndMs - now) / 1000))}s`;
+                        return "Auction live";
+                      }
+                      if (phase === "B") return "Auction finished";
+                      return "Auction status";
                     })()}
                   </div>
                 )}
@@ -485,7 +613,7 @@ export default function HouseDashboard() {
             </div>
           </div>
 
-          {activeRound && currentTeam ? (
+          {phase === "CD" && activeRound && currentTeam ? (
             <div className="space-y-6 sm:space-y-8">
               {/* Enhanced Round & Team Info */}
               <div className="bg-linear-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
@@ -512,7 +640,16 @@ export default function HouseDashboard() {
                       isTimeRunningOut ? "bg-red-500" : "bg-green-500"
                     }`}
                     style={{
-                      width: `${Math.max(0, (timeLeftValue / 60000) * 100)}%`,
+                      width: (() => {
+                        const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+                        const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
+                        if (rStart && rEnd) {
+                          const total = rEnd - rStart;
+                          const left = Math.max(0, timeLeftValue);
+                          return `${Math.max(0, Math.min(100, (left / total) * 100))}%`;
+                        }
+                        return "0%";
+                      })() 
                     }}
                   ></div>
                 </div>
@@ -532,7 +669,7 @@ export default function HouseDashboard() {
                   {/* Team Details */}
                   <div className="flex-1 space-y-4 w-full">
                     <h3 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] text-center sm:text-left">
-                      Team #{currentTeam.rank}
+                      {(currentTeam.name ? currentTeam.name : `Team #${currentTeam.rank}`)}
                     </h3>
                     
                     {/* Upper Row: Batch, Rank in Batch, Points */}
@@ -555,9 +692,13 @@ export default function HouseDashboard() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-[#FFD700] font-bold text-lg">👥 {currentTeam.memberCount} Members</span>
                       </div>
-                      <div className="text-gray-300 text-sm">
-                        Ready for bidding
-                      </div>
+                      {currentTeam.members && currentTeam.members.length > 0 ? (
+                        <div className="text-gray-300 text-sm">
+                          {currentTeam.members.map((m) => m.name).join(", ")}
+                        </div>
+                      ) : (
+                        <div className="text-gray-300 text-sm">Ready for bidding</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -646,18 +787,94 @@ export default function HouseDashboard() {
                 )}
               </div>
             </div>
+          ) : phase === "CB" && activeRound && currentTeam ? (
+            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+              <div className="text-center mb-6">
+                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">⚔️ Upcoming Round</h2>
+                <p className="text-lg sm:text-xl text-gray-300 mt-2">Starts in {formatTime(Math.max(0, timeLeft))}</p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8">
+                <div className="relative shrink-0 mx-auto sm:mx-0">
+                  <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
+                    <span className="text-5xl sm:text-6xl font-bold text-black">#{currentTeam.rank}</span>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-4 w-full">
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] text-center sm:text-left">
+                    {(currentTeam.name ? currentTeam.name : `Team #${currentTeam.rank}`)}
+                  </h3>
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                    <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                      📚 Batch {currentTeam.batch}
+                    </span>
+                    <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                      🏆 Rank #{currentTeam.rank}
+                    </span>
+                  </div>
+                  <div className="bg-black/40 rounded-lg p-4 border border-[#FFD700]/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[#FFD700] font-bold text-lg">👥 {currentTeam.memberCount} Members</span>
+                    </div>
+                    {currentTeam.members && currentTeam.members.length > 0 && (
+                      <div className="text-gray-300 text-sm">
+                        {currentTeam.members.map((m) => m.name).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : phase === "CC" ? (
+            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+              <div className="text-center mb-6">
+                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">🏁 Round Results</h2>
+                {allBids.length === 0 ? (
+                  <p className="text-gray-300 mt-2">No bids placed. No winner.</p>
+                ) : (
+                  (() => {
+                    const winner = allBids[0];
+                    const youWon = winner && winner.houseId === house.houseId;
+                    return (
+                      <p className={`mt-2 font-bold ${youWon ? "text-green-400" : "text-gray-300"}`}>
+                        {youWon ? "🎉 You won this round!" : `Winner: ${winner.houseName} with $${winner.amount}`}
+                      </p>
+                    );
+                  })()
+                )}
+              </div>
+              {allBids.length > 0 && (
+                <div className="max-w-2xl mx-auto">
+                  {allBids.map((b, idx) => (
+                    <div key={`${b.houseId}-${idx}`} className={`flex items-center justify-between px-4 py-3 rounded-lg mb-2 border ${b.houseId === house.houseId ? "border-green-500/60 bg-green-500/10" : "border-white/10 bg-white/5"}`}>
+                      <div className="text-white font-semibold">{idx + 1}. {b.houseName}</div>
+                      <div className={`text-lg font-bold ${idx === 0 ? "text-[#FFD700]" : "text-white"}`}>${b.amount}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
               <div className="text-center">
-                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">
-                  ⏸️ No Active Round
-                </h2>
-                <p className="text-lg sm:text-xl text-gray-300">
-                  Waiting for the next battle to begin...
-                </p>
-                <p className="text-gray-400 mt-4">
-                  The admin will start the next round soon
-                </p>
+                {phase === "A" && (
+                  <>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">⏳ Auction Not Started</h2>
+                    <p className="text-lg sm:text-xl text-gray-300">Starts in {formatTime(Math.max(0, timeLeft))}</p>
+                  </>
+                )}
+                {phase === "B" && (
+                  <>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">🏁 Auction Finished</h2>
+                    <p className="text-lg sm:text-xl text-gray-300">Thanks for participating!</p>
+                  </>
+                )}
+                {phase === "CA" && (
+                  <>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">⏸️ No Active Round</h2>
+                    <p className="text-lg sm:text-xl text-gray-300">Waiting for the next battle to begin...</p>
+                    <p className="text-gray-400 mt-4">The admin will start the next round soon</p>
+                  </>
+                )}
               </div>
             </div>
           )}
