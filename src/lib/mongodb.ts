@@ -13,7 +13,11 @@ if (!uri) {
   );
 }
 
-const options: MongoClientOptions = {};
+const options: MongoClientOptions = {
+  maxPoolSize: 10,      // Limit for free tier
+  minPoolSize: 2,       // Keep some connections warm
+  maxIdleTimeMS: 30000, // Close idle after 30s
+};
 
 let client: MongoClient;
 
