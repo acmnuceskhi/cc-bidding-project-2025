@@ -162,23 +162,40 @@ app.prepare().then(() => {
       });
     }
 
-    // Handle bid-placed events from API routes
     socket.on("bid-placed", (data) => {
-      if (dev) {
-        console.log("Bid placed:", data);
+      try {
+        if (dev) {
+          console.log("Bid placed:", data);
+        }
+        io.emit("bid-notification", {
+          houseId: data.houseId,
+          houseName: data.houseName,
+          roundId: data.roundId,
+        });
+      } catch (error) {
+        if (dev) {
+          console.error("Error handling bid-placed event:", error);
+        }
       }
-      io.emit("bid-notification", {
-        houseId: data.houseId,
-        houseName: data.houseName,
-        roundId: data.roundId,
-      });
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason) => {
       if (dev) {
-        console.log("Client disconnected:", socket.id);
+        console.log("Client disconnected:", socket.id, "Reason:", reason);
       }
     });
+
+    socket.on("error", (error) => {
+      if (dev) {
+        console.error("Socket error:", socket.id, error);
+      }
+    });
+  });
+
+  io.engine.on("connection_error", (err) => {
+    if (dev) {
+      console.error("Socket.IO connection error:", err);
+    }
   });
 
   httpServer

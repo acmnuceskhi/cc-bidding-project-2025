@@ -1,20 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-
-let socket: Socket | null = null;
+import type {
+  AppState,
+  ServerToClientEvents,
+  ClientToServerEvents,
+} from "@/types/socket";
 
 export function useSocket() {
   const [isConnected, setIsConnected] = useState(false);
-  const [currentState, setCurrentState] = useState<any>(null);
+  const [currentState, setCurrentState] = useState<AppState | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const socketRef = useRef<Socket<
+    ServerToClientEvents,
+    ClientToServerEvents
+  > | null>(null);
 
   useEffect(() => {
-    // Initialize socket connection
-    if (!socket) {
-      socket = io({
+    if (!socketRef.current) {
+      socketRef.current = io({
         path: "/socket.io",
+        autoConnect: true,
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
@@ -22,18 +29,18 @@ export function useSocket() {
         transports: ["websocket", "polling"],
       });
 
-      socket.on("connect", async () => {
+      const socket = socketRef.current;
+
+      const handleConnect = async () => {
         if (process.env.NODE_ENV === "development") {
           console.log("Socket connected");
         }
         setIsConnected(true);
         setIsReconnecting(false);
 
-        // Re-sync state from DB after reconnection
         try {
           const res = await fetch("/api/status", { cache: "no-store" });
           const freshState = await res.json();
-          // Convert to socket state format
           if (freshState.roundStatus === "active" && freshState.roundId) {
             const timeLeft = freshState.timerEnd
               ? Math.max(0, new Date(freshState.timerEnd).getTime() - Date.now())
@@ -69,54 +76,91 @@ export function useSocket() {
             console.error("Error syncing state after reconnect:", error);
           }
         }
-      });
+      };
 
-      socket.on("disconnect", () => {
+      const handleDisconnect = (reason: string) => {
         if (process.env.NODE_ENV === "development") {
-          console.log("Socket disconnected");
+          console.log("Socket disconnected:", reason);
         }
         setIsConnected(false);
-      });
+      };
 
-      socket.on("reconnect_attempt", () => {
+      const handleReconnectAttempt = () => {
         setIsReconnecting(true);
-      });
+      };
 
-      socket.on("reconnect_failed", () => {
+      const handleReconnectFailed = () => {
         setIsReconnecting(false);
         if (process.env.NODE_ENV === "development") {
           console.warn("Socket reconnection failed");
         }
-      });
+      };
 
-      socket.on("state-update", (state) => {
+      const handleStateUpdate = (state: AppState) => {
         if (process.env.NODE_ENV === "development") {
           console.log("State update received:", state);
         }
         setCurrentState(state);
-      });
+      };
+
+      const handleError = (error: Error) => {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Socket error:", error);
+        }
+      };
+
+      const handleConnectError = (error: Error) => {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Socket connection error:", error);
+        }
+      };
+
+      socket.on("connect", handleConnect);
+      socket.on("disconnect", handleDisconnect);
+      socket.on("reconnect_attempt" as any, handleReconnectAttempt);
+      socket.on("reconnect_failed" as any, handleReconnectFailed);
+      socket.on("state-update", handleStateUpdate);
+      socket.on("error" as any, handleError);
+      socket.on("connect_error", handleConnectError);
     }
 
     return () => {
-      // Don't disconnect on unmount, keep connection alive
+      if (socketRef.current) {
+        socketRef.current.off("connect");
+        socketRef.current.off("disconnect");
+        socketRef.current.off("reconnect_attempt" as any);
+        socketRef.current.off("reconnect_failed" as any);
+        socketRef.current.off("state-update");
+        socketRef.current.off("error" as any);
+        socketRef.current.off("connect_error");
+      }
     };
   }, []);
 
-  const emit = (event: string, data: any) => {
-    if (socket) {
-      socket.emit(event, data);
+  const emit = <K extends keyof ClientToServerEvents>(
+    event: K,
+    ...args: Parameters<ClientToServerEvents[K]>
+  ) => {
+    if (socketRef.current) {
+      socketRef.current.emit(event, ...(args as any));
     }
   };
 
-  const on = (event: string, callback: (data: any) => void) => {
-    if (socket) {
-      socket.on(event, callback);
-      return () => socket?.off(event, callback);
+  const on = <K extends keyof ServerToClientEvents>(
+    event: K,
+    callback: ServerToClientEvents[K]
+  ) => {
+    if (socketRef.current) {
+      socketRef.current.on(event, callback as any);
+      return () => {
+        socketRef.current?.off(event, callback as any);
+      };
     }
+    return () => {};
   };
 
   return {
-    socket,
+    socket: socketRef.current,
     isConnected,
     isReconnecting,
     currentState,
