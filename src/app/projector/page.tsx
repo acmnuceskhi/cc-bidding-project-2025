@@ -64,10 +64,14 @@ function WaitingScreen() {
       audioRef.current = audio;
       
       audio.play().then(() => {
-        console.log("🎵 Music started!");
+        if (process.env.NODE_ENV === "development") {
+          console.log("🎵 Music started!");
+        }
         setAudioStarted(true);
       }).catch((err) => {
-        console.log("Audio play failed:", err);
+        if (process.env.NODE_ENV === "development") {
+          console.log("Audio play failed:", err);
+        }
       });
     }
   };
@@ -214,8 +218,10 @@ export default function ProjectorDisplay() {
         
         // Track bid states - use the fetched housesData, not state
         const bidsPlaced = statusData.bidsPlaced || [];
-        console.log('📊 Bids placed:', bidsPlaced);
-        console.log('🏠 Houses:', housesData.map(h => ({ id: h._id?.toString(), houseId: h.houseId, name: h.name })));
+        if (process.env.NODE_ENV === "development") {
+          console.log('📊 Bids placed:', bidsPlaced);
+          console.log('🏠 Houses:', housesData.map(h => ({ id: h._id?.toString(), houseId: h.houseId, name: h.name })));
+        }
         
         setHouseBidStates((prevStates) => {
           const newStates: Record<string, HouseBidState> = {};
@@ -225,7 +231,9 @@ export default function ProjectorDisplay() {
             if (!houseId) return;
             
             const bid = bidsPlaced.find(b => b.houseId === houseId || b.houseId === house._id?.toString());
-            console.log(`🏯 ${house.name} (${houseId}): bid =`, bid);
+            if (process.env.NODE_ENV === "development") {
+              console.log(`🏯 ${house.name} (${houseId}): bid =`, bid);
+            }
             const prevState = prevStates[houseId];
             
             if (!bid) {
@@ -291,22 +299,26 @@ export default function ProjectorDisplay() {
       }
 
       // Check for winner from API or detect round completion
-      console.log("🎯 Projector winner check:", {
-        roundEnded: statusData.roundEnded,
-        winner: statusData.winner,
-        lastRoundId,
-        currentRoundId: statusData.roundId,
-        roundStatus: statusData.roundStatus,
-        winnerShown: winnerShownRef.current,
-        showWinnerState: showWinner,
-      });
+      if (process.env.NODE_ENV === "development") {
+        console.log("🎯 Projector winner check:", {
+          roundEnded: statusData.roundEnded,
+          winner: statusData.winner,
+          lastRoundId,
+          currentRoundId: statusData.roundId,
+          roundStatus: statusData.roundStatus,
+          winnerShown: winnerShownRef.current,
+          showWinnerState: showWinner,
+        });
+      }
 
       // Treat either an explicit roundEnded flag OR a winner object as signal
       const hasWinnerFromStatus =
         !!statusData.winner || statusData.roundEnded === true;
 
       if (hasWinnerFromStatus && !winnerShownRef.current) {
-        console.log('🏆 Projector: Showing winner from API');
+        if (process.env.NODE_ENV === "development") {
+          console.log('🏆 Projector: Showing winner from API');
+        }
         // Fetch all bids for this round to display in winner modal
         let allBids: Array<{ houseName: string; amount: number }> = [];
         // Prefer explicit roundId, otherwise fall back to our lastActive
@@ -316,7 +328,9 @@ export default function ProjectorDisplay() {
             const bidsRes = await fetch(`/api/bids?roundId=${roundIdToFetch}`, { cache: "no-store" });
             if (bidsRes.ok) {
               const bidsData = await bidsRes.json();
-              console.log('📊 Fetched bids for winner popup:', bidsData);
+              if (process.env.NODE_ENV === "development") {
+                console.log('📊 Fetched bids for winner popup:', bidsData);
+              }
               allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
                 const house = housesData.find(h => 
                   h.houseId === bid.houseId || h._id?.toString() === bid.houseId
@@ -390,14 +404,18 @@ export default function ProjectorDisplay() {
                 );
                 
                 if (winningHouse) {
-                  console.log('🏆 Projector: Showing winner from fallback completed rounds');
+                  if (process.env.NODE_ENV === "development") {
+                    console.log('🏆 Projector: Showing winner from fallback completed rounds');
+                  }
                   // Fetch all bids for this round
                   let allBids: Array<{ houseName: string; amount: number }> = [];
                   try {
                     const bidsRes = await fetch(`/api/bids?roundId=${lastRound.roundId}`, { cache: "no-store" });
                     if (bidsRes.ok) {
                       const bidsData = await bidsRes.json();
-                      console.log('📊 Fetched bids for fallback winner popup:', bidsData);
+                      if (process.env.NODE_ENV === "development") {
+                        console.log('📊 Fetched bids for fallback winner popup:', bidsData);
+                      }
                       allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
                         const house = housesData.find(h => 
                           h.houseId === bid.houseId || h._id?.toString() === bid.houseId
@@ -503,14 +521,16 @@ export default function ProjectorDisplay() {
     return houseMap[houseName] || "/arena-background.jpg";
   };
 
-  // Debug rendering logic
-  console.log('🖥️ Projector render state:', {
-    showWinner,
-    hasWinnerData: !!winnerData,
-    winnerData,
-    roundStatus: status?.roundStatus,
-    hasStatus: !!status
-  });
+  // Debug rendering logic (development only)
+  if (process.env.NODE_ENV === "development") {
+    console.log('🖥️ Projector render state:', {
+      showWinner,
+      hasWinnerData: !!winnerData,
+      winnerData,
+      roundStatus: status?.roundStatus,
+      hasStatus: !!status
+    });
+  }
 
   // Winner Screen
   if (showWinner && winnerData) {
