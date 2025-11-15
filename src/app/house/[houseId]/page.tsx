@@ -58,6 +58,8 @@ export default function HouseDashboard() {
   const pollDelayRef = useRef<number>(10000);
   const retryCountRef = useRef<number>(0);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Use ref to track connection status to avoid stale closures
+  const isConnectedRef = useRef<boolean>(false);
 
   // Socket.IO integration for real-time updates
   const { socket, isConnected, currentState, emit } = useSocket();
@@ -72,6 +74,11 @@ export default function HouseDashboard() {
     };
     return houseMap[houseName] || "/arena-background.jpg";
   };
+
+  // Update isConnectedRef when connection status changes
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Stop polling when socket is connected, resume when disconnected
   useEffect(() => {
@@ -193,12 +200,21 @@ export default function HouseDashboard() {
 
         // Schedule next poll only if socket is NOT connected AND (there's an active round or we're still initializing)
         // When socket is connected, we rely on socket events for updates instead of polling
-        if (!isConnected && (hasActiveRound || isInitialLoad)) {
+        if (!isConnectedRef.current && (hasActiveRound || isInitialLoad)) {
           if (pollTimeoutRef.current) {
             clearTimeout(pollTimeoutRef.current);
           }
           pollTimeoutRef.current = setTimeout(() => {
-            fetchData(false);
+            // Check connection status at execution time, not just when scheduling
+            if (!isConnectedRef.current) {
+              fetchData(false);
+            } else {
+              // Socket connected during timeout - clear it
+              if (pollTimeoutRef.current) {
+                clearTimeout(pollTimeoutRef.current);
+                pollTimeoutRef.current = null;
+              }
+            }
           }, pollDelayRef.current);
         }
       } catch (error) {
@@ -212,12 +228,21 @@ export default function HouseDashboard() {
         pollDelayRef.current = backoffDelay;
 
         // Still schedule next poll even on error (with backoff), but only if socket is not connected
-        if (!isConnected) {
+        if (!isConnectedRef.current) {
           if (pollTimeoutRef.current) {
             clearTimeout(pollTimeoutRef.current);
           }
           pollTimeoutRef.current = setTimeout(() => {
-            fetchData(false);
+            // Check connection status at execution time, not just when scheduling
+            if (!isConnectedRef.current) {
+              fetchData(false);
+            } else {
+              // Socket connected during timeout - clear it
+              if (pollTimeoutRef.current) {
+                clearTimeout(pollTimeoutRef.current);
+                pollTimeoutRef.current = null;
+              }
+            }
           }, backoffDelay);
         }
       } finally {
@@ -287,7 +312,16 @@ export default function HouseDashboard() {
             }
             // Debounce: only fetch if we haven't fetched recently
             pollTimeoutRef.current = setTimeout(() => {
-              fetchData(false);
+              // Check connection status at execution time
+              if (isConnectedRef.current) {
+                fetchData(false);
+              } else {
+                // Socket disconnected during timeout - clear it
+                if (pollTimeoutRef.current) {
+                  clearTimeout(pollTimeoutRef.current);
+                  pollTimeoutRef.current = null;
+                }
+              }
             }, 2000); // 2s debounce for state updates
           }
         } else if (state.screen === "waiting" || state.screen === "results") {

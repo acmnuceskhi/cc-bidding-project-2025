@@ -223,25 +223,54 @@ app.prepare().then(() => {
       console.log(`> Environment: ${dev ? "development" : "production"}`);
     });
 
-  // Graceful shutdown
-  process.on("SIGTERM", () => {
-    console.log("SIGTERM received, shutting down gracefully...");
-    io.close(() => {
-      httpServer.close(() => {
-        console.log("HTTP server closed");
-        process.exit(0);
-      });
-    });
-  });
+  // Graceful shutdown handler
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`${signal} received, shutting down gracefully...`);
+    
+    // Set a timeout to force exit if shutdown takes too long
+    const forceExitTimeout = setTimeout(() => {
+      console.error("Forced shutdown after timeout");
+      process.exit(1);
+    }, 10000); // 10 seconds max
 
-  process.on("SIGINT", () => {
-    console.log("SIGINT received, shutting down gracefully...");
-    io.close(() => {
-      httpServer.close(() => {
-        console.log("HTTP server closed");
+    try {
+      // Disconnect all sockets immediately (closes underlying connections)
+      io.disconnectSockets(true);
+      console.log("All Socket.IO clients disconnected");
+
+      // Close Socket.IO server (this also closes the underlying HTTP server)
+      io.close(async () => {
+        console.log("Socket.IO server closed");
+        
+        // Close MongoDB connection
+        try {
+          // Access the global MongoDB client
+          const mongoModule = await import("@/lib/mongodb");
+          const clientPromise = mongoModule.default;
+          if (clientPromise) {
+            const client = await clientPromise;
+            if (client && typeof client.close === "function") {
+              await client.close();
+              console.log("MongoDB connection closed");
+            }
+          }
+        } catch (error) {
+          console.error("Error closing MongoDB connection:", error);
+        }
+
+        clearTimeout(forceExitTimeout);
+        console.log("Graceful shutdown complete");
         process.exit(0);
       });
-    });
-  });
+    } catch (error) {
+      console.error("Error during graceful shutdown:", error);
+      clearTimeout(forceExitTimeout);
+      process.exit(1);
+    }
+  };
+
+  // Register shutdown handlers
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 });
 

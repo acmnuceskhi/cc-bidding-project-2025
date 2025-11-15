@@ -156,6 +156,8 @@ export default function ProjectorDisplay() {
   const pollDelayRef = useRef<number>(10000);
   const retryCountRef = useRef<number>(0);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Use ref to track connection status to avoid stale closures
+  const isConnectedRef = useRef<boolean>(false);
 
   // Socket.IO integration for real-time updates
   const { socket, isConnected } = useSocket();
@@ -173,6 +175,11 @@ export default function ProjectorDisplay() {
   useEffect(() => {
     teamRef.current = team;
   }, [team]);
+
+  // Update isConnectedRef when connection status changes
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Stop polling when socket is connected, resume when disconnected
   useEffect(() => {
@@ -500,16 +507,25 @@ export default function ProjectorDisplay() {
     const scheduleNextPoll = () => {
       // Only schedule next poll if socket is NOT connected
       // When socket is connected, we rely on socket events for updates instead of polling
-      if (!isConnected) {
+      if (!isConnectedRef.current) {
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current);
         }
         pollTimeoutRef.current = setTimeout(() => {
-          fetchData().then(() => {
-            scheduleNextPoll();
-          }).catch(() => {
-            scheduleNextPoll();
-          });
+          // Check connection status at execution time, not just when scheduling
+          if (!isConnectedRef.current) {
+            fetchData().then(() => {
+              scheduleNextPoll();
+            }).catch(() => {
+              scheduleNextPoll();
+            });
+          } else {
+            // Socket connected during timeout - clear any pending polls
+            if (pollTimeoutRef.current) {
+              clearTimeout(pollTimeoutRef.current);
+              pollTimeoutRef.current = null;
+            }
+          }
         }, pollDelayRef.current);
       } else {
         // Socket is connected - clear any pending polls
@@ -523,12 +539,12 @@ export default function ProjectorDisplay() {
     // Initial fetch only - don't start polling if socket is already connected
     fetchData().then(() => {
       // Only schedule polling if socket is not connected
-      if (!isConnected) {
+      if (!isConnectedRef.current) {
         scheduleNextPoll();
       }
     }).catch(() => {
       // Only schedule polling if socket is not connected
-      if (!isConnected) {
+      if (!isConnectedRef.current) {
         scheduleNextPoll();
       }
     });

@@ -42,11 +42,21 @@ export default function OverviewPage() {
 
   // Socket.IO integration for real-time updates
   const { socket, isConnected } = useSocket();
+  
+  // Use ref to track connection status to avoid stale closures
+  const isConnectedRef = useRef<boolean>(false);
+  // Use ref to store poll interval so it persists across effect re-runs
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update ref when currentTeam changes
   useEffect(() => {
     currentTeamRef.current = currentTeam;
   }, [currentTeam]);
+
+  // Update isConnectedRef when connection status changes
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -326,12 +336,27 @@ export default function OverviewPage() {
     // Initial fetch
     fetchOverviewData(true);
     
+    // Clear any existing polling interval
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    
     // Only set up polling if socket is NOT connected
     // When socket is connected, we rely on socket events for updates
-    let pollInterval: NodeJS.Timeout | null = null;
-    
     if (!isConnected) {
-      pollInterval = setInterval(() => fetchOverviewData(false), 2000);
+      pollIntervalRef.current = setInterval(() => {
+        // Check connection status at execution time, not just when scheduling
+        if (!isConnectedRef.current) {
+          fetchOverviewData(false);
+        } else {
+          // Socket connected during interval - clear it
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+        }
+      }, 2000);
     }
     
     // Listen to socket events for real-time updates
@@ -459,16 +484,18 @@ export default function OverviewPage() {
       socket.on("projector-update", handleProjectorUpdate);
 
       return () => {
-        if (pollInterval) {
-          clearInterval(pollInterval);
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
         }
         socket.off("projector-update", handleProjectorUpdate);
       };
     }
     
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
     };
   }, [fetchOverviewData, isConnected, socket]);
