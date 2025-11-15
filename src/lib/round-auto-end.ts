@@ -3,6 +3,7 @@ import { Bids } from "./models/bids";
 import { Houses } from "./models/houses";
 import clientPromise from "./mongodb";
 import { ObjectId } from "mongodb";
+import { getSocketInstance } from "./socket-instance";
 
 /**
  * Auto-end a round if it has expired
@@ -76,6 +77,22 @@ export async function checkAndAutoEndExpiredRound(): Promise<boolean> {
         winningBid: undefined,
         skipped: true,
       });
+
+      const io = getSocketInstance();
+      if (io) {
+        io.emit("round-ended", {
+          roundId: activeRound._id!.toString(),
+          winner: null,
+          losers: [],
+        });
+        io.emit("state-update", {
+          screen: "waiting",
+          roundId: activeRound._id!.toString(),
+          winner: null,
+          losers: [],
+        });
+      }
+
       return true;
     }
 
@@ -143,6 +160,50 @@ export async function checkAndAutoEndExpiredRound(): Promise<boolean> {
       if (process.env.NODE_ENV === "development") {
         console.log("✅ Round auto-ended successfully");
       }
+
+      const io = getSocketInstance();
+      if (io) {
+        const allBidsData = bids.map((bid) => ({
+          houseId: bid.houseId.toString(),
+          amount: bid.amount,
+          timestamp: bid.timestamp?.toISOString() || new Date().toISOString(),
+        }));
+
+        io.emit("round-ended", {
+          roundId: activeRound._id!.toString(),
+          winner: winningBid && winningHouse
+            ? {
+                houseId: winningBid.houseId.toString(),
+                houseName: winningHouse.name,
+                amount: winningBid.amount,
+              }
+            : null,
+          losers: allBidsData.filter(
+            (bid) =>
+              bid.houseId !== winningBid.houseId.toString() ||
+              bid.amount !== winningBid.amount
+          ),
+        });
+
+        io.emit("state-update", {
+          screen: winningBid && winningHouse ? "results" : "waiting",
+          roundId: activeRound._id!.toString(),
+          winner: winningBid && winningHouse
+            ? {
+                houseId: winningBid.houseId.toString(),
+                houseName: winningHouse.name,
+                amount: winningBid.amount,
+                timestamp: winningBid.timestamp?.toISOString() || new Date().toISOString(),
+              }
+            : null,
+          losers: allBidsData.filter(
+            (bid) =>
+              bid.houseId !== winningBid.houseId.toString() ||
+              bid.amount !== winningBid.amount
+          ),
+        });
+      }
+
       return true;
     } finally {
       await session.endSession();

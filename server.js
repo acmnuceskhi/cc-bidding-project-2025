@@ -15,63 +15,85 @@ const handle = app.getRequestHandler();
 // Build current state from database (stateless approach)
 async function buildStateFromDB() {
   try {
-    const baseUrl = `http://${hostname}:${port}`;
-    const response = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const { Rounds } = require("./src/lib/models/rounds");
+    const { Teams } = require("./src/lib/models/teams");
+    const { Bids } = require("./src/lib/models/bids");
+    const { Houses } = require("./src/lib/models/houses");
 
-    if (!response.ok) {
-      throw new Error(`Status API returned ${response.status}`);
+    const activeRounds = await Rounds.getActive();
+
+    if (activeRounds.length === 0) {
+      return {
+        screen: "waiting",
+        message: "Waiting for admin to start...",
+      };
     }
 
-    const statusData = await response.json();
+    const activeRound = activeRounds[0];
+    const roundId = activeRound._id?.toString();
 
-    // Convert status API response to socket state format
-    if (statusData.roundStatus === "active" && statusData.roundId) {
-      const timeLeft = statusData.timerEnd
-        ? Math.max(0, new Date(statusData.timerEnd).getTime() - Date.now())
-        : 0;
+    if (!roundId) {
+      return {
+        screen: "waiting",
+        message: "Waiting for admin to start...",
+      };
+    }
 
+    const timeLeft = activeRound.timerEnd
+      ? Math.max(0, activeRound.timerEnd.getTime() - Date.now())
+      : 0;
+
+    if (activeRound.status === "active" && timeLeft > 0) {
       return {
         screen: "bidding",
-        roundId: statusData.roundId,
-        teamId: statusData.team?.teamId || "",
+        roundId,
+        teamId: activeRound.teamId?.toString() || "",
         timeLeft,
       };
     }
 
-    // Check if round just ended (has winner data)
-    if (statusData.roundEnded && statusData.winner) {
-      return {
-        screen: "results",
-        roundId: statusData.roundId || null,
-        winner: statusData.winner
-          ? {
-              houseId: statusData.winner.houseId || "",
-              houseName: statusData.winner.houseName || "",
-              amount: statusData.winner.amount || 0,
-              timestamp: new Date().toISOString(),
-            }
-          : null,
-        losers: statusData.allBids
-          ? statusData.allBids
-              .filter(
-                (bid) =>
-                  bid.houseId !== statusData.winner?.houseId &&
-                  bid.amount !== statusData.winner?.amount
-              )
-              .map((bid) => ({
-                houseId: bid.houseId || "",
-                amount: bid.amount || 0,
-                timestamp: bid.timestamp || new Date().toISOString(),
-              }))
-          : [],
-      };
+    if (activeRound.status === "completed") {
+      const bids = await Bids.getLatestBidPerHouseForRound(roundId);
+
+      if (bids.length > 0) {
+        const winningBid = bids.reduce((winner, current) => {
+          if (current.amount > winner.amount) return current;
+          if (
+            current.amount === winner.amount &&
+            current.timestamp < winner.timestamp
+          )
+            return current;
+          return winner;
+        });
+
+        const winningHouse = await Houses.getById(winningBid.houseId.toString());
+
+        const allBidsData = bids.map((bid) => ({
+          houseId: bid.houseId.toString(),
+          amount: bid.amount,
+          timestamp: bid.timestamp?.toISOString() || new Date().toISOString(),
+        }));
+
+        return {
+          screen: "results",
+          roundId,
+          winner: winningHouse
+            ? {
+                houseId: winningBid.houseId.toString(),
+                houseName: winningHouse.name,
+                amount: winningBid.amount,
+                timestamp: winningBid.timestamp?.toISOString() || new Date().toISOString(),
+              }
+            : null,
+          losers: allBidsData.filter(
+            (bid) =>
+              bid.houseId !== winningBid.houseId.toString() ||
+              bid.amount !== winningBid.amount
+          ),
+        };
+      }
     }
 
-    // Default to waiting screen
     return {
       screen: "waiting",
       message: "Waiting for admin to start...",
@@ -142,43 +164,7 @@ app.prepare().then(() => {
       }
     }, 100);
 
-    // Admin actions - these will trigger broadcasts
-    socket.on("admin:start-round", async (data) => {
-      if (dev) {
-        console.log("Admin starting round:", data);
-      }
-      const state = await buildStateFromDB();
-      io.emit("state-update", state);
-      io.emit("round-started", {
-        roundId: data.roundId,
-        timerEnd: data.timerEnd,
-      });
-    });
-
-    socket.on("admin:end-round", async (data) => {
-      if (dev) {
-        console.log("Admin ending round:", data);
-      }
-      const state = await buildStateFromDB();
-      io.emit("state-update", state);
-      io.emit("round-ended", {
-        roundId: data.roundId,
-        winner: data.winner,
-        losers: data.losers,
-      });
-    });
-
-    socket.on("admin:show-waiting", async (data) => {
-      if (dev) {
-        console.log("Admin showing waiting screen");
-      }
-      const state = {
-        screen: "waiting",
-        message: data.message || "Waiting for next round...",
-      };
-      io.emit("state-update", state);
-    });
-
+    // Handle bid-placed events from API routes
     socket.on("bid-placed", (data) => {
       if (dev) {
         console.log("Bid placed:", data);
