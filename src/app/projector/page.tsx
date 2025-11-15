@@ -520,11 +520,17 @@ export default function ProjectorDisplay() {
       }
     };
 
-    // Initial fetch
+    // Initial fetch only - don't start polling if socket is already connected
     fetchData().then(() => {
-      scheduleNextPoll();
+      // Only schedule polling if socket is not connected
+      if (!isConnected) {
+        scheduleNextPoll();
+      }
     }).catch(() => {
-      scheduleNextPoll();
+      // Only schedule polling if socket is not connected
+      if (!isConnected) {
+        scheduleNextPoll();
+      }
     });
 
     // Listen to socket events for real-time updates
@@ -600,8 +606,10 @@ export default function ProjectorDisplay() {
           clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
         }
-        // Fetch immediately to get all round data
-        fetchData();
+        // Fetch immediately to get all round data (only when socket connected, not polling)
+        if (isConnected) {
+          fetchData();
+        }
       };
 
       const handleRoundEnded = (data?: { roundId: string; winner: any; losers: any[] }) => {
@@ -610,13 +618,18 @@ export default function ProjectorDisplay() {
           clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
         }
-        // Fetch immediately to get final state
-        fetchData();
+        // Fetch immediately to get final state (only when socket connected, not polling)
+        if (isConnected) {
+          fetchData();
+        }
       };
 
       const handleStateUpdate = (state: any) => {
         // State update received - use it to update round state if it's bidding state
         // But we still need to fetch for full data (house budgets, bid amounts)
+        // Only fetch when socket is connected (not when polling)
+        if (!isConnected) return;
+        
         if (state.screen === "bidding" && state.roundId === status?.roundId) {
           // Debounce: only fetch if we haven't fetched recently
           if (pollTimeoutRef.current) {
@@ -655,6 +668,7 @@ export default function ProjectorDisplay() {
     return () => {
       if (pollTimeoutRef.current) {
         clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

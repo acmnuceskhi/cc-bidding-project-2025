@@ -337,16 +337,25 @@ export default function OverviewPage() {
     if (socket) {
       const handleRoundStarted = () => {
         // Round started - fetch to get updated state
-        fetchOverviewData(false);
+        // Only fetch when socket is connected (not when polling)
+        if (isConnected) {
+          fetchOverviewData(false);
+        }
       };
 
       const handleRoundEnded = () => {
         // Round ended - fetch to get winner details
-        fetchOverviewData(false);
+        // Only fetch when socket is connected (not when polling)
+        if (isConnected) {
+          fetchOverviewData(false);
+        }
       };
 
       const handleStateUpdate = () => {
         // State update - fetch to get latest data
+        // Only fetch when socket is connected (not when polling)
+        if (!isConnected) return;
+        
         // Debounce: use a small delay to avoid rapid fetches
         setTimeout(() => {
           fetchOverviewData(false);
@@ -355,6 +364,9 @@ export default function OverviewPage() {
 
       const handleBidNotification = () => {
         // Bid placed - fetch to get updated bids
+        // Only fetch when socket is connected (not when polling)
+        if (!isConnected) return;
+        
         // Debounce: use a small delay to avoid rapid fetches
         setTimeout(() => {
           fetchOverviewData(false);

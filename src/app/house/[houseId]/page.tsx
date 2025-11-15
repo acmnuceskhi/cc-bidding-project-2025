@@ -245,6 +245,9 @@ export default function HouseDashboard() {
 
       const handleRoundStarted = (data?: { roundId: string; timerEnd: string }) => {
         // Round started - fetch full data to get team info, house budgets, etc.
+        // Only fetch when socket is connected (not when polling)
+        if (!isConnected) return;
+        
         // Clear any pending polls since we're fetching now
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current);
@@ -256,6 +259,9 @@ export default function HouseDashboard() {
 
       const handleRoundEnded = (data?: { roundId: string; winner: any; losers: any[] }) => {
         // Round ended - fetch to get winner details and updated house budgets
+        // Only fetch when socket is connected (not when polling)
+        if (!isConnected) return;
+        
         if (pollTimeoutRef.current) {
           clearTimeout(pollTimeoutRef.current);
           pollTimeoutRef.current = null;
@@ -267,6 +273,9 @@ export default function HouseDashboard() {
       const handleStateUpdate = (state: any) => {
         // State update received - use it to update round state if it's bidding state
         // But we still need to fetch for house-specific data (budget, current bid)
+        // Only fetch when socket is connected (not when polling)
+        if (!isConnected) return;
+        
         if (state.screen === "bidding" && state.roundId === activeRound?.roundId) {
           // Update round info from state
           if (state.timeLeft !== undefined) {
@@ -310,6 +319,7 @@ export default function HouseDashboard() {
     return () => {
       if (pollTimeoutRef.current) {
         clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
       }
     };
   }, [houseId, socket, activeRound?.roundId, isConnected]);
