@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
+import { useSocket } from "@/hooks/useSocket";
 
 interface Team {
   teamId: string;
@@ -156,6 +157,9 @@ export default function ProjectorDisplay() {
   const retryCountRef = useRef<number>(0);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Socket.IO integration for real-time updates
+  const { socket, isConnected } = useSocket();
+
   const { remainingMs: projRemaining } = useSynchronizedCountdown(
     status?.roundStatus === "active" && status?.timerEnd
       ? status.timerEnd
@@ -169,6 +173,15 @@ export default function ProjectorDisplay() {
   useEffect(() => {
     teamRef.current = team;
   }, [team]);
+
+  // Adjust polling interval based on socket connection
+  useEffect(() => {
+    if (isConnected) {
+      pollDelayRef.current = 15000; // Reduce polling when socket connected
+    } else {
+      pollDelayRef.current = 10000; // Normal polling when socket disconnected
+    }
+  }, [isConnected]);
 
   // Lazy-initialize bid sound
   useEffect(() => {
@@ -498,13 +511,130 @@ export default function ProjectorDisplay() {
       scheduleNextPoll();
     });
 
+    // Listen to socket events for real-time updates
+    if (socket) {
+      const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
+        // Immediately update bid state when a bid is placed
+        if (data.roundId === status?.roundId) {
+          setHouseBidStates((prevStates) => {
+            const houseId = data.houseId;
+            const prevState = prevStates[houseId];
+            
+            if (!prevState || prevState.status === "no-bid") {
+              // First bid for this house
+              if (bidSoundRef.current) {
+                try {
+                  bidSoundRef.current.currentTime = 0;
+                  void bidSoundRef.current.play();
+                } catch (e) {
+                  console.warn("Bid sound play failed", e);
+                }
+              }
+              
+              const newState: HouseBidState = {
+                status: "bid-placed",
+                showFlash: true,
+              };
+              
+              setTimeout(() => {
+                setHouseBidStates((prev) => ({
+                  ...prev,
+                  [houseId]: { ...prev[houseId], showFlash: false }
+                }));
+              }, 2000);
+              
+              return { ...prevStates, [houseId]: newState };
+            } else {
+              // Bid updated
+              if (bidSoundRef.current) {
+                try {
+                  bidSoundRef.current.currentTime = 0;
+                  void bidSoundRef.current.play();
+                } catch (e) {
+                  console.warn("Bid sound play failed", e);
+                }
+              }
+              
+              const newState: HouseBidState = {
+                status: "bid-updated",
+                showFlash: true,
+                previousAmount: prevState.previousAmount,
+              };
+              
+              setTimeout(() => {
+                setHouseBidStates((prev) => ({
+                  ...prev,
+                  [houseId]: { ...prev[houseId], showFlash: false }
+                }));
+              }, 2000);
+              
+              return { ...prevStates, [houseId]: newState };
+            }
+          });
+          
+          // Also trigger a data refresh to get latest bid amounts
+          if (pollTimeoutRef.current) {
+            clearTimeout(pollTimeoutRef.current);
+          }
+          pollTimeoutRef.current = setTimeout(() => {
+            fetchData();
+          }, 500);
+        }
+      };
+
+      const handleRoundStarted = () => {
+        // Refresh when a new round starts
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData();
+        }, 500);
+      };
+
+      const handleRoundEnded = () => {
+        // Refresh when round ends to show winner
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData();
+        }, 500);
+      };
+
+      const handleStateUpdate = () => {
+        // Refresh on state updates
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData();
+        }, 500);
+      };
+
+      socket.on("bid-notification", handleBidNotification);
+      socket.on("round-started", handleRoundStarted);
+      socket.on("round-ended", handleRoundEnded);
+      socket.on("state-update", handleStateUpdate);
+
+      return () => {
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        socket.off("bid-notification", handleBidNotification);
+        socket.off("round-started", handleRoundStarted);
+        socket.off("round-ended", handleRoundEnded);
+        socket.off("state-update", handleStateUpdate);
+      };
+    }
+
     return () => {
       if (pollTimeoutRef.current) {
         clearTimeout(pollTimeoutRef.current);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [socket, status?.roundId]);
 
   const formatTime = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);
