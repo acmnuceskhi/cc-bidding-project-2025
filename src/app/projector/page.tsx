@@ -174,12 +174,17 @@ export default function ProjectorDisplay() {
     teamRef.current = team;
   }, [team]);
 
-  // Adjust polling interval based on socket connection
+  // Stop polling when socket is connected, resume when disconnected
   useEffect(() => {
     if (isConnected) {
-      pollDelayRef.current = 15000; // Reduce polling when socket connected
+      // Clear any existing polling when socket connects
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
     } else {
-      pollDelayRef.current = 10000; // Normal polling when socket disconnected
+      // Resume polling with normal interval when socket disconnects
+      pollDelayRef.current = 10000;
     }
   }, [isConnected]);
 
@@ -493,18 +498,23 @@ export default function ProjectorDisplay() {
 
   useEffect(() => {
     const scheduleNextPoll = () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
+      // Only schedule next poll if socket is NOT connected
+      // When socket is connected, we rely on socket events for updates instead of polling
+      if (!isConnected) {
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData().then(() => {
+            scheduleNextPoll();
+          }).catch(() => {
+            scheduleNextPoll();
+          });
+        }, pollDelayRef.current);
       }
-      pollTimeoutRef.current = setTimeout(() => {
-        fetchData().then(() => {
-          scheduleNextPoll();
-        }).catch(() => {
-          scheduleNextPoll();
-        });
-      }, pollDelayRef.current);
     };
 
+    // Initial fetch
     fetchData().then(() => {
       scheduleNextPoll();
     }).catch(() => {
@@ -572,44 +582,52 @@ export default function ProjectorDisplay() {
             }
           });
           
-          // Also trigger a data refresh to get latest bid amounts
+          // No need to fetch - bid state is updated locally
+          // The next state-update or round-end will provide full data if needed
+        }
+      };
+
+      const handleRoundStarted = (data?: { roundId: string; timerEnd: string }) => {
+        // Round started - fetch full data to get team info, house budgets, etc.
+        // Clear any pending polls since we're fetching now
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
+        // Fetch immediately to get all round data
+        fetchData();
+      };
+
+      const handleRoundEnded = (data?: { roundId: string; winner: any; losers: any[] }) => {
+        // Round ended - fetch to get winner details and updated house budgets
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
+        // Fetch immediately to get final state
+        fetchData();
+      };
+
+      const handleStateUpdate = (state: any) => {
+        // State update received - use it to update round state if it's bidding state
+        // But we still need to fetch for full data (house budgets, bid amounts)
+        if (state.screen === "bidding" && state.roundId === status?.roundId) {
+          // Debounce: only fetch if we haven't fetched recently
           if (pollTimeoutRef.current) {
             clearTimeout(pollTimeoutRef.current);
+            pollTimeoutRef.current = null;
           }
           pollTimeoutRef.current = setTimeout(() => {
             fetchData();
-          }, 500);
-        }
-      };
-
-      const handleRoundStarted = () => {
-        // Refresh when a new round starts
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
+          }, 2000); // 2s debounce for state updates
+        } else if (state.screen === "waiting" || state.screen === "results") {
+          // Round ended or waiting - fetch to get full state
+          if (pollTimeoutRef.current) {
+            clearTimeout(pollTimeoutRef.current);
+            pollTimeoutRef.current = null;
+          }
           fetchData();
-        }, 500);
-      };
-
-      const handleRoundEnded = () => {
-        // Refresh when round ends to show winner
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
         }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData();
-        }, 500);
-      };
-
-      const handleStateUpdate = () => {
-        // Refresh on state updates
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData();
-        }, 500);
       };
 
       socket.on("bid-notification", handleBidNotification);
@@ -634,7 +652,7 @@ export default function ProjectorDisplay() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, status?.roundId]);
+  }, [socket, status?.roundId, isConnected]);
 
   const formatTime = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);

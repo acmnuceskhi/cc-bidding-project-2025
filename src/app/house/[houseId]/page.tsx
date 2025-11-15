@@ -73,12 +73,17 @@ export default function HouseDashboard() {
     return houseMap[houseName] || "/arena-background.jpg";
   };
 
-  // Adjust polling interval based on socket connection
+  // Stop polling when socket is connected, resume when disconnected
   useEffect(() => {
     if (isConnected) {
-      pollDelayRef.current = 15000; // Reduce polling when socket connected
+      // Clear any existing polling when socket connects
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
     } else {
-      pollDelayRef.current = 10000; // Normal polling when socket disconnected
+      // Resume polling with normal interval when socket disconnects
+      pollDelayRef.current = 10000;
     }
   }, [isConnected]);
 
@@ -186,8 +191,9 @@ export default function HouseDashboard() {
           setTimeLeft(0);
         }
 
-        // Schedule next poll only if there's an active round or we're still initializing
-        if (hasActiveRound || isInitialLoad) {
+        // Schedule next poll only if socket is NOT connected AND (there's an active round or we're still initializing)
+        // When socket is connected, we rely on socket events for updates instead of polling
+        if (!isConnected && (hasActiveRound || isInitialLoad)) {
           if (pollTimeoutRef.current) {
             clearTimeout(pollTimeoutRef.current);
           }
@@ -205,13 +211,15 @@ export default function HouseDashboard() {
         );
         pollDelayRef.current = backoffDelay;
 
-        // Still schedule next poll even on error (with backoff)
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
+        // Still schedule next poll even on error (with backoff), but only if socket is not connected
+        if (!isConnected) {
+          if (pollTimeoutRef.current) {
+            clearTimeout(pollTimeoutRef.current);
+          }
+          pollTimeoutRef.current = setTimeout(() => {
+            fetchData(false);
+          }, backoffDelay);
         }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, backoffDelay);
       } finally {
         if (isInitialLoad) {
           setInitialLoading(false);
@@ -224,47 +232,63 @@ export default function HouseDashboard() {
     fetchData(true);
 
     // Listen to socket events for real-time updates
+    // When socket is connected, we use events instead of polling
     if (socket) {
       const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
-        // Refresh data when another house places a bid
+        // Only refresh if it's for the current round and not our own bid
+        // We don't need to fetch for other houses' bids - just note that bidding is active
         if (data.roundId === activeRound?.roundId && data.houseId !== houseId) {
+          // No need to fetch - just indicates other houses are bidding
+          // The next state-update or round-end will provide full data
+        }
+      };
+
+      const handleRoundStarted = (data?: { roundId: string; timerEnd: string }) => {
+        // Round started - fetch full data to get team info, house budgets, etc.
+        // Clear any pending polls since we're fetching now
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
+        // Fetch immediately to get all round data
+        fetchData(false);
+      };
+
+      const handleRoundEnded = (data?: { roundId: string; winner: any; losers: any[] }) => {
+        // Round ended - fetch to get winner details and updated house budgets
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+          pollTimeoutRef.current = null;
+        }
+        // Fetch immediately to get final state
+        fetchData(false);
+      };
+
+      const handleStateUpdate = (state: any) => {
+        // State update received - use it to update round state if it's bidding state
+        // But we still need to fetch for house-specific data (budget, current bid)
+        if (state.screen === "bidding" && state.roundId === activeRound?.roundId) {
+          // Update round info from state
+          if (state.timeLeft !== undefined) {
+            // State has timeLeft in ms, but we need timerEnd as ISO string
+            // We'll fetch to get full data including house budgets
+            if (pollTimeoutRef.current) {
+              clearTimeout(pollTimeoutRef.current);
+              pollTimeoutRef.current = null;
+            }
+            // Debounce: only fetch if we haven't fetched recently
+            pollTimeoutRef.current = setTimeout(() => {
+              fetchData(false);
+            }, 2000); // 2s debounce for state updates
+          }
+        } else if (state.screen === "waiting" || state.screen === "results") {
+          // Round ended or waiting - fetch to get full state
           if (pollTimeoutRef.current) {
             clearTimeout(pollTimeoutRef.current);
+            pollTimeoutRef.current = null;
           }
-          pollTimeoutRef.current = setTimeout(() => {
-            fetchData(false);
-          }, 1000);
-        }
-      };
-
-      const handleRoundStarted = () => {
-        // Refresh when a new round starts
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
           fetchData(false);
-        }, 500);
-      };
-
-      const handleRoundEnded = () => {
-        // Refresh when round ends
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
         }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, 500);
-      };
-
-      const handleStateUpdate = () => {
-        // Refresh on state updates
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, 500);
       };
 
       socket.on("bid-notification", handleBidNotification);
@@ -288,7 +312,7 @@ export default function HouseDashboard() {
         clearTimeout(pollTimeoutRef.current);
       }
     };
-  }, [houseId, socket, activeRound?.roundId]);
+  }, [houseId, socket, activeRound?.roundId, isConnected]);
 
   const { remainingMs: houseRemaining } = useSynchronizedCountdown(
     activeRound?.timerEnd ?? null
