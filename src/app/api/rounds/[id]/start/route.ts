@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { verifyAuth, hasRole } from "@/lib/auth";
+import { getSocketInstance } from "@/lib/socket-instance";
 
 // interface filteredRound {
 //   roundId: string; // matches MongoDB _id
@@ -201,6 +202,27 @@ export async function POST(
 
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
+    }
+
+    // Get team info for socket event
+    const team = await Teams.getById(round.teamId.toString());
+
+    // Emit socket events to notify all clients
+    const io = getSocketInstance();
+    if (io) {
+      // Emit round-started event
+      io.emit("round-started", {
+        roundId: targetRoundId,
+        timerEnd: timerEnd.toISOString(),
+      });
+      
+      // Emit state-update event (will trigger clients to fetch fresh state)
+      io.emit("state-update", {
+        screen: "bidding",
+        roundId: targetRoundId,
+        teamId: team?._id?.toString() || round.teamId.toString(),
+        timeLeft: durationMs,
+      });
     }
 
     return NextResponse.json({
