@@ -4,6 +4,7 @@ import { Houses } from "./models/houses";
 import clientPromise from "./mongodb";
 import { ObjectId } from "mongodb";
 import { getSocketInstance } from "./socket-instance";
+import { buildProjectorData } from "./socket-projector-data";
 
 /**
  * Auto-end a round if it has expired
@@ -80,6 +81,11 @@ export async function checkAndAutoEndExpiredRound(): Promise<boolean> {
 
       const io = getSocketInstance();
       if (io) {
+        // Build and emit full projector data
+        const projectorData = await buildProjectorData();
+        io.emit("projector-update", projectorData);
+        
+        // Emit round-ended event (for backward compatibility)
         io.emit("round-ended", {
           roundId: activeRound._id!.toString(),
           winner: null,
@@ -163,12 +169,17 @@ export async function checkAndAutoEndExpiredRound(): Promise<boolean> {
 
       const io = getSocketInstance();
       if (io) {
+        // Build and emit full projector data
+        const projectorData = await buildProjectorData();
+        io.emit("projector-update", projectorData);
+        
         const allBidsData = bids.map((bid) => ({
           houseId: bid.houseId.toString(),
           amount: bid.amount,
           timestamp: bid.timestamp?.toISOString() || new Date().toISOString(),
         }));
 
+        // Emit round-ended event (for backward compatibility)
         io.emit("round-ended", {
           roundId: activeRound._id!.toString(),
           winner: winningBid && winningHouse
@@ -185,6 +196,7 @@ export async function checkAndAutoEndExpiredRound(): Promise<boolean> {
           ),
         });
 
+        // Emit state-update (for backward compatibility)
         io.emit("state-update", {
           screen: winningBid && winningHouse ? "results" : "waiting",
           roundId: activeRound._id!.toString(),

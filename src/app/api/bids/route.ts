@@ -5,7 +5,8 @@ import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { Config } from "@/lib/models/config";
 import { verifyAuth } from "@/lib/auth";
-import { emitSocketEvent } from "@/lib/socket-instance";
+import { emitSocketEvent, getSocketInstance } from "@/lib/socket-instance";
+import { buildProjectorData } from "@/lib/socket-projector-data";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
@@ -205,6 +206,21 @@ export async function POST(request: NextRequest) {
       houseName: house.name,
       roundId,
     });
+
+    // Emit projector-update with full data (debounced in server.ts handler)
+    // This provides full status and houses data without requiring HTTP requests
+    const io = getSocketInstance();
+    if (io) {
+      // Build and emit full projector data
+      // Note: This is async but we don't await to avoid blocking the response
+      buildProjectorData()
+        .then((projectorData) => {
+          io.emit("projector-update", projectorData);
+        })
+        .catch((error) => {
+          console.error("Error building projector data after bid:", error);
+        });
+    }
 
     return NextResponse.json({
       success: true,

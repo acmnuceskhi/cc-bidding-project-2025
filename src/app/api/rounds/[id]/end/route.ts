@@ -8,6 +8,7 @@ import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { getSocketInstance } from "@/lib/socket-instance";
+import { buildProjectorData } from "@/lib/socket-projector-data";
 import type { Bid } from "@/lib/models/bids";
 
 // POST /api/rounds/:id/end - End a round and determine winner (Admin only)
@@ -168,13 +169,17 @@ export async function POST(
     // Emit socket events to notify all clients
     const io = getSocketInstance();
     if (io) {
+      // Build and emit full projector data
+      const projectorData = await buildProjectorData();
+      io.emit("projector-update", projectorData);
+      
       const allBidsData = bids.map((bid) => ({
         houseId: bid.houseId.toString(),
         amount: bid.amount,
         timestamp: bid.timestamp?.toISOString() || new Date().toISOString(),
       }));
 
-      // Emit round-ended event
+      // Emit round-ended event (for backward compatibility)
       io.emit("round-ended", {
         roundId: id,
         winner: winningBid && winningHouse
@@ -191,7 +196,7 @@ export async function POST(
         ),
       });
 
-      // Emit state-update to trigger clients to refresh
+      // Emit state-update (for backward compatibility)
       io.emit("state-update", {
         screen: winningBid && winningHouse ? "results" : "waiting",
         roundId: id,

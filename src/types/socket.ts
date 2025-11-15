@@ -57,11 +57,43 @@ export interface BidPlacedEvent {
   roundId: string;
 }
 
+export interface ProjectorUpdateEvent {
+  status: {
+    roundId: string | null;
+    team: {
+      teamId: string;
+      rank: number;
+      batch: string | null;
+      memberCount: number;
+      successfulAttempts?: number;
+      totalPoints?: number;
+    } | null;
+    roundStatus: "active" | "idle";
+    roundNumber?: number;
+    timerRemaining: number;
+    timerEnd?: string;
+    bidsPlaced: Array<{ houseId: string; amount: number }>;
+    roundEnded?: boolean;
+    winner?: {
+      houseName: string;
+      amount: number;
+    };
+  };
+  houses: Array<{
+    _id: string;
+    houseId: string;
+    name: string;
+    remainingBudget: number;
+    totalBudget: number;
+  }>;
+}
+
 export interface ServerToClientEvents {
   "state-update": (state: AppState) => void;
   "round-started": (data: RoundStartedEvent) => void;
   "round-ended": (data: RoundEndedEvent) => void;
   "bid-notification": (data: BidNotificationEvent) => void;
+  "projector-update": (data: ProjectorUpdateEvent) => void;
 }
 
 export interface ClientToServerEvents {

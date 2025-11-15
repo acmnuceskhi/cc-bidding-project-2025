@@ -3,6 +3,7 @@ import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { getSocketInstance } from "@/lib/socket-instance";
+import { buildProjectorData } from "@/lib/socket-projector-data";
 
 // interface filteredRound {
 //   roundId: string; // matches MongoDB _id
@@ -210,13 +211,17 @@ export async function POST(
     // Emit socket events to notify all clients
     const io = getSocketInstance();
     if (io) {
-      // Emit round-started event
+      // Build and emit full projector data
+      const projectorData = await buildProjectorData();
+      io.emit("projector-update", projectorData);
+      
+      // Emit round-started event (for backward compatibility)
       io.emit("round-started", {
         roundId: targetRoundId,
         timerEnd: timerEnd.toISOString(),
       });
       
-      // Emit state-update event (will trigger clients to fetch fresh state)
+      // Emit state-update event (for backward compatibility)
       io.emit("state-update", {
         screen: "bidding",
         roundId: targetRoundId,
