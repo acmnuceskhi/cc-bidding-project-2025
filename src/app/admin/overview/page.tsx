@@ -323,6 +323,7 @@ export default function OverviewPage() {
   }, []);
 
   useEffect(() => {
+    // Initial fetch
     fetchOverviewData(true);
     
     // Only set up polling if socket is NOT connected
@@ -335,37 +336,133 @@ export default function OverviewPage() {
     
     // Listen to socket events for real-time updates
     if (socket) {
-      const handleRoundStarted = () => {
-        // Round started - fetch to get updated state
-        // Only fetch when socket is connected (not when polling)
-        if (isConnected) {
-          fetchOverviewData(false);
+      // Use projector-update event which provides full data (status + houses)
+      // This eliminates HTTP requests when socket is connected
+      const handleProjectorUpdate = (data: {
+        status: {
+          roundId: string | null;
+          team: {
+            teamId: string;
+            rank: number;
+            batch: string | null;
+            memberCount: number;
+            successfulAttempts?: number;
+            totalPoints?: number;
+          } | null;
+          roundStatus: "active" | "idle";
+          roundNumber?: number;
+          timerRemaining: number;
+          timerEnd?: string;
+          bidsPlaced: Array<{ houseId: string; amount: number }>;
+          roundEnded?: boolean;
+          winner?: {
+            houseName: string;
+            amount: number;
+          };
+        };
+        houses: Array<{
+          _id: string;
+          houseId: string;
+          name: string;
+          remainingBudget: number;
+          totalBudget: number;
+        }>;
+      }) => {
+        // Update houses directly from socket data
+        // Note: We store the raw data and let the component handle display
+        // The socket data structure is compatible for display purposes
+        setHouses(data.houses.map(h => ({
+          _id: undefined, // Will be set from existing houses if needed
+          name: h.name,
+          remainingBudget: h.remainingBudget,
+          totalBudget: h.totalBudget,
+        })) as any);
+
+        // Update active round and team
+        if (data.status.roundStatus === "active" && data.status.roundId && data.status.team) {
+          const serverTimerEnd = data.status.timerEnd
+            ? new Date(data.status.timerEnd)
+            : null;
+
+          if (serverTimerEnd) {
+            setActiveRound({
+              _id: data.status.roundId,
+              teamId: data.status.team.teamId,
+              status: "active",
+              timerEnd: serverTimerEnd,
+              bids: [],
+            } as any);
+            lastActiveRoundIdRef.current = data.status.roundId;
+
+            setCurrentTeam({
+              _id: undefined, // Team ID from socket is string, not ObjectId
+              rank: data.status.team.rank,
+              batch: data.status.team.batch || undefined,
+              successfulAttempts: data.status.team.successfulAttempts || 0,
+              unsuccessfulAttempts: 0, // Not provided in socket data
+              totalPoints: data.status.team.totalPoints || 0,
+              totalPenalty: 0, // Not provided in socket data
+              timeTakenPerProblem: [], // Not provided in socket data
+            } as Team);
+            setRoundNumber(data.status.roundNumber || null);
+            winnerShownRef.current = false;
+
+            // Update bids from socket data
+            const enrichedBids = data.status.bidsPlaced.map((bid) => {
+              const house = data.houses.find(h => h.houseId === bid.houseId || h._id === bid.houseId);
+              return {
+                houseId: bid.houseId,
+                amount: bid.amount,
+                houseName: house?.name || "Unknown House",
+              };
+            });
+            setCurrentBids(enrichedBids);
+          }
+        } else {
+          setActiveRound(null);
+          setCurrentTeam(null);
+          setCurrentBids([]);
+          setRoundNumber(null);
+        }
+
+        // Handle winner display
+        if (data.status.roundEnded && data.status.winner && !winnerShownRef.current) {
+          const team = currentTeamRef.current || (data.status.team ? {
+            _id: undefined,
+            rank: data.status.team.rank,
+            batch: data.status.team.batch || undefined,
+            successfulAttempts: data.status.team.successfulAttempts || 0,
+            unsuccessfulAttempts: 0,
+            totalPoints: data.status.team.totalPoints || 0,
+            totalPenalty: 0,
+            timeTakenPerProblem: [],
+          } as Team : null);
+
+          setWinnerData({
+            teamName: `Team ${team?.rank || "?"}`,
+            teamBatch: team?.batch,
+            teamRank: team?.rank,
+            memberCount: data.status.team?.memberCount, // Get from socket data
+            houseName: data.status.winner.houseName,
+            amount: data.status.winner.amount,
+          });
+          setShowWinnerModal(true);
+          winnerShownRef.current = true;
+
+          setTimeout(() => {
+            setShowWinnerModal(false);
+            setWinnerData(null);
+          }, 15000);
         }
       };
 
-      const handleRoundEnded = () => {
-        // Round ended - fetch to get winner details
-        // Only fetch when socket is connected (not when polling)
-        if (isConnected) {
-          fetchOverviewData(false);
-        }
-      };
-
-      // Note: We don't listen to state-update or bid-notification events
-      // because they fire too frequently and would cause excessive API calls.
-      // Instead, we only listen to round-started and round-ended which are
-      // infrequent events that require full data refresh.
-      // For real-time bid updates, the UI will update when rounds change.
-
-      socket.on("round-started", handleRoundStarted);
-      socket.on("round-ended", handleRoundEnded);
+      socket.on("projector-update", handleProjectorUpdate);
 
       return () => {
         if (pollInterval) {
           clearInterval(pollInterval);
         }
-        socket.off("round-started", handleRoundStarted);
-        socket.off("round-ended", handleRoundEnded);
+        socket.off("projector-update", handleProjectorUpdate);
       };
     }
     
