@@ -74,7 +74,6 @@ export default function OverviewPage() {
       setHouses(housesData || []);
 
       // Check if round just ended (server-side auto-end)
-
       console.log("🔍 Status check:", {
         roundEnded: statusData.roundEnded,
         winner: statusData.winner,
@@ -112,7 +111,45 @@ export default function OverviewPage() {
           setShowWinnerModal(false);
           setWinnerData(null);
         }, 15000);
+      } else if (!statusData.roundEnded && !statusData.roundId && activeRound && !winnerShownRef.current) {
+        // Round ended but winner not in status - fetch from completed rounds
+        try {
+          const roundsRes = await fetchWithAuth("/api/rounds");
+          if (roundsRes.ok) {
+            const rounds = await roundsRes.json();
+            const lastCompleted = rounds.find((r: { status: string; roundId: string }) => 
+              r.status === "completed" && r.roundId === activeRound._id?.toString()
+            );
+            
+            if (lastCompleted && lastCompleted.winningBid && lastCompleted.winningHouseId) {
+              const winningHouse = housesData.find((h: { _id: { toString: () => string } }) => 
+                h._id?.toString() === lastCompleted.winningHouseId?.toString()
+              );
+              
+              if (winningHouse) {
+                const team = currentTeamRef.current || statusData.team;
+                setWinnerData({
+                  teamName: `Team ${team?.rank || "?"}`,
+                  teamBatch: team?.batch,
+                  teamRank: team?.rank,
+                  memberCount: team?.memberCount,
+                  houseName: winningHouse.name,
+                  amount: lastCompleted.winningBid,
+                });
+                setShowWinnerModal(true);
+                winnerShownRef.current = true;
+                setTimeout(() => {
+                  setShowWinnerModal(false);
+                  setWinnerData(null);
+                }, 15000);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching completed round:", err);
+        }
       }
+      
       // Only set active round if status is "active", not "completed"
 
       if (
@@ -609,12 +646,11 @@ export default function OverviewPage() {
             End Current Round
           </button>
           <button
-            // onClick={handleViewFullStats}
             onClick={handleReStartRound}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all transform hover:scale-105"
+            disabled={!activeRound || isStartingRound}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
-            {/* View Full Stats */}
-            Restart Round
+            {isStartingRound ? "⏳ Restarting..." : "Restart Round"}
           </button>
         </div>
       </div>

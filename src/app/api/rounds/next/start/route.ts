@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Check if team already has a house (already sold)
-      if (t.houseId) {
+      if (t.houseId && t.houseId.toString().trim() !== "") {
         console.log(
           "Skipping round",
           i + 1,

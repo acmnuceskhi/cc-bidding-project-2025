@@ -45,7 +45,11 @@ export default function AdminLayout({
   };
 
   if (!mounted || !isAuthenticated) {
-    return <FullPageSpinner message="Loading admin panel..." />;
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <FullPageSpinner message="Loading admin panel..." />
+      </div>
+    );
   }
 
   return (

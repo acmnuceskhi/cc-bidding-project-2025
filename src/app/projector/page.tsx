@@ -16,6 +16,7 @@ interface Team {
 interface WinnerData {
   houseName: string;
   amount: number;
+  allBids?: Array<{ houseId: string; houseName: string; amount: number }>;
 }
 
 interface House {
@@ -42,14 +43,19 @@ interface Status {
   winner?: WinnerData;
 }
 
-// Waiting Screen Component with Video and Typewriter
+interface HouseBidState {
+  status: "no-bid" | "bid-placed" | "bid-updated";
+  showFlash: boolean;
+  previousAmount?: number;
+}
+
+// Waiting Screen Component
 function WaitingScreen() {
   const [displayText, setDisplayText] = useState("");
   const [audioStarted, setAudioStarted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fullText = "Waiting for admin to start the next round...";
 
-  // Function to start audio
   const startAudio = () => {
     if (!audioStarted && !audioRef.current) {
       const audio = new Audio("/oogway-ascends.mp3");
@@ -67,7 +73,6 @@ function WaitingScreen() {
   };
 
   useEffect(() => {
-    // Typewriter effect
     let currentIndex = 0;
     const typingInterval = setInterval(() => {
       if (currentIndex <= fullText.length) {
@@ -76,9 +81,8 @@ function WaitingScreen() {
       } else {
         clearInterval(typingInterval);
       }
-    }, 80); // 80ms per character
+    }, 80);
 
-    // Add event listeners for any user interaction
     const events = ['click', 'touchstart', 'keydown', 'mousemove'];
     events.forEach(event => {
       document.addEventListener(event, startAudio, { once: true });
@@ -102,7 +106,6 @@ function WaitingScreen() {
       onClick={startAudio}
       onTouchStart={startAudio}
     >
-      {/* Full Screen Video */}
       <video
         autoPlay
         loop
@@ -113,7 +116,6 @@ function WaitingScreen() {
         <source src="/waiting-video.mp4" type="video/mp4" />
       </video>
 
-      {/* Overlay with typewriter text */}
       <div className="relative z-10 text-center px-8">
         <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#000000] animate-pulse">
           CC Bidding System
@@ -140,256 +142,322 @@ export default function ProjectorDisplay() {
   const [winnerData, setWinnerData] = useState<WinnerData | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
   const [lastRoundId, setLastRoundId] = useState<string | null>(null);
+  const [houseBidStates, setHouseBidStates] = useState<Record<string, HouseBidState>>({});
+  const winnerShownRef = useRef<boolean>(false);
+  const lastCompletedWinnerRef = useRef<WinnerData | null>(null);
+  const teamRef = useRef<Team | null>(null);
+  const bidSoundRef = useRef<HTMLAudioElement | null>(null);
+  const winnerSoundRef = useRef<HTMLAudioElement | null>(null);
 
-  // Server time hook not required directly; countdown uses hook
-
-  // Client-side countdown using device time
   const { remainingMs: projRemaining } = useSynchronizedCountdown(
     status?.roundStatus === "active" && status?.timerEnd
       ? status.timerEnd
       : null
   );
+  
   useEffect(() => {
     setTimeLeft(projRemaining);
   }, [projRemaining]);
+  
+  useEffect(() => {
+    teamRef.current = team;
+  }, [team]);
 
-  const fetchLastRoundWinner = async () => {
+  // Lazy-initialize bid sound
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!bidSoundRef.current) {
+      bidSoundRef.current = new Audio("/bidding-sound.mp3");
+      bidSoundRef.current.volume = 0.7;
+    }
+    if (!winnerSoundRef.current) {
+      winnerSoundRef.current = new Audio("/winning-sound.mp3");
+      winnerSoundRef.current.volume = 0.8;
+      winnerSoundRef.current.loop = true;
+    }
+  }, []);
+
+  const fetchData = async () => {
     try {
-      // Fetch all rounds and get the most recent completed one
-      const roundsRes = await fetch("/api/rounds");
-      if (roundsRes.ok) {
-        const rounds = await roundsRes.json();
-        const completedRounds = rounds.filter(
-          (r: { status: string }) => r.status === "completed"
-        );
+      const statusRes = await fetch("/api/status", { cache: "no-store" });
+      const statusData: Status = await statusRes.json();
+      console.log('🎯 Projector fetchData - Full status:', statusData);
+      setStatus(statusData);
 
-        if (completedRounds.length > 0) {
-          const lastRound = completedRounds[0]; // Most recent
+      // Fetch houses first
+      let housesData: House[] = [];
+      try {
+        const housesRes = await fetch("/api/houses", { cache: "no-store" });
+        if (housesRes.ok) {
+          housesData = await housesRes.json();
+          setHouses(Array.isArray(housesData) ? housesData : []);
+        } else {
+          setHouses([]);
+        }
+      } catch {
+        setHouses([]);
+      }
 
-          if (lastRound.winningBid) {
-            // Fetch team
-            const teamRes = await fetch("/api/teams");
-            if (teamRes.ok) {
-              const teams = await teamRes.json();
-              const roundTeam = teams.find(
-                (t: Team) => t.teamId === lastRound.teamId
-              );
-
-              if (roundTeam) {
-                setTeam(roundTeam);
-              }
-            }
-
-            // Fetch bids to get winner house name
-            const bidsRes = await fetch(
-              `/api/bids?roundId=${lastRound.roundId}`
-            );
-            if (bidsRes.ok) {
-              const bids = await bidsRes.json();
-              const winningBid = bids.find(
-                (b: Bid & { amount: number }) =>
-                  b.amount === lastRound.winningBid
-              );
-
-              if (winningBid) {
-                // Try to get house name (might fail without auth, but try anyway)
+      if (statusData.roundStatus === "active" && statusData.team) {
+        setTeam(statusData.team);
+        setLastRoundId(statusData.roundId || null);
+        winnerShownRef.current = false;
+        
+        // Track bid states - use the fetched housesData, not state
+        const bidsPlaced = statusData.bidsPlaced || [];
+        console.log('📊 Bids placed:', bidsPlaced);
+        console.log('🏠 Houses:', housesData.map(h => ({ id: h._id?.toString(), houseId: h.houseId, name: h.name })));
+        
+        setHouseBidStates((prevStates) => {
+          const newStates: Record<string, HouseBidState> = {};
+          
+          housesData.forEach((house) => {
+            const houseId = house.houseId || house._id?.toString();
+            if (!houseId) return;
+            
+            const bid = bidsPlaced.find(b => b.houseId === houseId || b.houseId === house._id?.toString());
+            console.log(`🏯 ${house.name} (${houseId}): bid =`, bid);
+            const prevState = prevStates[houseId];
+            
+            if (!bid) {
+              newStates[houseId] = {
+                status: "no-bid",
+                showFlash: false,
+              };
+            } else if (!prevState || prevState.status === "no-bid") {
+              // First bid
+              newStates[houseId] = {
+                status: "bid-placed",
+                showFlash: true,
+                previousAmount: bid.amount,
+              };
+              // Play bid sound
+              if (bidSoundRef.current) {
                 try {
-                  const housesRes = await fetch("/api/houses");
-                  if (housesRes.ok) {
-                    const housesData: House[] = await housesRes.json();
-                    const winningHouse = housesData.find(
-                      (h) => h.houseId === winningBid.houseId.toString()
-                    );
-                    if (winningHouse) {
-                      setWinnerData({
-                        houseName: winningHouse.name,
-                        amount: lastRound.winningBid,
-                      });
-                      setShowWinner(true);
-                      setTimeout(() => {
-                        setShowWinner(false);
-                        setWinnerData(null);
-                      }, 15000); // Show winner for 15 seconds
+                  bidSoundRef.current.currentTime = 0;
+                  void bidSoundRef.current.play();
+                } catch (e) {
+                  console.warn("Bid sound play failed", e);
+                }
+              }
+              // Auto-hide flash after 2s
+              setTimeout(() => {
+                setHouseBidStates(prev => ({
+                  ...prev,
+                  [houseId]: { ...prev[houseId], showFlash: false }
+                }));
+              }, 2000);
+            } else if (prevState.previousAmount !== bid.amount) {
+              // Bid updated
+              newStates[houseId] = {
+                status: "bid-updated",
+                showFlash: true,
+                previousAmount: bid.amount,
+              };
+              if (bidSoundRef.current) {
+                try {
+                  bidSoundRef.current.currentTime = 0;
+                  void bidSoundRef.current.play();
+                } catch (e) {
+                  console.warn("Bid sound play failed", e);
+                }
+              }
+              setTimeout(() => {
+                setHouseBidStates(prev => ({
+                  ...prev,
+                  [houseId]: { ...prev[houseId], showFlash: false }
+                }));
+              }, 2000);
+            } else {
+              // No change
+              newStates[houseId] = prevState;
+            }
+          });
+          
+          return newStates;
+        });
+      } else {
+        setTimeLeft(0);
+        // Don't reset bid states immediately - keep them visible
+      }
+
+      // Check for winner from API or detect round completion
+      console.log("🎯 Projector winner check:", {
+        roundEnded: statusData.roundEnded,
+        winner: statusData.winner,
+        lastRoundId,
+        currentRoundId: statusData.roundId,
+        roundStatus: statusData.roundStatus,
+        winnerShown: winnerShownRef.current,
+        showWinnerState: showWinner,
+      });
+
+      // Treat either an explicit roundEnded flag OR a winner object as signal
+      const hasWinnerFromStatus =
+        !!statusData.winner || statusData.roundEnded === true;
+
+      if (hasWinnerFromStatus && !winnerShownRef.current) {
+        console.log('🏆 Projector: Showing winner from API');
+        // Fetch all bids for this round to display in winner modal
+        let allBids: Array<{ houseName: string; amount: number }> = [];
+        // Prefer explicit roundId, otherwise fall back to our lastActive
+        const roundIdToFetch = statusData.roundId || lastRoundId;
+        if (roundIdToFetch) {
+          try {
+            const bidsRes = await fetch(`/api/bids?roundId=${roundIdToFetch}`, { cache: "no-store" });
+            if (bidsRes.ok) {
+              const bidsData = await bidsRes.json();
+              console.log('📊 Fetched bids for winner popup:', bidsData);
+              allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
+                const house = housesData.find(h => 
+                  h.houseId === bid.houseId || h._id?.toString() === bid.houseId
+                );
+                return {
+                  houseId: bid.houseId,
+                  houseName: house?.name || "Unknown",
+                  amount: bid.amount,
+                };
+              }).sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
+            }
+          } catch (err) {
+            console.error("Error fetching round bids:", err);
+          }
+        }
+        
+        // If API didn't send winner details, derive the winning bid from bids list
+        let winnerHouseName = statusData.winner?.houseName || "";
+        let winnerAmount = statusData.winner?.amount ?? 0;
+
+        if (!winnerHouseName && allBids.length > 0) {
+          const topBid = allBids[0];
+          winnerHouseName = topBid.houseName;
+          winnerAmount = topBid.amount;
+        }
+
+        const derivedWinner: WinnerData = {
+          houseName: winnerHouseName || "Unknown House",
+          amount: winnerAmount,
+          allBids,
+        };
+
+        setWinnerData(derivedWinner);
+        lastCompletedWinnerRef.current = derivedWinner;
+        setShowWinner(true);
+        winnerShownRef.current = true;
+        setLastRoundId(null);
+        // Play winner sound while popup is visible
+        if (winnerSoundRef.current) {
+          try {
+            winnerSoundRef.current.currentTime = 0;
+            void winnerSoundRef.current.play();
+          } catch (e) {
+            console.warn("Winner sound play failed", e);
+          }
+        }
+
+        setTimeout(() => {
+          setShowWinner(false);
+          setWinnerData(null);
+          if (winnerSoundRef.current) {
+            winnerSoundRef.current.pause();
+          }
+        }, 15000);
+      } else if (lastRoundId && statusData.roundStatus === "idle" && !statusData.roundId && !winnerShownRef.current) {
+        // Round just ended, fetch the last completed round's winner
+        try {
+          const roundsRes = await fetch("/api/rounds");
+          if (roundsRes.ok) {
+            const rounds = await roundsRes.json();
+            const completedRounds = rounds.filter((r: { status: string }) => r.status === "completed");
+            
+            if (completedRounds.length > 0) {
+              const lastRound = completedRounds[0];
+              
+              if (lastRound.winningBid && lastRound.winningHouseId) {
+                // Find the winning house
+                const winningHouse = housesData.find(h => 
+                  h._id?.toString() === lastRound.winningHouseId?.toString() ||
+                  h.houseId === lastRound.winningHouseId?.toString()
+                );
+                
+                if (winningHouse) {
+                  console.log('🏆 Projector: Showing winner from fallback completed rounds');
+                  // Fetch all bids for this round
+                  let allBids: Array<{ houseName: string; amount: number }> = [];
+                  try {
+                    const bidsRes = await fetch(`/api/bids?roundId=${lastRound.roundId}`, { cache: "no-store" });
+                    if (bidsRes.ok) {
+                      const bidsData = await bidsRes.json();
+                      console.log('📊 Fetched bids for fallback winner popup:', bidsData);
+                      allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
+                        const house = housesData.find(h => 
+                          h.houseId === bid.houseId || h._id?.toString() === bid.houseId
+                        );
+                        return {
+                          houseId: bid.houseId,
+                          houseName: house?.name || "Unknown",
+                          amount: bid.amount,
+                        };
+                      }).sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
+                    }
+                  } catch (err) {
+                    console.error("Error fetching round bids:", err);
+                  }
+                  
+                  const derivedWinner: WinnerData = {
+                    houseName: winningHouse.name,
+                    amount: lastRound.winningBid,
+                    allBids,
+                  };
+                  setWinnerData(derivedWinner);
+                  lastCompletedWinnerRef.current = derivedWinner;
+                  setShowWinner(true);
+                  winnerShownRef.current = true;
+                  setLastRoundId(null);
+
+                  if (winnerSoundRef.current) {
+                    try {
+                      winnerSoundRef.current.currentTime = 0;
+                      void winnerSoundRef.current.play();
+                    } catch (e) {
+                      console.warn("Winner sound play failed", e);
                     }
                   }
-                } catch (err) {
-                  console.log("Could not fetch house details");
+
+                  setTimeout(() => {
+                    setShowWinner(false);
+                    setWinnerData(null);
+                    if (winnerSoundRef.current) {
+                      winnerSoundRef.current.pause();
+                    }
+                  }, 15000);
                 }
               }
             }
           }
+        } catch (err) {
+          console.error("Error fetching completed round:", err);
         }
-      }
-    } catch (error) {
-      console.error("Error fetching last round winner:", error);
-    }
-  };
-
-  const fetchData = async () => {
-    try {
-      // Fetch status
-      const statusRes = await fetch("/api/status", { cache: "no-store" });
-      const statusData: Status = await statusRes.json();
-      setStatus(statusData);
-
-      // Fetch houses (handle 401 gracefully for projector)
-      try {
-        const housesRes = await fetch("/api/houses", { cache: "no-store" });
-        if (housesRes.ok) {
-          const housesData: House[] = await housesRes.json();
-          setHouses(Array.isArray(housesData) ? housesData : []);
-        } else {
-          // If auth fails, use empty array (projector doesn't need house details)
-          setHouses([]);
-        }
-      } catch (houseError) {
-        console.log("Could not fetch houses (projector doesn't need auth)");
-        setHouses([]);
-      }
-
-      // Update team and timer
-      if (statusData.roundStatus === "active" && statusData.team) {
-        setTeam(statusData.team);
-        setLastRoundId(statusData.roundId || null);
-        // timeLeft is driven by synchronized countdown hook
-      } else {
-        setTimeLeft(0);
-      }
-
-      // Check for winner announcement (direct from API)
-      if (statusData.roundEnded && statusData.winner) {
-        console.log("🏆 Winner detected from API:", statusData.winner);
-        console.log("📝 Team:", team);
-        setWinnerData(statusData.winner);
-        setShowWinner(true);
-        setLastRoundId(null); // Reset for next round
-
-        // Auto-hide after 15 seconds
-        setTimeout(() => {
-          console.log("⏰ Hiding winner modal");
-          setShowWinner(false);
-          setWinnerData(null);
-        }, 15000); // Show winner for 15 seconds
-      } else {
-        console.log(
-          "📊 Status:",
-          statusData.roundStatus,
-          "RoundEnded:",
-          statusData.roundEnded,
-          "Winner:",
-          statusData.winner
-        );
-      }
-
-      // Also detect round end by checking if we had an active round that's now gone
-      if (
-        lastRoundId &&
-        !statusData.roundId &&
-        statusData.roundStatus !== "active"
-      ) {
-        console.log("🏆 Round ended, fetching winner info...");
-        // Fetch the last completed round to get winner
-        fetchLastRoundWinner();
-        setLastRoundId(null);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
     }
   };
 
-  // Poll for data updates
   useEffect(() => {
     fetchData();
-
     const pollInterval = setInterval(() => {
       fetchData();
     }, 2000);
-
     return () => clearInterval(pollInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Legacy boundary ticker removed; rAF-based hook handles countdown
 
   const formatTime = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);
     return `${seconds}`;
   };
 
-  // Winner Announcement Screen
-  if (showWinner && winnerData) {
-    return (
-      <div
-        className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
-        style={{ backgroundImage: "url('/arena-background.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 via-orange-500/30 to-red-600/30 backdrop-blur-sm"></div>
-
-        <div className="relative z-10 text-center max-w-5xl mx-auto p-8">
-          <h1 className="text-8xl sm:text-9xl font-bold mb-12 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700] animate-pulse">
-            🏆 SOLD! 🏆
-          </h1>
-
-          {/* Team Rank Badge */}
-          <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]">
-            <span className="text-9xl sm:text-[12rem] font-bold text-black">#{team?.rank || "?"}</span>
-          </div>
-
-          <h2 className="text-5xl sm:text-7xl font-bold mb-4 text-white drop-shadow-[0_0_30px_#000000]">
-            Team #{team?.rank || "?"}
-          </h2>
-          <p className="text-3xl sm:text-4xl text-white/90 mb-2 drop-shadow-[0_0_20px_#000000]">
-            Batch: {team?.batch || "N/A"}
-          </p>
-          <p className="text-2xl sm:text-3xl text-white/80 mb-8 drop-shadow-[0_0_20px_#000000]">
-            {team?.memberCount || 0} members
-          </p>
-
-          {/* Team Stats */}
-          {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
-            <div className="flex justify-center gap-6 mb-8">
-              {team.successfulAttempts !== undefined && (
-                <div className="bg-black/60 rounded-xl px-6 py-3 border-2 border-[#FFD700]/50 backdrop-blur-md">
-                  <div className="text-sm text-gray-300">Problems Solved</div>
-                  <div className="text-3xl font-bold text-[#FFD700]">{team.successfulAttempts}</div>
-                </div>
-              )}
-              {team.totalPoints !== undefined && (
-                <div className="bg-black/60 rounded-xl px-6 py-3 border-2 border-[#FFD700]/50 backdrop-blur-md">
-                  <div className="text-sm text-gray-300">Total Points</div>
-                  <div className="text-3xl font-bold text-[#FFD700]">{team.totalPoints}</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="text-4xl sm:text-5xl mb-8 text-white drop-shadow-[0_0_20px_#000000]">
-            has been won by
-          </div>
-
-          <div className="bg-black/60 rounded-3xl p-8 sm:p-12 border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)] backdrop-blur-md">
-            <div className="text-6xl sm:text-8xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_30px_#FFD700]">
-              🏯 {winnerData.houseName}
-            </div>
-            <div className="text-5xl sm:text-6xl font-bold text-white drop-shadow-[0_0_20px_#FFFFFF]">
-              for ${winnerData.amount}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Waiting Screen with Music
-  if (!status || status.roundStatus !== "active") {
-    return <WaitingScreen />;
-  }
-
-  // Active Bidding Screen
-  const isTimeRunningOut = timeLeft < 10000;
-  const bidsPlaced = status.bidsPlaced || [];
-
-  // Get house background images
   const getHouseBackground = (houseName: string) => {
     const houseMap: Record<string, string> = {
       "Lord Shen": "/lord-shen.jpg",
@@ -400,154 +468,375 @@ export default function ProjectorDisplay() {
     return houseMap[houseName] || "/arena-background.jpg";
   };
 
+  // Debug rendering logic
+  console.log('🖥️ Projector render state:', {
+    showWinner,
+    hasWinnerData: !!winnerData,
+    winnerData,
+    roundStatus: status?.roundStatus,
+    hasStatus: !!status
+  });
+
+  // Winner Screen
+  if (showWinner && winnerData) {
+    return (
+      <div
+        className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
+        style={{ backgroundImage: "url('/arena-background.jpg')" }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 via-orange-500/30 to-red-600/30 backdrop-blur-sm"></div>
+        <div className="relative z-10 text-center max-w-5xl mx-auto p-8">
+          <h1 className="text-8xl sm:text-9xl font-bold mb-12 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700] animate-pulse">
+            🏆 SOLD! 🏆
+          </h1>
+          <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]">
+            <span className="text-9xl sm:text-[12rem] font-bold text-black">#{team?.rank || "?"}</span>
+          </div>
+          <h2 className="text-5xl sm:text-7xl font-bold mb-4 text-white drop-shadow-[0_0_30px_#000000]">
+            Team #{team?.rank || "?"}
+          </h2>
+          <p className="text-3xl sm:text-4xl text-white/90 mb-2 drop-shadow-[0_0_20px_#000000]">
+            Batch: {team?.batch || "N/A"}
+          </p>
+          <p className="text-2xl sm:text-3xl text-white/80 mb-8 drop-shadow-[0_0_20px_#000000]">
+            {team?.memberCount || 0} members
+          </p>
+          <div className="text-4xl sm:text-5xl mb-8 text-white drop-shadow-[0_0_20px_#000000]">
+            has been won by
+          </div>
+          <div className="bg-black/60 rounded-3xl p-8 sm:p-12 border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.6)] backdrop-blur-md">
+            <div className="text-6xl sm:text-8xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_30px_#FFD700]">
+              🏯 {winnerData.houseName}
+            </div>
+            <div className="text-5xl sm:text-6xl font-bold text-white drop-shadow-[0_0_20px_#FFFFFF] mb-8">
+              for ${winnerData.amount}
+            </div>
+            
+            {winnerData.allBids && winnerData.allBids.length > 0 && (
+              <div className="mt-8 pt-8 border-t-2 border-[#FFD700]/30">
+                <h3 className="text-3xl sm:text-4xl font-bold text-white mb-6 drop-shadow-[0_0_15px_#FFFFFF]">
+                  All Bids This Round
+                </h3>
+                <div className="space-y-3">
+                  {(() => {
+                    // Build a list of all houses with either their bid or a "No Bids" entry
+                    const seenHouseIds = new Set<string>();
+                    const bidRows = winnerData.allBids!.map((bid, index) => {
+                      seenHouseIds.add(bid.houseId);
+                      const isWinner =
+                        bid.amount === winnerData.amount &&
+                        bid.houseName === winnerData.houseName;
+                      return (
+                        <div
+                          key={`bid-${index}`}
+                          className={`flex justify-between items-center p-4 sm:p-6 rounded-xl transition-all ${
+                            isWinner
+                              ? "bg-[#FFD700]/30 border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]"
+                              : "bg-black/40 border-2 border-white/20"
+                          }`}
+                        >
+                          <span
+                            className={`font-bold ${
+                              isWinner
+                                ? "text-[#FFD700] text-3xl sm:text-4xl drop-shadow-[0_0_15px_#FFD700]"
+                                : "text-white text-2xl sm:text-3xl"
+                            }`}
+                          >
+                            {isWinner && "👑 "}
+                            {bid.houseName}
+                          </span>
+                          <span
+                            className={`font-bold ${
+                              isWinner
+                                ? "text-[#FFD700] text-4xl sm:text-5xl drop-shadow-[0_0_20px_#FFD700]"
+                                : "text-white text-3xl sm:text-4xl"
+                            }`}
+                          >
+                            ${bid.amount}
+                          </span>
+                        </div>
+                      );
+                    });
+
+                    // Add synthetic "No Bids" rows for houses that never bid
+                    const noBidRows = houses
+                      .filter((h) => h.houseId && !seenHouseIds.has(h.houseId))
+                      .map((h) => (
+                        <div
+                          key={`nobid-${h.houseId}`}
+                          className="flex justify-between items-center p-4 sm:p-6 rounded-xl bg-black/40 border-2 border-white/10"
+                        >
+                          <span className="font-bold text-white text-2xl sm:text-3xl">
+                            {h.name}
+                          </span>
+                          <span className="font-semibold text-gray-300 text-xl sm:text-2xl">
+                            No Bids
+                          </span>
+                        </div>
+                      ));
+
+                    return [...bidRows, ...noBidRows];
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // If there is no active status but we have a last completed winner cached,
+  // rebuild the winner popup so late-opened tabs still see the result.
+  if ((!status || status.roundStatus !== "active") && lastCompletedWinnerRef.current && !showWinner) {
+    // Safely trigger showing the cached winner; guard against render loops
+    setTimeout(() => {
+      setShowWinner((prev) => (prev ? prev : true));
+      setWinnerData((prev) => prev || lastCompletedWinnerRef.current);
+    }, 0);
+  }
+
+  if (!status || status.roundStatus !== "active") {
+    return <WaitingScreen />;
+  }
+
+  const isTimeRunningOut = timeLeft < 10000;
+  
+  // Split houses: first 2 on left, last 2 on right
+  const leftHouses = houses.slice(0, 2);
+  const rightHouses = houses.slice(2, 4);
+
   return (
     <div
-      className="min-h-screen bg-cover bg-center relative flex flex-col"
+      className="min-h-screen bg-cover bg-center relative"
       style={{ backgroundImage: "url('/arena-background.jpg')" }}
     >
-      {/* Enhanced dark overlay */}
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm"></div>
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70008_1px,transparent_1px),linear-gradient(to_bottom,#FFD70008_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
 
-      {/* Neon grid overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
-
-      {/* Content */}
-      <div className="relative z-10 flex-1 flex flex-col">
-        {/* Timer at Top */}
-        <div className="text-center py-8">
+      <div className="relative z-10 min-h-screen flex flex-col p-4">
+        {/* Timer at top */}
+        <div className="text-center py-4 mb-2">
           <div
-            className={`text-8xl sm:text-[10rem] font-bold mb-4 transition-colors ${isTimeRunningOut ? "text-red-500 animate-pulse drop-shadow-[0_0_40px_#EF4444]" : "text-[#FFD700] drop-shadow-[0_0_40px_#FFD700]"}`}
+            className={`text-7xl font-bold mb-2 transition-colors ${isTimeRunningOut ? "text-red-500 animate-pulse drop-shadow-[0_0_30px_#EF4444]" : "text-[#FFD700] drop-shadow-[0_0_30px_#FFD700]"}`}
           >
             {formatTime(timeLeft)}
           </div>
-          <div className="w-full max-w-4xl mx-auto bg-gray-700/60 rounded-full h-6 border-2 border-[#FFD700]/50 px-4">
+          <div className="w-full max-w-3xl mx-auto bg-gray-700/60 rounded-full h-4 border-2 border-[#FFD700]/50">
             <div
-              className={`h-full rounded-full transition-all duration-1000 shadow-[0_0_20px_currentColor] ${
+              className={`h-full rounded-full transition-all duration-1000 shadow-[0_0_15px_currentColor] ${
                 isTimeRunningOut ? "bg-red-500" : "bg-green-500"
               }`}
-              style={{
-                width: `${Math.max(0, (timeLeft / 60000) * 100)}%`,
-              }}
+              style={{ width: `${Math.max(0, (timeLeft / 60000) * 100)}%` }}
             ></div>
           </div>
-          <div className="text-xl sm:text-2xl text-gray-300 mt-2">
-            seconds remaining
-          </div>
+          <div className="text-lg text-gray-300 mt-1">seconds remaining</div>
         </div>
 
-        {/* Team in Center */}
-        <div className="flex-1 flex items-center justify-center px-4 py-8">
-          <div className="max-w-7xl w-full">
-            {/* Team Card */}
-            <div className="bg-gradient-to-r from-yellow-600 to-orange-600 rounded-3xl p-8 sm:p-12 max-w-3xl mx-auto backdrop-blur-md border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.5)] mb-8">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-6 text-center text-black">
-                👥 Current Team
-              </h2>
-              <div className="flex flex-col items-center gap-6">
-                {/* Team Rank Badge */}
-                <div className="w-32 h-32 sm:w-48 sm:h-48 rounded-full bg-gradient-to-br from-black to-gray-900 flex items-center justify-center border-4 border-black shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-                  <span className="text-7xl sm:text-9xl font-bold text-[#FFD700]">#{team?.rank || "?"}</span>
-                </div>
-                <div className="text-center">
-                  <h3 className="text-4xl sm:text-6xl font-bold text-black mb-2">
-                    Team #{team?.rank || "?"}
-                  </h3>
-                  <p className="text-2xl sm:text-3xl text-black/80 mb-1">
-                    Batch: {team?.batch || "N/A"}
-                  </p>
-                  <p className="text-xl sm:text-2xl text-black/70 mb-4">
-                    {team?.memberCount || 0} members
-                  </p>
+        {/* Main content: 2 houses | center team | 2 houses */}
+        <div className="flex-1 grid grid-cols-[1fr_2fr_1fr] gap-3">
+          {/* Left Houses */}
+          <div className="flex flex-col gap-3">
+            {leftHouses.map((house, index) => {
+              const houseId = house._id?.toString() || house.houseId || `left-house-${index}`;
+              const bidState = houseBidStates[houseId] || { status: "no-bid", showFlash: false };
+              const percentage = (house.remainingBudget / house.totalBudget) * 100;
+
+              const isFlashing = bidState.showFlash && bidState.status !== "no-bid";
+
+              return (
+                <div
+                  key={houseId}
+                  className={`relative flex-1 rounded-2xl overflow-hidden border-3 transition-all duration-300 ${
+                    isFlashing
+                      ? "border-[#FFD700] shadow-[0_0_35px_rgba(255,215,0,0.9)] scale-[1.03]"
+                      : "border-[#FFD700]/60 shadow-[0_0_25px_rgba(255,215,0,0.4)]"
+                  }`}
+                >
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url('${getHouseBackground(house.name)}')` }}
+                  ></div>
                   
-                  {/* Team Performance Stats */}
-                  {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
-                    <div className="flex justify-center gap-4 mt-4">
-                      {team.successfulAttempts !== undefined && (
-                        <div className="bg-black/30 rounded-lg px-4 py-2 border border-black/50">
-                          <div className="text-xs text-black/70">Problems Solved</div>
-                          <div className="text-2xl font-bold text-black">{team.successfulAttempts}</div>
+                  {/* Gray overlay for no-bid */}
+                  {bidState.status === "no-bid" && (
+                    <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-[2px] transition-opacity duration-500"></div>
+                  )}
+
+                  {/* Golden flash overlay for bid placed/updated while flashing */}
+                  {isFlashing && (
+                    <div className="absolute inset-0 bg-[#FFD700]/40 backdrop-blur-[3px] animate-pulse"></div>
+                  )}
+
+                  {/* Normal overlay for bid placed/updated when not flashing */}
+                  {bidState.status !== "no-bid" && !isFlashing && (
+                    <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"></div>
+                  )}
+                  
+                  <div className="relative z-10 p-6 h-full flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-3 text-center drop-shadow-[0_0_15px_#000000]">
+                        {house.name}
+                      </h3>
+                      <div className="text-center mb-3">
+                        <div className="text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
+                          ${house.remainingBudget}
                         </div>
+                        <div className="text-sm text-gray-200">of ${house.totalBudget}</div>
+                      </div>
+                      <div className="w-full bg-black/60 rounded-full h-3 overflow-hidden border border-[#FFD700]/30">
+                        <div
+                          className="bg-[#FFD700] h-full rounded-full transition-all shadow-[0_0_10px_#FFD700]"
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-center mt-2 text-sm text-gray-200">
+                        {percentage.toFixed(0)}% remaining
+                      </div>
+                    </div>
+                    
+                    {/* Bid status */}
+                    <div className="text-center mt-4">
+                      {bidState.status === "no-bid" && (
+                        <div className="text-lg font-semibold text-gray-400">No Bid</div>
                       )}
-                      {team.totalPoints !== undefined && (
-                        <div className="bg-black/30 rounded-lg px-4 py-2 border border-black/50">
-                          <div className="text-xs text-black/70">Total Points</div>
-                          <div className="text-2xl font-bold text-black">{team.totalPoints}</div>
+                      {bidState.status === "bid-placed" && !bidState.showFlash && (
+                        <div className="text-lg font-bold text-green-400 drop-shadow-[0_0_10px_#000000]">✓ Bid Placed</div>
+                      )}
+                      {bidState.status === "bid-updated" && !bidState.showFlash && (
+                        <div className="text-lg font-bold text-blue-400 drop-shadow-[0_0_10px_#000000]">↻ Bid Updated</div>
+                      )}
+                      {bidState.showFlash && (
+                        <div className="text-xl font-bold text-yellow-300 drop-shadow-[0_0_15px_#FFD700] animate-pulse">
+                          {bidState.status === "bid-placed" ? "🎯 BID PLACED!" : "🔄 BID UPDATED!"}
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Center Team Card */}
+          <div className="flex items-center justify-center">
+            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 rounded-3xl p-8 w-full max-w-2xl border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.5)] backdrop-blur-md">
+              <h2 className="text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
+                👥 CURRENT TEAM
+              </h2>
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.6)]">
+                  <span className="text-8xl font-bold text-black">#{team?.rank || "?"}</span>
+                </div>
+                <div className="text-center">
+                  <h3 className="text-4xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] mb-2">
+                    Team #{team?.rank || "?"}
+                  </h3>
+                  <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+                    <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                      📚 Batch {team?.batch}
+                    </span>
+                    <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                      👥 {team?.memberCount || 0} members
+                    </span>
+                  </div>
+                  {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
+                    <div className="flex justify-center gap-3 mt-3">
+                      {team.successfulAttempts !== undefined && (
+                        <span className="bg-green-500/20 text-green-300 px-4 py-2 rounded-lg font-semibold border border-green-500/40">
+                          ✓ {team.successfulAttempts} solved
+                        </span>
+                      )}
+                      {team.totalPoints !== undefined && (
+                        <span className="bg-yellow-500/20 text-yellow-300 px-4 py-2 rounded-lg font-semibold border border-yellow-500/40">
+                          ★ {team.totalPoints} pts
+                        </span>
+                      )}
+                    </div>
                   )}
-                  
-                  <p className="text-xl sm:text-2xl text-black/80 mt-4">
-                    Awaiting house bids...
-                  </p>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* House Treasuries Cards */}
-            <div className="bg-black/40 rounded-2xl p-6 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
-              <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
-                🏯 House Treasuries
-              </h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {Array.isArray(houses) &&
-                  houses.map((house) => {
-                    const percentage =
-                      (house.remainingBudget / house.totalBudget) * 100;
-                    const hasBid = bidsPlaced.some(
-                      (bid) => bid.houseId === house._id?.toString()
-                    );
+          {/* Right Houses */}
+          <div className="flex flex-col gap-3">
+            {rightHouses.map((house, index) => {
+              const houseId = house._id?.toString() || house.houseId || `right-house-${index}`;
+              const bidState = houseBidStates[houseId] || { status: "no-bid", showFlash: false };
+              const percentage = (house.remainingBudget / house.totalBudget) * 100;
+              const isFlashing = bidState.showFlash && bidState.status !== "no-bid";
 
-                    return (
-                      <div
-                        key={house._id?.toString()}
-                        className={`relative rounded-xl p-4 sm:p-6 border-2 transition-all overflow-hidden ${
-                          hasBid
-                            ? "border-green-400 shadow-[0_0_25px_rgba(34,197,94,0.6)]"
-                            : "border-[#FFD700]/50 shadow-[0_0_25px_rgba(255,215,0,0.3)]"
-                        }`}
-                        style={{
-                          backgroundImage: `url('${getHouseBackground(house.name)}')`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                        }}
-                      >
-                        {/* Opacity overlay */}
-                        <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"></div>
+              return (
+                <div
+                  key={houseId}
+                  className={`relative flex-1 rounded-2xl overflow-hidden border-3 transition-all duration-300 ${
+                    isFlashing
+                      ? "border-[#FFD700] shadow-[0_0_35px_rgba(255,215,0,0.9)] scale-[1.03]"
+                      : "border-[#FFD700]/60 shadow-[0_0_25px_rgba(255,215,0,0.4)]"
+                  }`}
+                >
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url('${getHouseBackground(house.name)}')` }}
+                  ></div>
+                  
+                  {bidState.status === "no-bid" && (
+                    <div className="absolute inset-0 bg-gray-900/70 backdrop-blur-[2px] transition-opacity duration-500"></div>
+                  )}
 
-                        {/* Content */}
-                        <div className="relative z-10">
-                          <h3 className="text-lg sm:text-xl font-bold text-white mb-2 text-center drop-shadow-[0_0_15px_#000000]">
-                            {house.name}
-                          </h3>
-                          <div className="text-center mb-3">
-                            <div className="text-2xl sm:text-3xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
-                              ${house.remainingBudget}
-                            </div>
-                            <div className="text-xs sm:text-sm text-gray-200">
-                              of ${house.totalBudget}
-                            </div>
-                          </div>
-                          <div className="w-full bg-black/60 rounded-full h-3 overflow-hidden border border-[#FFD700]/30">
-                            <div
-                              className="bg-[#FFD700] h-full rounded-full transition-all shadow-[0_0_10px_#FFD700]"
-                              style={{ width: `${percentage}%` }}
-                            ></div>
-                          </div>
-                          <div className="text-center mt-2 text-xs sm:text-sm text-gray-200">
-                            {percentage.toFixed(0)}% remaining
-                          </div>
-                          {hasBid && (
-                            <div className="text-center mt-2 text-sm font-bold text-green-300 drop-shadow-[0_0_10px_#000000]">
-                              ✓ Bid Placed
-                            </div>
-                          )}
+                  {/* Golden flash overlay for bid placed/updated while flashing */}
+                  {isFlashing && (
+                    <div className="absolute inset-0 bg-[#FFD700]/40 backdrop-blur-[3px] animate-pulse"></div>
+                  )}
+
+                  {/* Normal overlay for bid placed/updated when not flashing */}
+                  {bidState.status !== "no-bid" && !isFlashing && (
+                    <div className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"></div>
+                  )}
+                  
+                  <div className="relative z-10 p-6 h-full flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-3 text-center drop-shadow-[0_0_15px_#000000]">
+                        {house.name}
+                      </h3>
+                      <div className="text-center mb-3">
+                        <div className="text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
+                          ${house.remainingBudget}
                         </div>
+                        <div className="text-sm text-gray-200">of ${house.totalBudget}</div>
                       </div>
-                    );
-                  })}
-              </div>
-            </div>
+                      <div className="w-full bg-black/60 rounded-full h-3 overflow-hidden border border-[#FFD700]/30">
+                        <div
+                          className="bg-[#FFD700] h-full rounded-full transition-all shadow-[0_0_10px_#FFD700]"
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-center mt-2 text-sm text-gray-200">
+                        {percentage.toFixed(0)}% remaining
+                      </div>
+                    </div>
+                    
+                    <div className="text-center mt-4">
+                      {bidState.status === "no-bid" && (
+                        <div className="text-lg font-semibold text-gray-400">No Bid</div>
+                      )}
+                      {bidState.status === "bid-placed" && !bidState.showFlash && (
+                        <div className="text-lg font-bold text-green-400 drop-shadow-[0_0_10px_#000000]">✓ Bid Placed</div>
+                      )}
+                      {bidState.status === "bid-updated" && !bidState.showFlash && (
+                        <div className="text-lg font-bold text-blue-400 drop-shadow-[0_0_10px_#000000]">↻ Bid Updated</div>
+                      )}
+                      {bidState.showFlash && (
+                        <div className="text-xl font-bold text-yellow-300 drop-shadow-[0_0_15px_#FFD700] animate-pulse">
+                          {bidState.status === "bid-placed" ? "🎯 BID PLACED!" : "🔄 BID UPDATED!"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

@@ -3,18 +3,9 @@ import { Teams } from "@/lib/models/teams";
 import { Participants } from "@/lib/models/participants";
 import { verifyAuth } from "@/lib/auth";
 
-// GET /api/teams - Get all teams
+// GET /api/teams - Get all teams (public for results page)
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const authResult = await verifyAuth(request);
-    if (!authResult) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
     const teams = await Teams.getAll();
 
     // Transform to include only required fields and fetch team members

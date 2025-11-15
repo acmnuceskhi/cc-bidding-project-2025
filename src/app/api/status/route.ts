@@ -271,9 +271,10 @@ export async function GET() {
       ? Math.max(0, Math.floor((roundTimerEnd - currentTime) / 1000))
       : 0;
 
-    // Collect houses that have placed bids (no amounts)
+    // Collect houses that have placed bids with amounts
     const bidsPlaced = roundBids.map((bid) => ({
       houseId: bid.houseId.toString(),
+      amount: bid.amount,
     }));
 
     // Calculate round number (count of all completed + active rounds)

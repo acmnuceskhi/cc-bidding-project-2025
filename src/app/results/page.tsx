@@ -36,6 +36,7 @@ interface HouseWithTeams extends House {
 
 export default function FinalTeamsPage() {
   const [houses, setHouses] = useState<HouseWithTeams[]>([]);
+  const [previousHouseTeamCounts, setPreviousHouseTeamCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,15 +51,36 @@ export default function FinalTeamsPage() {
         const [housesData, teamsData]: [House[], TeamWithDetails[]] =
           await Promise.all([housesRes.json(), teamsRes.json()]);
 
+        console.log("Houses data:", housesData);
+        console.log("Teams data:", teamsData);
+
         // Assign teams to their respective houses
         const housesWithTeams: HouseWithTeams[] = housesData.map(
-          (house) => ({
-            ...house,
-            teams: teamsData.filter(
-              (t) => t.houseId && String(t.houseId) === String(house._id)
-            ),
-          })
+          (house) => {
+            const houseIdStr = house._id ? String(house._id) : house.houseId;
+            const matchedTeams = teamsData.filter(
+              (t) => t.houseId && String(t.houseId) === houseIdStr
+            );
+            console.log(`House ${house.name} (${houseIdStr}):`, matchedTeams);
+            return {
+              ...house,
+              teams: matchedTeams,
+            };
+          }
         );
+
+        console.log("Houses with teams:", housesWithTeams);
+
+        // Track previous team counts per house so we can animate only
+        // when a house gains teams (i.e. wins something new).
+        setPreviousHouseTeamCounts((prev) => {
+          const updated: Record<string, number> = { ...prev };
+          for (const h of housesWithTeams) {
+            const key = (h._id ? String(h._id) : h.houseId) || h.name;
+            updated[key] = h.teams.length;
+          }
+          return updated;
+        });
 
         setHouses(housesWithTeams);
       } catch (error) {
@@ -89,17 +111,49 @@ export default function FinalTeamsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {houses.map((house, index) => (
-              <div
-                key={house.houseId || `house-${index}`}
-                className="relative p-6 rounded-2xl bg-white/10 backdrop-blur-md border border-[#FFD700]/40 shadow-[0_0_25px_rgba(255,215,0,0.3)] transition-transform hover:scale-105"
-              >
-                <h2
-                  className="text-2xl font-bold mb-4 drop-shadow-[0_0_10px_rgba(255,215,0,0.6)]"
-                  style={{ color: house.color || "#FFD700" }}
+            {houses.map((house, index) => {
+              const getHouseBackground = (houseName: string) => {
+                const houseMap: Record<string, string> = {
+                  "Lord Shen": "/lord-shen.jpg",
+                  "Dragon Warrior": "/dragon-warrior.jpg",
+                  "Master Oogway": "/master-oogway.jpg",
+                  "Tai Lung": "/tai-lung.jpg",
+                };
+                return houseMap[houseName] || "/arena-background.jpg";
+              };
+              const hasTeams = house.teams && house.teams.length > 0;
+              const houseKey = (house._id ? String(house._id) : house.houseId) || house.name;
+              const prevCount = previousHouseTeamCounts[houseKey] ?? 0;
+              const isNewlyGained = hasTeams && house.teams.length > prevCount;
+              
+              return (
+                <div
+                  key={house.houseId || `house-${index}`}
+                  className={`relative p-6 rounded-2xl border transition-transform overflow-hidden ${
+                    isNewlyGained
+                      ? "border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.8)] animate-pulse"
+                      : hasTeams
+                        ? "border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)]"
+                        : "border-[#FFD700]/40 shadow-[0_0_25px_rgba(255,215,0,0.3)] hover:scale-105"
+                  }`}
                 >
-                  House of {house.name}
-                </h2>
+                  {/* Background image */}
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url('${getHouseBackground(house.name)}')` }}
+                  ></div>
+                  
+                  {/* Dark overlay */}
+                  <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"></div>
+                  
+                  {/* Content */}
+                  <div className="relative z-10">
+                    <h2
+                      className="text-2xl font-bold mb-4 drop-shadow-[0_0_10px_rgba(255,215,0,0.6)]"
+                      style={{ color: house.color || "#FFD700" }}
+                    >
+                      House of {house.name}
+                    </h2>
 
                 {house.teams.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3 text-sm text-gray-200">
@@ -141,12 +195,14 @@ export default function FinalTeamsPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-400 italic mt-2">
-                    No teams assigned yet
-                  </p>
+                  <div className="text-center text-gray-400 py-4">
+                    No teams yet
+                  </div>
                 )}
-              </div>
-            ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
