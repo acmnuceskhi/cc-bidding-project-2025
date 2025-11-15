@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Bids } from "@/lib/models/bids";
 import { Houses } from "@/lib/models/houses";
-import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { Config } from "@/lib/models/config";
 import { verifyAuth } from "@/lib/auth";
@@ -38,16 +37,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { roundId, amount, previousAmount } = body;
+    // Support new team-based API while remaining backward compatible:
+    // - Prefer body.teamId
+    // - Fallback: treat body.roundId as teamId
+    const rawTeamId: string | undefined = body.teamId || body.roundId;
+    const { amount, previousAmount } = body;
 
     // Validate input
     // Treat 0 as a valid provided value; only undefined/null should be missing
-    if (!roundId || amount === undefined || amount === null) {
+    if (!rawTeamId || amount === undefined || amount === null) {
       return NextResponse.json(
         {
           success: false,
           error: "MISSING_FIELDS",
-          message: "Missing required fields: roundId, amount",
+          message: "Missing required fields: teamId, amount",
         },
         { status: 400 }
       );
@@ -64,38 +67,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the round
-    const round = await Rounds.getById(roundId);
-    if (!round) {
+    // Validate against team-based active window from Config
+    const cfg = await Config.get();
+    if (!cfg.currentRound || cfg.currentRound !== rawTeamId) {
       return NextResponse.json(
         {
           success: false,
-          error: "ROUND_NOT_FOUND",
-          message: "Round not found",
-        },
-        { status: 404 }
-      );
-    }
-
-    // Check if round is active
-    if (round.status !== "active") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "ROUND_NOT_ACTIVE",
-          message: "Round is not active",
+          error: "TEAM_NOT_ACTIVE",
+          message: "This team is not currently open for bidding",
         },
         { status: 400 }
       );
     }
-
-    // Check if round has expired
-    if (!round.timerEnd || new Date() > round.timerEnd) {
+    const now = new Date();
+    if (!cfg.currentRoundStartTime || !cfg.currentRoundEndTime || now < cfg.currentRoundStartTime || now > cfg.currentRoundEndTime) {
       return NextResponse.json(
         {
           success: false,
-          error: "ROUND_EXPIRED",
-          message: "Round has expired",
+          error: "WINDOW_CLOSED",
+          message: "Bidding window is not active",
         },
         { status: 400 }
       );
@@ -140,7 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 🧑‍🤝‍🧑 Get team being bid on
-    const team = await Teams.getById(round.teamId.toString());
+    const team = await Teams.getById(rawTeamId);
     if (!team || !team.batch) {
       return NextResponse.json(
         {
@@ -176,7 +166,7 @@ export async function POST(request: NextRequest) {
     ]);
 
     // 🏷️ In second pass, remove minimum roster check (no longer applicable for team-based bidding)
-    const passPhase = round.passPhase ?? 1;
+    const passPhase = 1;
 
     // Count how many existing teams are in the same batch
     const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
@@ -197,13 +187,15 @@ export async function POST(request: NextRequest) {
 
     // Place or update the bid (NO budget deduction here)
     // Budget is only deducted when the round ends and they win
-    await Bids.upsertBid(roundId, houseId, round.teamId.toString(), amount);
+    // Use teamId as the round identifier for bids storage (round-less design)
+    await Bids.upsertBid(rawTeamId, houseId, rawTeamId, amount);
 
     // Emit socket event to notify all clients of the bid
     emitSocketEvent("bid-placed", {
       houseId,
       houseName: house.name,
-      roundId,
+      // Back-compat: event field name remains roundId but carries teamId
+      roundId: rawTeamId,
     });
 
     return NextResponse.json({
@@ -246,7 +238,8 @@ export async function GET(request: NextRequest) {
 
     let bids;
     if (roundId) {
-      bids = await Bids.getByRound(roundId);
+      // Back-compat: treat roundId as teamId
+      bids = await Bids.getByTeam(roundId);
     } else if (teamId) {
       bids = await Bids.getByTeam(teamId);
     } else if (houseId) {

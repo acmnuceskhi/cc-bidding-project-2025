@@ -266,37 +266,33 @@ export default function ProjectorDisplay() {
         setHouses([]);
       }
       // If active, fetch bids to build bid states and team details from current round
-      const roundId = auctionState?.currentRound || null;
+      const roundId = auctionState?.currentRound || null; // teamId in round-less mode
       const now = Date.now();
       const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
       const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
       const isActive = !!(rStart && rEnd && now >= rStart && now < rEnd);
       if (isActive && roundId) {
-        // Fetch team
+        // Fetch team directly using teamId (round-less)
         try {
-          const roundRes = await fetch(`/api/rounds/${roundId}`, { cache: "no-store" });
-          if (roundRes.ok) {
-            const r = await roundRes.json();
-            const teamRes = await fetch(`/api/teams/${r.teamId}`, { cache: "no-store" });
-            if (teamRes.ok) {
-              const t = await teamRes.json();
-              setTeam({
-                teamId: t.teamId,
-                rank: t.rank,
-                batch: t.batch,
-                memberCount: t.memberCount,
-                successfulAttempts: t.successfulAttempts,
-                totalPoints: t.totalPoints,
-                timeTaken: undefined,
-              });
-            }
-            lastCompletedWinnerRef.current = null;
+          const teamRes = await fetch(`/api/teams/${roundId}`, { cache: "no-store" });
+          if (teamRes.ok) {
+            const t = await teamRes.json();
+            setTeam({
+              teamId: t.teamId,
+              rank: t.rank,
+              batch: t.batch,
+              memberCount: t.memberCount,
+              successfulAttempts: t.successfulAttempts,
+              totalPoints: t.totalPoints,
+              timeTaken: undefined,
+            });
           }
+          lastCompletedWinnerRef.current = null;
         } catch {}
 
-        // Fetch current round bids to update bid states
+        // Fetch current team bids to update bid states
         try {
-          const bidsRes = await fetch(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+          const bidsRes = await fetch(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
           const bidsData = await bidsRes.json();
           const bidsPlaced: Array<{ houseId: string; amount: number }> = Array.isArray(bidsData)
             ? bidsData.map((b: { houseId: string; amount: number }) => ({ houseId: b.houseId, amount: b.amount }))
@@ -341,10 +337,10 @@ export default function ProjectorDisplay() {
       const phaseNow = computePhase();
       if (phaseNow === "C_C_LIVE_ENDED") {
         let allBids: Array<{ houseId: string; houseName: string; amount: number }> = [];
-        const roundIdToFetch = auctionState?.currentRound || null;
-        if (roundIdToFetch) {
+        const teamIdToFetch = auctionState?.currentRound || null;
+        if (teamIdToFetch) {
           try {
-            const bidsRes = await fetch(`/api/bids?roundId=${roundIdToFetch}`, { cache: "no-store" });
+            const bidsRes = await fetch(`/api/bids?teamId=${teamIdToFetch}`, { cache: "no-store" });
             if (bidsRes.ok) {
               const bidsData = await bidsRes.json();
               allBids = bidsData.map((bid: { houseId: string; amount: number }) => {

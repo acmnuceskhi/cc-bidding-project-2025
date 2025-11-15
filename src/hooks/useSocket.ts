@@ -24,6 +24,7 @@ export function useSocket() {
   > | null>(null);
 
   useEffect(() => {
+    // Ensure a singleton socket exists
     if (!socketRef.current) {
       socketRef.current = io({
         path: "/socket.io",
@@ -34,87 +35,90 @@ export function useSocket() {
         reconnectionDelayMax: 5000,
         transports: ["websocket", "polling"],
       });
+    }
 
-      const socket = socketRef.current;
-      setSocketObj(socket);
+    const socket = socketRef.current!;
+    setSocketObj(socket);
 
-      const handleConnect = () => {
+    const handleConnect = () => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("Socket connected");
+      }
+      setIsConnected(true);
+      setIsReconnecting(false);
+      // Request an authoritative snapshot for THIS hook instance
+      socket.emit("request-state", async (snapshot: AuctionState) => {
         if (process.env.NODE_ENV === "development") {
-          console.log("Socket connected");
+          console.log("request-state ack:", snapshot);
         }
-        setIsConnected(true);
-        setIsReconnecting(false);
-        // Request an authoritative snapshot via socket ack (no /status fetch)
-        socket.emit("request-state", async (snapshot: AuctionState) => {
-          if (process.env.NODE_ENV === "development") {
-            console.log("request-state ack:", snapshot);
-          }
-          const isEmpty =
-            (!snapshot.currentRound || snapshot.currentRound === "") &&
-            !snapshot.auctionStartTime &&
-            !snapshot.auctionEndTime &&
-            !snapshot.currentRoundStartTime &&
-            !snapshot.currentRoundEndTime;
-          if (isEmpty) {
-            try {
-              const res = await fetch("/api/config", { cache: "no-store" });
-              if (res.ok) {
-                const cfg = await res.json();
-                setAuctionState({
-                  currentRound: cfg.currentRound || "",
-                  auctionStartTime: cfg.auctionStartTime || null,
-                  auctionEndTime: cfg.auctionEndTime || null,
-                  currentRoundStartTime: cfg.currentRoundStartTime || null,
-                  currentRoundEndTime: cfg.currentRoundEndTime || null,
-                  serverTime: Date.now(),
-                });
-                return;
-              }
-            } catch (e) {
-              if (process.env.NODE_ENV === "development") {
-                console.warn("/api/config fallback failed", e);
-              }
+        const isEmpty =
+          (!snapshot.currentRound || snapshot.currentRound === "") &&
+          !snapshot.auctionStartTime &&
+          !snapshot.auctionEndTime &&
+          !snapshot.currentRoundStartTime &&
+          !snapshot.currentRoundEndTime;
+        if (isEmpty) {
+          try {
+            const res = await fetch("/api/config", { cache: "no-store" });
+            if (res.ok) {
+              const cfg = await res.json();
+              setAuctionState({
+                currentRound: cfg.currentRound || "",
+                auctionStartTime: cfg.auctionStartTime || null,
+                auctionEndTime: cfg.auctionEndTime || null,
+                currentRoundStartTime: cfg.currentRoundStartTime || null,
+                currentRoundEndTime: cfg.currentRoundEndTime || null,
+                serverTime: Date.now(),
+              });
+              return;
+            }
+          } catch (e) {
+            if (process.env.NODE_ENV === "development") {
+              console.warn("/api/config fallback failed", e);
             }
           }
-          setAuctionState(snapshot);
-        });
-      };
-
-      const handleDisconnect = (reason: string) => {
-        if (process.env.NODE_ENV === "development") {
-          console.log("Socket disconnected:", reason);
         }
-        setIsConnected(false);
-      };
+        setAuctionState(snapshot);
+      });
+    };
 
-      const handleStateUpdate = (state: AppState) => {
-        if (process.env.NODE_ENV === "development") {
-          console.log("State update received:", state);
-        }
-        setCurrentState(state);
-      };
+    const handleDisconnect = (reason: string) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("Socket disconnected:", reason);
+      }
+      setIsConnected(false);
+    };
 
-      const handleAuctionState = (data: AuctionState) => {
-        if (process.env.NODE_ENV === "development") {
-          console.log("Auction state received:", data);
-        }
-        setAuctionState(data);
-      };
+    const handleStateUpdate = (state: AppState) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("State update received:", state);
+      }
+      setCurrentState(state);
+    };
 
-      socket.on("connect", handleConnect);
-      socket.on("disconnect", handleDisconnect);
-      socket.on("state-update", handleStateUpdate);
-      socket.on("auction-state", handleAuctionState);
+    const handleAuctionState = (data: AuctionState) => {
+      if (process.env.NODE_ENV === "development") {
+        console.log("Auction state received:", data);
+      }
+      setAuctionState(data);
+    };
+
+    // Attach per-instance listeners
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("state-update", handleStateUpdate);
+    socket.on("auction-state", handleAuctionState);
+
+    // If already connected (because another hook created it), request state immediately
+    if (socket.connected) {
+      handleConnect();
     }
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.off("connect");
-        socketRef.current.off("disconnect");
-        socketRef.current.off("state-update");
-        socketRef.current.off("auction-state");
-        // No additional engine event cleanup
-      }
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("state-update", handleStateUpdate);
+      socket.off("auction-state", handleAuctionState);
       setSocketObj(null);
     };
   }, []);

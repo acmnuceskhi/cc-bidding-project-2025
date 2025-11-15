@@ -114,15 +114,8 @@ export default function HouseDashboard() {
             timerEnd: endIso || undefined,
           });
 
-          // Fetch round to discover teamId
-          let teamId: string | null = null;
-          try {
-            const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
-            if (roundRes.ok) {
-              const r = await roundRes.json();
-              teamId = r.teamId || null;
-            }
-          } catch {}
+          // In round-less mode, currentRound is the teamId
+          let teamId: string | null = roundId;
 
           // Fetch team details for display
           if (teamId) {
@@ -164,7 +157,7 @@ export default function HouseDashboard() {
 
             // Fetch current bid for this house in this round
             try {
-              const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+              const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
               const bidsData = await bidsRes.json();
               if (Array.isArray(bidsData)) {
                 const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
@@ -207,78 +200,75 @@ export default function HouseDashboard() {
       if (phase === "CB" || phase === "CD") {
         if (!roundId) return;
         try {
-          const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
-          if (roundRes.ok) {
-            const r = await roundRes.json();
-            setActiveRound({
-              _id: roundId,
-              roundId,
-              teamId: r.teamId || "",
-              status: phase === "CD" ? "active" : "scheduled",
-              timerEnd: auctionState.currentRoundEndTime || undefined,
-              scheduledStart: auctionState.currentRoundStartTime || undefined,
-            });
+          const teamId = roundId; // team-based identifier
+          setActiveRound({
+            _id: roundId,
+            roundId,
+            teamId: teamId,
+            status: phase === "CD" ? "active" : "scheduled",
+            timerEnd: auctionState.currentRoundEndTime || undefined,
+            scheduledStart: auctionState.currentRoundStartTime || undefined,
+          });
 
-            if (r.teamId) {
-              try {
-                const teamRes = await fetchWithAuth(`/api/teams/${r.teamId}`, { cache: "no-store" });
-                if (teamRes.ok) {
-                  const t = await teamRes.json();
-                  setCurrentTeam({
-                    teamId: t.teamId,
-                    name: t.name || null,
-                    rank: t.rank,
-                    batch: t.batch,
-                    memberCount: t.memberCount,
-                    successfulAttempts: t.successfulAttempts,
-                    totalPoints: t.totalPoints,
-                    timeTaken: undefined,
-                    members: t.members || [],
-                  });
-                } else {
-                  setCurrentTeam(null);
-                }
-              } catch {
+          if (teamId) {
+            try {
+              const teamRes = await fetchWithAuth(`/api/teams/${teamId}`, { cache: "no-store" });
+              if (teamRes.ok) {
+                const t = await teamRes.json();
+                setCurrentTeam({
+                  teamId: t.teamId,
+                  name: t.name || null,
+                  rank: t.rank,
+                  batch: t.batch,
+                  memberCount: t.memberCount,
+                  successfulAttempts: t.successfulAttempts,
+                  totalPoints: t.totalPoints,
+                  timeTaken: undefined,
+                  members: t.members || [],
+                });
+              } else {
                 setCurrentTeam(null);
               }
+            } catch {
+              setCurrentTeam(null);
+            }
 
-              // Check bidding eligibility (only relevant in CD)
-              if (phase === "CD" && house) {
-                try {
-                  const canBidRes = await fetchWithAuth(
-                    `/api/houses/${house.houseId}/canPlaceBid?teamId=${r.teamId}`,
-                    { cache: "no-store" }
-                  );
-                  const canBidData = await canBidRes.json();
-                  setCanBid(!!canBidData.canBid);
-                  setCanBidMessage(canBidData.message || "");
-                } catch (err) {
-                  console.error("Failed to check canBid:", err);
-                  setCanBid(true);
-                }
+            // Check bidding eligibility (only relevant in CD)
+            if (phase === "CD" && house) {
+              try {
+                const canBidRes = await fetchWithAuth(
+                  `/api/houses/${house.houseId}/canPlaceBid?teamId=${teamId}`,
+                  { cache: "no-store" }
+                );
+                const canBidData = await canBidRes.json();
+                setCanBid(!!canBidData.canBid);
+                setCanBidMessage(canBidData.message || "");
+              } catch (err) {
+                console.error("Failed to check canBid:", err);
+                setCanBid(true);
+              }
 
-                // Fetch current bid for this house in this round
-                try {
-                  const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
-                  const bidsData = await bidsRes.json();
-                  if (Array.isArray(bidsData)) {
-                    const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
-                    setCurrentBid(myBid ? myBid.amount : null);
-                  } else {
-                    setCurrentBid(null);
-                  }
-                } catch (error) {
-                  console.error("Failed to fetch current bid:", error);
+              // Fetch current bid for this house for current team
+              try {
+                const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
+                const bidsData = await bidsRes.json();
+                if (Array.isArray(bidsData)) {
+                  const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
+                  setCurrentBid(myBid ? myBid.amount : null);
+                } else {
                   setCurrentBid(null);
                 }
-              } else {
-                setCanBid(false);
-                setCanBidMessage("");
+              } catch (error) {
+                console.error("Failed to fetch current bid:", error);
                 setCurrentBid(null);
               }
             } else {
-              setCurrentTeam(null);
+              setCanBid(false);
+              setCanBidMessage("");
+              setCurrentBid(null);
             }
+          } else {
+            setCurrentTeam(null);
           }
         } catch {}
       } else if (phase === "CC") {
@@ -288,7 +278,7 @@ export default function HouseDashboard() {
           return;
         }
         try {
-          const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+          const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
           const bidsData = await bidsRes.json();
           if (Array.isArray(bidsData)) {
             setAllBids(
