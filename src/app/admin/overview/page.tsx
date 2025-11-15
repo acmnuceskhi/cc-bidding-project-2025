@@ -351,32 +351,14 @@ export default function OverviewPage() {
         }
       };
 
-      const handleStateUpdate = () => {
-        // State update - fetch to get latest data
-        // Only fetch when socket is connected (not when polling)
-        if (!isConnected) return;
-        
-        // Debounce: use a small delay to avoid rapid fetches
-        setTimeout(() => {
-          fetchOverviewData(false);
-        }, 1000);
-      };
-
-      const handleBidNotification = () => {
-        // Bid placed - fetch to get updated bids
-        // Only fetch when socket is connected (not when polling)
-        if (!isConnected) return;
-        
-        // Debounce: use a small delay to avoid rapid fetches
-        setTimeout(() => {
-          fetchOverviewData(false);
-        }, 1000);
-      };
+      // Note: We don't listen to state-update or bid-notification events
+      // because they fire too frequently and would cause excessive API calls.
+      // Instead, we only listen to round-started and round-ended which are
+      // infrequent events that require full data refresh.
+      // For real-time bid updates, the UI will update when rounds change.
 
       socket.on("round-started", handleRoundStarted);
       socket.on("round-ended", handleRoundEnded);
-      socket.on("state-update", handleStateUpdate);
-      socket.on("bid-notification", handleBidNotification);
 
       return () => {
         if (pollInterval) {
@@ -384,8 +366,6 @@ export default function OverviewPage() {
         }
         socket.off("round-started", handleRoundStarted);
         socket.off("round-ended", handleRoundEnded);
-        socket.off("state-update", handleStateUpdate);
-        socket.off("bid-notification", handleBidNotification);
       };
     }
     
