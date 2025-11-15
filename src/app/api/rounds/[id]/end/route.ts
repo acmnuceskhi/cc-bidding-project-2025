@@ -7,6 +7,7 @@ import { Participants } from "@/lib/models/participants";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { verifyAuth, hasRole } from "@/lib/auth";
+import { getSocketInstance } from "@/lib/socket-instance";
 import type { Bid } from "@/lib/models/bids";
 
 // POST /api/rounds/:id/end - End a round and determine winner (Admin only)
@@ -162,6 +163,52 @@ export async function POST(
       });
     } finally {
       await session.endSession();
+    }
+
+    // Emit socket events to notify all clients
+    const io = getSocketInstance();
+    if (io) {
+      const allBidsData = bids.map((bid) => ({
+        houseId: bid.houseId.toString(),
+        amount: bid.amount,
+        timestamp: bid.timestamp?.toISOString() || new Date().toISOString(),
+      }));
+
+      // Emit round-ended event
+      io.emit("round-ended", {
+        roundId: id,
+        winner: winningBid && winningHouse
+          ? {
+              houseId: winningBid.houseId.toString(),
+              houseName: winningHouse.name,
+              amount: winningBid.amount,
+            }
+          : null,
+        losers: allBidsData.filter(
+          (bid) =>
+            bid.houseId !== winningBid?.houseId.toString() ||
+            bid.amount !== winningBid?.amount
+        ),
+      });
+
+      // Emit state-update to trigger clients to refresh
+      io.emit("state-update", {
+        screen: winningBid && winningHouse ? "results" : "waiting",
+        roundId: id,
+        winner: winningBid && winningHouse
+          ? {
+              houseId: winningBid.houseId.toString(),
+              houseName: winningHouse.name,
+              amount: winningBid.amount,
+              timestamp: winningBid.timestamp?.toISOString() || new Date().toISOString(),
+            }
+          : null,
+        losers: allBidsData.filter(
+          (bid) =>
+            bid.houseId !== winningBid?.houseId.toString() ||
+            bid.amount !== winningBid?.amount
+        ),
+      });
     }
 
     return NextResponse.json({

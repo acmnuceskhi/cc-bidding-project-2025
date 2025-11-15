@@ -5,6 +5,7 @@ import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { Config } from "@/lib/models/config";
 import { verifyAuth } from "@/lib/auth";
+import { emitSocketEvent } from "@/lib/socket-instance";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
@@ -197,6 +198,13 @@ export async function POST(request: NextRequest) {
     // Place or update the bid (NO budget deduction here)
     // Budget is only deducted when the round ends and they win
     await Bids.upsertBid(roundId, houseId, round.teamId.toString(), amount);
+
+    // Emit socket event to notify all clients of the bid
+    emitSocketEvent("bid-placed", {
+      houseId,
+      houseName: house.name,
+      roundId,
+    });
 
     return NextResponse.json({
       success: true,
