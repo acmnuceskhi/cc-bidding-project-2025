@@ -69,13 +69,24 @@ export default function LandingPage() {
 
   return (
     <div
-      className="min-h-screen bg-cover bg-center flex flex-col items-center justify-center text-center relative"
+      className="min-h-screen bg-cover bg-center flex flex-col items-center justify-center text-center relative overflow-hidden"
       style={{ backgroundImage: "url('/arena-background.jpg')" }}
     >
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-xs"></div>
+      {/* Kungfu Video Layer - UNDER the dark overlay */}
+      <video
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-0"
+        id="kungfu-video"
+        muted
+        playsInline
+        preload="auto"
+      >
+        <source src="/kungfu-fight.mp4" type="video/mp4" />
+      </video>
 
-      {/* Content */}
+      {/* Dark Overlay - stays persistent ABOVE video, BELOW content */}
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-[1.5px]"></div>
+
+      {/* Content - highest layer */}
       <div className="relative z-10 px-6">
         {/* Title */}
         <h1 className="text-6xl md:text-8xl font-extrabold mb-4 text-[#FFD700] drop-shadow-[0_0_20px_#B22222] tracking-wide">
@@ -152,10 +163,38 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-6 text-gray-400 text-sm">
+      <div className="absolute bottom-6 text-gray-400 text-sm z-10">
         Powered by{" "}
         <span className="text-[#FFD700] font-semibold">CC Tech Team</span>
       </div>
+
+      {/* Video control script */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              const video = document.getElementById('kungfu-video');
+              if (!video) return;
+              
+              function playVideo() {
+                video.classList.add('animate-video-cycle');
+                video.currentTime = 0;
+                video.play().catch(() => {});
+                
+                setTimeout(() => {
+                  video.classList.remove('animate-video-cycle');
+                }, 4000);
+              }
+              
+              // Start first play after 1 second
+              setTimeout(playVideo, 1000);
+              
+              // Then play every 14 seconds (4s video + 10s wait)
+              setInterval(playVideo, 14000);
+            })();
+          `,
+        }}
+      />
     </div>
   );
 }
