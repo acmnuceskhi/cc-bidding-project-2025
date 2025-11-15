@@ -8,6 +8,7 @@ import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useToast } from "@/components/ToastProvider";
 import { FullPageSpinner } from "@/components/Spinner";
 import { useSocket } from "@/hooks/useSocket";
+import type { ServerToClientEvents } from "@/types/socket";
 
 type Phase = "A" | "B" | "CA" | "CB" | "CC" | "CD";
 
@@ -330,14 +331,36 @@ export default function HouseDashboard() {
       socket.on("bid-notification", handleBidNotification);
       socket.on("auction-state", handleAuctionState);
 
+      // Budget updates targeted to this house
+      const budgetUpdateHandler = (data: Parameters<ServerToClientEvents["budget-update"]>[0]) => {
+        if (!data || typeof data !== "object") return;
+        if (data.houseId === houseId) {
+          setHouse((prev) => (prev ? { ...prev, remainingBudget: data.remainingBudget } : prev));
+        }
+      };
+      socket.on("budget-update", budgetUpdateHandler);
+
+      // Bids updates: for house, payload is { teamId, houseId, amount }
+      const bidsUpdateHandler = (data: Parameters<ServerToClientEvents["bids-update"]>[0]) => {
+        const teamId = auctionState?.currentRound || "";
+        if (!teamId) return;
+        if (!data || typeof data !== "object") return;
+        if ("houseId" in data && data.teamId === teamId && data.houseId === houseId) {
+          setCurrentBid(data.amount);
+        }
+      };
+      socket.on("bids-update", bidsUpdateHandler);
+
       return () => {
         socket.off("bid-notification", handleBidNotification);
         socket.off("auction-state", handleAuctionState);
+        socket.off("budget-update", budgetUpdateHandler);
+        socket.off("bids-update", bidsUpdateHandler);
       };
     }
 
     return () => {};
-  }, [houseId, socket, auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime, fetchData, activeRound?.roundId]);
+  }, [houseId, socket, auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime, auctionState, fetchData, activeRound?.roundId]);
 
   // Phase computation loop (1s) using auctionState timestamps
   useEffect(() => {

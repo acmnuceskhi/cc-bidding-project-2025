@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
+import type { ServerToClientEvents } from "@/types/socket";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { FullPageSpinner } from "@/components/Spinner";
 
@@ -20,7 +21,7 @@ interface AuctionStateLike {
 }
 
 export default function AdminMainPage() {
-  const { auctionState } = useSocket();
+  const { auctionState, socket } = useSocket();
   const [loading, setLoading] = useState(true);
   const [teams, setTeams] = useState<TeamOption[]>([]);
   const [filter, setFilter] = useState("");
@@ -31,6 +32,7 @@ export default function AdminMainPage() {
   const [bids, setBids] = useState<Array<{ houseId: string; houseName?: string; amount: number }>>([]);
   const [now, setNow] = useState<number>(Date.now());
   const [validating, setValidating] = useState<boolean>(false);
+  const [currentTeamAssigned, setCurrentTeamAssigned] = useState<string | null>(null);
 
   // Keep a 1s tick for countdowns
   useEffect(() => {
@@ -96,6 +98,24 @@ export default function AdminMainPage() {
     return now < s;
   }, [auctionState, now]);
 
+  // Track assignment status for the current team (treated as validated if assigned)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const teamId = (auctionState as AuctionStateLike)?.currentRound || "";
+        if (!teamId) { setCurrentTeamAssigned(null); return; }
+        const res = await fetchWithAuth(`/api/teams/${teamId}`, { cache: "no-store" });
+        if (!res.ok) { setCurrentTeamAssigned(null); return; }
+        const data = await res.json();
+        if (!cancelled) setCurrentTeamAssigned(data?.houseId || null);
+      } catch {
+        if (!cancelled) setCurrentTeamAssigned(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [auctionState, auctionState?.currentRound]);
+
   const roundEnded = useMemo(() => {
     if (!auctionState?.currentRoundEndTime) return false;
     const e = new Date(auctionState.currentRoundEndTime).getTime();
@@ -137,6 +157,26 @@ export default function AdminMainPage() {
       mounted = false;
     };
   }, [auctionState, auctionState?.currentRound, roundOngoing, roundEnded]);
+
+  // Live bids via socket (admins receive all latest bids for current team)
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (data: Parameters<ServerToClientEvents["bids-update"]>[0]) => {
+      const teamId = (auctionState as AuctionStateLike)?.currentRound || "";
+      if (!teamId) return;
+      if (!data || typeof data !== "object") return;
+      if ("bids" in data && data.teamId === teamId) {
+        const list = (data.bids as Array<{ houseId: string; houseName?: string; amount: number }>)
+          .slice()
+          .sort((a, b) => b.amount - a.amount);
+        setBids(list);
+      }
+    };
+    socket.on("bids-update", handler);
+    return () => {
+      socket.off("bids-update", handler);
+    };
+  }, [socket, auctionState]);
 
   async function startRound() {
     try {
@@ -213,7 +253,11 @@ export default function AdminMainPage() {
         return;
       }
       const data = await res.json();
-      if (data?.winner) {
+      if (data?.alreadyValidated && data?.winner) {
+        setCurrentTeamAssigned(data.winner.houseId || null);
+        alert(`Already validated for ${data.winner.houseName}${data.winner.amount ? ` ($${data.winner.amount})` : ""}`);
+      } else if (data?.winner) {
+        setCurrentTeamAssigned(data.winner.houseId || null);
         alert(`Winner validated: ${data.winner.houseName} ($${data.winner.amount})`);
       } else {
         alert("No winner to validate (no bids)");
@@ -290,7 +334,12 @@ export default function AdminMainPage() {
             <select
               value={selectedTeamId}
               onChange={(e) => setSelectedTeamId(e.target.value)}
-              className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+              disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
+              className={`w-full bg-gray-900/70 border-2 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 ${
+                roundEnded && bids.length > 0 && !currentTeamAssigned
+                  ? "border-gray-600 text-gray-400 cursor-not-allowed"
+                  : "border-[#FFD700]/30 focus:ring-[#FFD700]"
+              }`}
             >
               <option value="">-- Choose a team --</option>
               {filteredTeams.map((t) => (
@@ -302,7 +351,7 @@ export default function AdminMainPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end opacity-100">
           <div>
             <label className="block text-sm font-semibold text-gray-200 mb-1">Duration (seconds)</label>
             <input
@@ -310,7 +359,8 @@ export default function AdminMainPage() {
               min={5}
               value={duration}
               onChange={(e) => setDuration(Math.max(5, Number(e.target.value || 0)))}
-              className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+              disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
+              className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
             />
           </div>
           <div>
@@ -319,6 +369,7 @@ export default function AdminMainPage() {
                 type="checkbox"
                 checked={startNow5}
                 onChange={(e) => setStartNow5(e.target.checked)}
+                disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
               />
               <span>Start in 5 seconds</span>
             </label>
@@ -328,7 +379,7 @@ export default function AdminMainPage() {
             <input
               type="datetime-local"
               value={startTime}
-              disabled={startNow5}
+              disabled={startNow5 || (roundEnded && bids.length > 0 && !currentTeamAssigned)}
               onChange={(e) => setStartTime(e.target.value)}
               className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
             />
@@ -338,11 +389,14 @@ export default function AdminMainPage() {
         <div className="mt-6 flex gap-3">
           <button
             onClick={startRound}
-            disabled={!selectedTeamId}
-            className={`px-6 py-3 rounded-xl font-bold ${!selectedTeamId ? "bg-gray-600 text-gray-300" : "bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white"}`}
+            disabled={!selectedTeamId || (roundEnded && bids.length > 0 && !currentTeamAssigned)}
+            className={`px-6 py-3 rounded-xl font-bold ${!selectedTeamId || (roundEnded && bids.length > 0 && !currentTeamAssigned) ? "bg-gray-600 text-gray-300 cursor-not-allowed" : "bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white"}`}
           >
             Start
           </button>
+          {roundEnded && bids.length > 0 && !currentTeamAssigned && (
+            <div className="text-sm text-yellow-300 self-center">Finish validating the current team to start the next.</div>
+          )}
         </div>
       </div>
 
@@ -416,7 +470,7 @@ export default function AdminMainPage() {
               ))}
             </div>
           )}
-          {bids.length > 0 && (
+          {bids.length > 0 && !currentTeamAssigned && (
             <div className="mt-6 flex gap-3">
               <button
                 onClick={validateWin}
@@ -426,7 +480,27 @@ export default function AdminMainPage() {
                 Validate Win
               </button>
               <button
-                onClick={() => { /* Cancel: no-op per spec */ }}
+                onClick={async () => {
+                  try {
+                    const teamId = (auctionState as AuctionStateLike)?.currentRound || "";
+                    if (!teamId) return;
+                    const ok = window.confirm("Cancel results and clear bids for this team?");
+                    if (!ok) return;
+                    const res = await fetchWithAuth("/api/validate-win", {
+                      method: "POST",
+                      body: JSON.stringify({ teamId, action: "cancel" }),
+                    });
+                    if (!res.ok) {
+                      const msg = await res.text();
+                      alert(`Failed to cancel: ${msg}`);
+                      return;
+                    }
+                    setBids([]); // unlock Start form immediately
+                  } catch (e) {
+                    console.error(e);
+                    alert("Failed to cancel");
+                  }
+                }}
                 className="px-6 py-3 rounded-xl font-bold bg-gray-700 text-white hover:bg-gray-600"
               >
                 Cancel

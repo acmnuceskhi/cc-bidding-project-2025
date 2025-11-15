@@ -4,7 +4,9 @@ import { Houses } from "@/lib/models/houses";
 import { Teams } from "@/lib/models/teams";
 import { Config } from "@/lib/models/config";
 import { verifyAuth } from "@/lib/auth";
-import { emitSocketEvent } from "@/lib/socket-instance";
+import { emitSocketEvent, getSocketInstance } from "@/lib/socket-instance";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
@@ -165,8 +167,7 @@ export async function POST(request: NextRequest) {
       Config.get(),
     ]);
 
-    // 🏷️ In second pass, remove minimum roster check (no longer applicable for team-based bidding)
-    const passPhase = 1;
+    // 🏷️ In second pass, minimum roster check removed (team-based bidding)
 
     // Count how many existing teams are in the same batch
     const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
@@ -185,9 +186,16 @@ export async function POST(request: NextRequest) {
 
     const isNew: boolean = previousAmount === null;
 
-    // Place or update the bid (NO budget deduction here)
-    // Budget is only deducted when the round ends and they win
-    // Use teamId as the round identifier for bids storage (round-less design)
+    // Always delete any pre-existing bid from this house for this team
+    // Then insert a fresh bid document (ensures clean state and fresh timestamp)
+    const client = await clientPromise;
+    await client
+      .db()
+      .collection("bids")
+      .deleteMany({ roundId: new ObjectId(rawTeamId), houseId: new ObjectId(houseId) });
+
+    // Insert or upsert the new bid (no budget deduction here)
+    // teamId doubles as roundId in the round-less design
     await Bids.upsertBid(rawTeamId, houseId, rawTeamId, amount);
 
     // Emit socket event to notify all clients of the bid
@@ -197,6 +205,26 @@ export async function POST(request: NextRequest) {
       // Back-compat: event field name remains roundId but carries teamId
       roundId: rawTeamId,
     });
+
+    // Enriched push updates
+    try {
+      const io = getSocketInstance();
+      if (io) {
+        // Admin sees all latest bids for current team
+        const latestBids = await Bids.getByTeam(rawTeamId);
+        const allHouses = await Houses.getAll();
+        const houseNameById = new Map(allHouses.map((h) => [h._id?.toString(), h.name]));
+        const adminBids = latestBids
+          .map((b) => ({ houseId: b.houseId.toString(), houseName: houseNameById.get(b.houseId.toString()) || "Unknown", amount: b.amount }))
+          .sort((a, b) => b.amount - a.amount);
+        io.to("admins").emit("bids-update", { teamId: rawTeamId, bids: adminBids });
+
+        // House sees only its own latest bid
+        io.to(`house:${houseId}`).emit("bids-update", { teamId: rawTeamId, houseId, amount });
+      }
+    } catch {
+      // Non-fatal; API success should not depend on socket delivery
+    }
 
     return NextResponse.json({
       success: true,

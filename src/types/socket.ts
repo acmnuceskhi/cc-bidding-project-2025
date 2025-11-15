@@ -63,6 +63,12 @@ export interface ServerToClientEvents {
   "round-ended": (data: RoundEndedEvent) => void;
   "bid-notification": (data: BidNotificationEvent) => void;
   "auction-state": (data: AuctionState) => void;
+  "budget-update": (data: { houseId: string; remainingBudget: number }) => void;
+  "bids-update": (
+    data:
+      | { teamId: string; bids: Array<{ houseId: string; houseName?: string; amount: number }> } // admin payload
+      | { teamId: string; houseId: string; amount: number } // house payload
+  ) => void;
 }
 
 export interface ClientToServerEvents {

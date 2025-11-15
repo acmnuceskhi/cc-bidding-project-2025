@@ -26,6 +26,7 @@ export function useSocket() {
   useEffect(() => {
     // Ensure a singleton socket exists
     if (!socketRef.current) {
+      const token = typeof window !== "undefined" ? sessionStorage.getItem("token") : null;
       socketRef.current = io({
         path: "/socket.io",
         autoConnect: true,
@@ -34,6 +35,7 @@ export function useSocket() {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         transports: ["websocket", "polling"],
+        auth: token ? { token } : undefined,
       });
     }
 
@@ -122,6 +124,21 @@ export function useSocket() {
       setSocketObj(null);
     };
   }, []);
+
+  // If token appears later (e.g., after login), update auth and reconnect to join rooms
+  useEffect(() => {
+    const s = socketRef.current;
+    if (!s || typeof window === "undefined") return;
+    const token = sessionStorage.getItem("token");
+    // If we have a token and it's different from current auth, refresh connection
+    if (token && (!s.auth || (s.auth as any).token !== token)) {
+      s.auth = { token } as any;
+      if (s.connected) {
+        try { s.disconnect(); } catch { }
+      }
+      try { s.connect(); } catch { }
+    }
+  });
 
   const emit = <K extends keyof ClientToServerEvents>(
     event: K,

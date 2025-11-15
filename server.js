@@ -4,6 +4,7 @@ const { parse } = require("url");
 const next = require("next");
 const { Server } = require("socket.io");
 const { setSocketInstance } = require("./src/lib/socket-instance");
+const jwt = require("jsonwebtoken");
 const { MongoClient } = require("mongodb");
 const { config: loadEnv } = require("dotenv");
 const path = require("path");
@@ -131,10 +132,36 @@ app.prepare().then(() => {
   // Export socket instance for use in API routes
   setSocketInstance(io);
 
+  // Authenticate sockets and join rooms
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake?.auth?.token;
+      if (!token) return next();
+      const secret = process.env.JWT_SECRET || "fallback-secret-key";
+      const payload = jwt.verify(token, secret);
+      socket.data.user = payload || null;
+      return next();
+    } catch (e) {
+      // Allow connection but without privileged rooms
+      return next();
+    }
+  });
+
   io.on("connection", async (socket) => {
     if (dev) {
       console.log("Client connected:", socket.id);
     }
+
+    // Join role-based rooms for targeted events
+    try {
+      const payload = socket.data?.user;
+      if (payload?.role === "house_captain" && payload.houseId) {
+        socket.join(`house:${payload.houseId}`);
+      }
+      if (payload?.role === "admin") {
+        socket.join("admins");
+      }
+    } catch { }
 
     try {
       const currentState = await buildAuctionStateFromConfig();
