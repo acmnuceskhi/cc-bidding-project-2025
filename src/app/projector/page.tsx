@@ -446,9 +446,10 @@ export default function ProjectorDisplay() {
 
   useEffect(() => {
     fetchData();
+    // Reduced from 2s to 4s to lower server load (still fast enough for real-time feel)
     const pollInterval = setInterval(() => {
       fetchData();
-    }, 2000);
+    }, 4000);
     return () => clearInterval(pollInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

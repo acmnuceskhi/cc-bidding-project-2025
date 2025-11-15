@@ -228,6 +228,17 @@ export async function GET() {
           console.log("✅ Round auto-ended successfully");
 
           // Real-time updates handled by polling
+        } catch (txError) {
+          console.error("❌ Transaction failed during auto-end:", txError);
+          // CRITICAL: Reset round status so it can be retried or manually handled
+          await client
+            .db()
+            .collection("rounds")
+            .updateOne(
+              { _id: new ObjectId(activeRound._id!) },
+              { $set: { status: "active" } } // Reset to active so admin can manually end
+            );
+          throw txError; // Re-throw to outer catch
         } finally {
           await session.endSession();
         }
@@ -253,6 +264,7 @@ export async function GET() {
       } catch (autoEndError) {
         console.error("❌ Error auto-ending round:", autoEndError);
         // Continue with normal status response if auto-end fails
+        // Round status has been reset to "active" in catch block above
       }
     }
 

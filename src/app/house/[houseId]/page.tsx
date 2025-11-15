@@ -181,9 +181,10 @@ export default function HouseDashboard() {
 
     fetchData(true);
 
+    // Reduced from 3s to 5s to lower server load
     const pollInterval = setInterval(() => {
       fetchData(false);
-    }, 3000);
+    }, 5000);
 
     return () => clearInterval(pollInterval);
   }, [houseId]);

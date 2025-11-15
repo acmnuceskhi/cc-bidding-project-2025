@@ -13,7 +13,12 @@ if (!uri) {
   );
 }
 
-const options: MongoClientOptions = {};
+const options: MongoClientOptions = {
+  maxPoolSize: 10, // Limit concurrent connections for free tier
+  minPoolSize: 2,
+  maxIdleTimeMS: 30000, // Close idle connections after 30s
+  serverSelectionTimeoutMS: 10000, // Fail fast if DB unreachable
+};
 
 let client: MongoClient;
 
