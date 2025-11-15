@@ -148,6 +148,9 @@ export default function ProjectorDisplay() {
   const teamRef = useRef<Team | null>(null);
   const bidSoundRef = useRef<HTMLAudioElement | null>(null);
   const winnerSoundRef = useRef<HTMLAudioElement | null>(null);
+  const pollDelayRef = useRef<number>(10000);
+  const retryCountRef = useRef<number>(0);
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { remainingMs: projRemaining } = useSynchronizedCountdown(
     status?.roundStatus === "active" && status?.timerEnd
@@ -181,8 +184,14 @@ export default function ProjectorDisplay() {
     try {
       const statusRes = await fetch("/api/status", { cache: "no-store" });
       const statusData: Status = await statusRes.json();
-      console.log('🎯 Projector fetchData - Full status:', statusData);
+      if (process.env.NODE_ENV === "development") {
+        console.log('🎯 Projector fetchData - Full status:', statusData);
+      }
       setStatus(statusData);
+      
+      // Reset retry count on success
+      retryCountRef.current = 0;
+      pollDelayRef.current = 10000;
 
       // Fetch houses first
       let housesData: House[] = [];
@@ -441,15 +450,41 @@ export default function ProjectorDisplay() {
       }
     } catch (error) {
       console.error("Error fetching data:", error);
+      // Exponential backoff on errors
+      retryCountRef.current++;
+      const backoffDelay = Math.min(
+        10000 * Math.pow(2, retryCountRef.current),
+        60000
+      );
+      pollDelayRef.current = backoffDelay;
     }
   };
 
   useEffect(() => {
-    fetchData();
-    const pollInterval = setInterval(() => {
-      fetchData();
-    }, 2000);
-    return () => clearInterval(pollInterval);
+    const scheduleNextPoll = () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+      pollTimeoutRef.current = setTimeout(() => {
+        fetchData().then(() => {
+          scheduleNextPoll();
+        }).catch(() => {
+          scheduleNextPoll();
+        });
+      }, pollDelayRef.current);
+    };
+
+    fetchData().then(() => {
+      scheduleNextPoll();
+    }).catch(() => {
+      scheduleNextPoll();
+    });
+
+    return () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

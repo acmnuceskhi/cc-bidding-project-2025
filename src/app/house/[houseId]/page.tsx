@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -54,6 +54,9 @@ export default function HouseDashboard() {
   const [canBidMessage, setCanBidMessage] = useState<string>("");
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [isPolling, setIsPolling] = useState<boolean>(false);
+  const pollDelayRef = useRef<number>(10000);
+  const retryCountRef = useRef<number>(0);
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -94,11 +97,16 @@ export default function HouseDashboard() {
         });
         const statusData = await statusRes.json();
 
-        if (
+        // Reset retry count on success
+        retryCountRef.current = 0;
+        pollDelayRef.current = 10000;
+
+        const hasActiveRound =
           statusData &&
           statusData.roundId &&
-          statusData.roundStatus === "active"
-        ) {
+          statusData.roundStatus === "active";
+
+        if (hasActiveRound) {
           const serverTimerEnd = statusData.timerEnd
             ? new Date(statusData.timerEnd)
             : null;
@@ -164,12 +172,33 @@ export default function HouseDashboard() {
           setCurrentBid(null);
           setTimeLeft(0);
         }
+
+        // Schedule next poll only if there's an active round or we're still initializing
+        if (hasActiveRound || isInitialLoad) {
+          if (pollTimeoutRef.current) {
+            clearTimeout(pollTimeoutRef.current);
+          }
+          pollTimeoutRef.current = setTimeout(() => {
+            fetchData(false);
+          }, pollDelayRef.current);
+        }
       } catch (error) {
         console.error("Failed to fetch house data:", error);
-        setHouse(null);
-        setActiveRound(null);
-        setCurrentTeam(null);
-        setTimeLeft(0);
+        // Exponential backoff on errors
+        retryCountRef.current++;
+        const backoffDelay = Math.min(
+          10000 * Math.pow(2, retryCountRef.current),
+          60000
+        );
+        pollDelayRef.current = backoffDelay;
+
+        // Still schedule next poll even on error (with backoff)
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData(false);
+        }, backoffDelay);
       } finally {
         if (isInitialLoad) {
           setInitialLoading(false);
@@ -181,11 +210,11 @@ export default function HouseDashboard() {
 
     fetchData(true);
 
-    const pollInterval = setInterval(() => {
-      fetchData(false);
-    }, 3000);
-
-    return () => clearInterval(pollInterval);
+    return () => {
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+      }
+    };
   }, [houseId]);
 
   const { remainingMs: houseRemaining } = useSynchronizedCountdown(
