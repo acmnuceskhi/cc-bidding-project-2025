@@ -54,21 +54,33 @@ function WaitingScreen() {
   const [displayText, setDisplayText] = useState("");
   const [audioStarted, setAudioStarted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const attemptedRef = useRef(false);
   const fullText = "Waiting for admin to start the next round...";
 
   const startAudio = () => {
-    if (!audioStarted && !audioRef.current) {
+    // Only try if not already playing
+    if (audioStarted) return;
+    
+    // Create audio if it doesn't exist
+    if (!audioRef.current) {
       const audio = new Audio("/oogway-ascends.mp3");
       audio.loop = true;
       audio.volume = 0.5;
       audioRef.current = audio;
-      
-      audio.play().then(() => {
-        console.log("🎵 Music started!");
-        setAudioStarted(true);
-      }).catch((err) => {
-        console.log("Audio play failed:", err);
-      });
+    }
+    
+    // Try to play
+    if (!attemptedRef.current) {
+      attemptedRef.current = true;
+      audioRef.current.play()
+        .then(() => {
+          console.log("🎵 Music started!");
+          setAudioStarted(true);
+        })
+        .catch((err) => {
+          console.log("Audio play failed, will retry on next interaction:", err);
+          attemptedRef.current = false; // Allow retry
+        });
     }
   };
 
@@ -83,16 +95,16 @@ function WaitingScreen() {
       }
     }, 80);
 
-    const events = ['click', 'touchstart', 'keydown', 'mousemove'];
-    events.forEach(event => {
-      document.addEventListener(event, startAudio, { once: true });
-    });
+    // Pre-create audio element to improve responsiveness
+    if (!audioRef.current) {
+      const audio = new Audio("/oogway-ascends.mp3");
+      audio.loop = true;
+      audio.volume = 0.5;
+      audioRef.current = audio;
+    }
 
     return () => {
       clearInterval(typingInterval);
-      events.forEach(event => {
-        document.removeEventListener(event, startAudio);
-      });
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -105,6 +117,8 @@ function WaitingScreen() {
       className="min-h-screen bg-black relative flex items-center justify-center overflow-hidden cursor-pointer"
       onClick={startAudio}
       onTouchStart={startAudio}
+      onMouseMove={startAudio}
+      onKeyDown={startAudio}
     >
       <video
         autoPlay
