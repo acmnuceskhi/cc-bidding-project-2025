@@ -8,6 +8,7 @@ import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useToast } from "@/components/ToastProvider";
 import { FullPageSpinner } from "@/components/Spinner";
+import { useSocket } from "@/hooks/useSocket";
 
 interface Team {
   teamId: string;
@@ -58,6 +59,9 @@ export default function HouseDashboard() {
   const retryCountRef = useRef<number>(0);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Socket.IO integration for real-time updates
+  const { socket, isConnected, currentState, emit } = useSocket();
+
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
     const houseMap: Record<string, string> = {
@@ -68,6 +72,15 @@ export default function HouseDashboard() {
     };
     return houseMap[houseName] || "/arena-background.jpg";
   };
+
+  // Adjust polling interval based on socket connection
+  useEffect(() => {
+    if (isConnected) {
+      pollDelayRef.current = 15000; // Reduce polling when socket connected
+    } else {
+      pollDelayRef.current = 10000; // Normal polling when socket disconnected
+    }
+  }, [isConnected]);
 
   useEffect(() => {
     const fetchData = async (isInitialLoad = false) => {
@@ -210,12 +223,72 @@ export default function HouseDashboard() {
 
     fetchData(true);
 
+    // Listen to socket events for real-time updates
+    if (socket) {
+      const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
+        // Refresh data when another house places a bid
+        if (data.roundId === activeRound?.roundId && data.houseId !== houseId) {
+          if (pollTimeoutRef.current) {
+            clearTimeout(pollTimeoutRef.current);
+          }
+          pollTimeoutRef.current = setTimeout(() => {
+            fetchData(false);
+          }, 1000);
+        }
+      };
+
+      const handleRoundStarted = () => {
+        // Refresh when a new round starts
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData(false);
+        }, 500);
+      };
+
+      const handleRoundEnded = () => {
+        // Refresh when round ends
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData(false);
+        }, 500);
+      };
+
+      const handleStateUpdate = () => {
+        // Refresh on state updates
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        pollTimeoutRef.current = setTimeout(() => {
+          fetchData(false);
+        }, 500);
+      };
+
+      socket.on("bid-notification", handleBidNotification);
+      socket.on("round-started", handleRoundStarted);
+      socket.on("round-ended", handleRoundEnded);
+      socket.on("state-update", handleStateUpdate);
+
+      return () => {
+        if (pollTimeoutRef.current) {
+          clearTimeout(pollTimeoutRef.current);
+        }
+        socket.off("bid-notification", handleBidNotification);
+        socket.off("round-started", handleRoundStarted);
+        socket.off("round-ended", handleRoundEnded);
+        socket.off("state-update", handleStateUpdate);
+      };
+    }
+
     return () => {
       if (pollTimeoutRef.current) {
         clearTimeout(pollTimeoutRef.current);
       }
     };
-  }, [houseId]);
+  }, [houseId, socket, activeRound?.roundId]);
 
   const { remainingMs: houseRemaining } = useSynchronizedCountdown(
     activeRound?.timerEnd ?? null
