@@ -133,6 +133,7 @@ app.prepare().then(() => {
     pingTimeout: 60000,
     pingInterval: 25000,
     connectTimeout: 45000,
+    maxHttpBufferSize: 1e6,
     transports: ["websocket", "polling"],
     cors: {
       origin: corsOrigin,
@@ -148,21 +149,18 @@ app.prepare().then(() => {
       console.log("Client connected:", socket.id);
     }
 
-    // Fetch current state from database and send to newly connected client
-    setTimeout(async () => {
-      try {
-        const currentState = await buildStateFromDB();
-        socket.emit("state-update", currentState);
-      } catch (error) {
-        if (dev) {
-          console.error("Error sending initial state:", error);
-        }
-        socket.emit("state-update", {
-          screen: "waiting",
-          message: "Waiting for admin to start...",
-        });
+    try {
+      const currentState = await buildStateFromDB();
+      socket.emit("state-update", currentState);
+    } catch (error) {
+      if (dev) {
+        console.error("Error sending initial state:", error);
       }
-    }, 100);
+      socket.emit("state-update", {
+        screen: "waiting",
+        message: "Waiting for admin to start...",
+      });
+    }
 
     // Handle bid-placed events from API routes
     socket.on("bid-placed", (data) => {
@@ -197,17 +195,21 @@ app.prepare().then(() => {
   // Graceful shutdown
   process.on("SIGTERM", () => {
     console.log("SIGTERM received, shutting down gracefully...");
-    httpServer.close(() => {
-      console.log("HTTP server closed");
-      process.exit(0);
+    io.close(() => {
+      httpServer.close(() => {
+        console.log("HTTP server closed");
+        process.exit(0);
+      });
     });
   });
 
   process.on("SIGINT", () => {
     console.log("SIGINT received, shutting down gracefully...");
-    httpServer.close(() => {
-      console.log("HTTP server closed");
-      process.exit(0);
+    io.close(() => {
+      httpServer.close(() => {
+        console.log("HTTP server closed");
+        process.exit(0);
+      });
     });
   });
 });
