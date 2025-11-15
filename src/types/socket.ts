@@ -62,9 +62,21 @@ export interface ServerToClientEvents {
   "round-started": (data: RoundStartedEvent) => void;
   "round-ended": (data: RoundEndedEvent) => void;
   "bid-notification": (data: BidNotificationEvent) => void;
+  "auction-state": (data: AuctionState) => void;
 }
 
 export interface ClientToServerEvents {
   "bid-placed": (data: BidPlacedEvent) => void;
+  "request-state": (ack?: (data: AuctionState) => void) => void;
+}
+
+// Canonical auction-state payload pushed from server
+export interface AuctionState {
+  currentRound: string;
+  auctionStartTime: string | null; // ISO string or null
+  auctionEndTime: string | null; // ISO string or null
+  currentRoundStartTime: string | null; // ISO string or null
+  currentRoundEndTime: string | null; // ISO string or null
+  serverTime: number; // ms epoch
 }
 

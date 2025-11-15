@@ -92,9 +92,9 @@ export async function POST(
         // Check if there are completed rounds that could be restarted
         const completedRounds = allRounds.filter((r) => r.status === "completed");
         console.log(`No scheduled rounds. Total rounds: ${allRounds.length}, Completed: ${completedRounds.length}`);
-        
+
         return NextResponse.json(
-          { 
+          {
             error: "No scheduled rounds available to start",
             debug: {
               totalRounds: allRounds.length,
@@ -153,7 +153,7 @@ export async function POST(
       if (!nextRound || !team) {
         console.log("No unsold teams found. Skipped teams:", skippedTeams);
         return NextResponse.json(
-          { 
+          {
             error: "No unsold teams available for bidding",
             debug: {
               scheduledRounds: scheduledRounds.length,
@@ -215,13 +215,29 @@ export async function POST(
         roundId: targetRoundId,
         timerEnd: timerEnd.toISOString(),
       });
-      
+
       // Emit state-update event (will trigger clients to fetch fresh state)
       io.emit("state-update", {
         screen: "bidding",
         roundId: targetRoundId,
         teamId: team?._id?.toString() || round.teamId.toString(),
         timeLeft: durationMs,
+      });
+
+      // Update authoritative config state and broadcast auction-state
+      await Config.update({
+        currentRound: targetRoundId,
+        currentRoundStartTime: new Date(),
+        currentRoundEndTime: timerEnd,
+      });
+      const cfgState = await Config.getAuctionState();
+      io.emit("auction-state", {
+        currentRound: cfgState.currentRound || "",
+        auctionStartTime: cfgState.auctionStartTime?.toISOString() || null,
+        auctionEndTime: cfgState.auctionEndTime?.toISOString() || null,
+        currentRoundStartTime: cfgState.currentRoundStartTime?.toISOString() || null,
+        currentRoundEndTime: cfgState.currentRoundEndTime?.toISOString() || null,
+        serverTime: Date.now(),
       });
     }
 

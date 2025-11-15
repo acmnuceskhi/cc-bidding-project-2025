@@ -1,8 +1,35 @@
+/* eslint-disable */
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
 const { Server } = require("socket.io");
 const { setSocketInstance } = require("./src/lib/socket-instance");
+const { MongoClient } = require("mongodb");
+const { config: loadEnv } = require("dotenv");
+const path = require("path");
+
+// Load environment variables similar to src/lib/mongodb.ts
+loadEnv({ path: path.resolve(process.cwd(), ".env.local") });
+loadEnv({ path: path.resolve(process.cwd(), ".env") });
+
+const MONGODB_URI = process.env.MONGODB_URI;
+let mongoClientPromise;
+function getMongoClient() {
+  if (!mongoClientPromise) {
+    if (!MONGODB_URI) {
+      throw new Error(
+        "Please define MONGODB_URI in your environment (e.g. .env.local)"
+      );
+    }
+    const client = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+    });
+    mongoClientPromise = client.connect();
+  }
+  return mongoClientPromise;
+}
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -12,99 +39,59 @@ const hostname =
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
-// Build current state from database (stateless approach)
-async function buildStateFromDB() {
+// Build current state from config (authoritative five fields)
+async function buildAuctionStateFromConfig() {
   try {
-    const { Rounds } = require("./src/lib/models/rounds");
-    const { Teams } = require("./src/lib/models/teams");
-    const { Bids } = require("./src/lib/models/bids");
-    const { Houses } = require("./src/lib/models/houses");
+    const client = await getMongoClient();
+    const collection = client.db().collection("config");
+    const CONFIG_ID = "auction-config";
+    const doc = await collection.findOne({ _id: CONFIG_ID });
 
-    const activeRounds = await Rounds.getActive();
-
-    if (activeRounds.length === 0) {
-      return {
-        screen: "waiting",
-        message: "Waiting for admin to start...",
-      };
-    }
-
-    const activeRound = activeRounds[0];
-    const roundId = activeRound._id?.toString();
-
-    if (!roundId) {
-      return {
-        screen: "waiting",
-        message: "Waiting for admin to start...",
-      };
-    }
-
-    const timeLeft = activeRound.timerEnd
-      ? Math.max(0, activeRound.timerEnd.getTime() - Date.now())
-      : 0;
-
-    if (activeRound.status === "active" && timeLeft > 0) {
-      return {
-        screen: "bidding",
-        roundId,
-        teamId: activeRound.teamId?.toString() || "",
-        timeLeft,
-      };
-    }
-
-    if (activeRound.status === "completed") {
-      const bids = await Bids.getLatestBidPerHouseForRound(roundId);
-
-      if (bids.length > 0) {
-        const winningBid = bids.reduce((winner, current) => {
-          if (current.amount > winner.amount) return current;
-          if (
-            current.amount === winner.amount &&
-            current.timestamp < winner.timestamp
-          )
-            return current;
-          return winner;
-        });
-
-        const winningHouse = await Houses.getById(winningBid.houseId.toString());
-
-        const allBidsData = bids.map((bid) => ({
-          houseId: bid.houseId.toString(),
-          amount: bid.amount,
-          timestamp: bid.timestamp?.toISOString() || new Date().toISOString(),
-        }));
-
-        return {
-          screen: "results",
-          roundId,
-          winner: winningHouse
-            ? {
-                houseId: winningBid.houseId.toString(),
-                houseName: winningHouse.name,
-                amount: winningBid.amount,
-                timestamp: winningBid.timestamp?.toISOString() || new Date().toISOString(),
-              }
-            : null,
-          losers: allBidsData.filter(
-            (bid) =>
-              bid.houseId !== winningBid.houseId.toString() ||
-              bid.amount !== winningBid.amount
-          ),
-        };
+    const normalizeDate = (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      if (v instanceof Date) return v;
+      if (typeof v === "number") return new Date(v);
+      if (typeof v === "string") {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
       }
-    }
+      if (v && typeof v === "object" && typeof v.toDate === "function") {
+        try {
+          const d = v.toDate();
+          return d instanceof Date ? d : null;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+
+    const state = doc || {};
+    const auctionStartTime = normalizeDate(state.auctionStartTime);
+    const auctionEndTime = normalizeDate(state.auctionEndTime);
+    const currentRoundStartTime = normalizeDate(state.currentRoundStartTime);
+    const currentRoundEndTime = normalizeDate(state.currentRoundEndTime);
 
     return {
-      screen: "waiting",
-      message: "Waiting for admin to start...",
+      currentRound: state.currentRound || "",
+      auctionStartTime: auctionStartTime ? auctionStartTime.toISOString() : null,
+      auctionEndTime: auctionEndTime ? auctionEndTime.toISOString() : null,
+      currentRoundStartTime: currentRoundStartTime ? currentRoundStartTime.toISOString() : null,
+      currentRoundEndTime: currentRoundEndTime ? currentRoundEndTime.toISOString() : null,
+      serverTime: Date.now(),
     };
   } catch (error) {
     if (dev) {
-      console.error("Error building state from DB:", error);
+      console.error("Error building auction state from config:", error);
     }
     return {
-      screen: "waiting",
-      message: "Waiting for admin to start...",
+      currentRound: "",
+      auctionStartTime: null,
+      auctionEndTime: null,
+      currentRoundStartTime: null,
+      currentRoundEndTime: null,
+      serverTime: Date.now(),
     };
   }
 }
@@ -150,17 +137,32 @@ app.prepare().then(() => {
     }
 
     try {
-      const currentState = await buildStateFromDB();
-      socket.emit("state-update", currentState);
+      const currentState = await buildAuctionStateFromConfig();
+      socket.emit("auction-state", currentState);
     } catch (error) {
       if (dev) {
-        console.error("Error sending initial state:", error);
+        console.error("Error sending initial auction state:", error);
       }
-      socket.emit("state-update", {
-        screen: "waiting",
-        message: "Waiting for admin to start...",
+      socket.emit("auction-state", {
+        currentRound: "",
+        auctionStartTime: null,
+        auctionEndTime: null,
+        currentRoundStartTime: null,
+        currentRoundEndTime: null,
+        serverTime: Date.now(),
       });
     }
+
+    // Allow clients to request the latest auction-state snapshot on demand
+    socket.on("request-state", async (ack) => {
+      try {
+        const currentState = await buildAuctionStateFromConfig();
+        if (typeof ack === "function") ack(currentState);
+        else socket.emit("auction-state", currentState);
+      } catch (err) {
+        if (dev) console.error("request-state failed:", err);
+      }
+    });
 
     socket.on("bid-placed", (data) => {
       try {

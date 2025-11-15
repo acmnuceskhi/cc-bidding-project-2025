@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useSocket } from "@/hooks/useSocket";
+import type { AuctionState } from "@/types/socket";
 
 interface Team {
   teamId: string;
@@ -51,13 +52,36 @@ interface HouseBidState {
 }
 
 // Waiting Screen Component
-function WaitingScreen() {
+function WaitingScreen({ auctionState }: { auctionState?: AuctionState | null }) {
   const [displayText, setDisplayText] = useState("");
   const [audioStarted, setAudioStarted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fullText = "Waiting for admin to start the next round...";
 
-  const startAudio = () => {
+  // Prefer round-level countdown; fallback to auction-level
+  const auctionCountdownEnd = (() => {
+    if (!auctionState) return null;
+    const now = Date.now();
+    const roundStartMs = auctionState.currentRoundStartTime
+      ? new Date(auctionState.currentRoundStartTime).getTime()
+      : null;
+    if (roundStartMs && now < roundStartMs) return auctionState.currentRoundStartTime;
+
+    const startMs = auctionState.auctionStartTime
+      ? new Date(auctionState.auctionStartTime).getTime()
+      : null;
+    const endMs = auctionState.auctionEndTime
+      ? new Date(auctionState.auctionEndTime).getTime()
+      : null;
+    if (startMs && now < startMs) return auctionState.auctionStartTime;
+    if (endMs && now < endMs) return auctionState.auctionEndTime;
+    return null;
+  })();
+  const { remainingMs: auctionRemainingMs } = useSynchronizedCountdown(
+    auctionCountdownEnd
+  );
+
+  const startAudio = useCallback(() => {
     if (!audioStarted && !audioRef.current) {
       const audio = new Audio("/oogway-ascends.mp3");
       audio.loop = true;
@@ -66,16 +90,12 @@ function WaitingScreen() {
       
       audio.play().then(() => {
         if (process.env.NODE_ENV === "development") {
-          console.log("🎵 Music started!");
+          //console.log("🎵 Music started!");
         }
         setAudioStarted(true);
-      }).catch((err) => {
-        if (process.env.NODE_ENV === "development") {
-          console.log("Audio play failed:", err);
-        }
-      });
+      }).catch(() => {});
     }
-  };
+  }, [audioStarted]);
 
   useEffect(() => {
     let currentIndex = 0;
@@ -103,7 +123,7 @@ function WaitingScreen() {
         audioRef.current.currentTime = 0;
       }
     };
-  }, []);
+  }, [startAudio, fullText]);
 
   return (
     <div 
@@ -125,10 +145,25 @@ function WaitingScreen() {
         <h1 className="text-5xl sm:text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_30px_#000000] animate-pulse">
           CC Bidding System
         </h1>
-        <p className="text-3xl sm:text-4xl text-white drop-shadow-[0_0_20px_#000000] font-mono min-h-[3rem]">
+        <p className="text-3xl sm:text-4xl text-white drop-shadow-[0_0_20px_#000000] font-mono min-h-12">
           {displayText}
           <span className="animate-pulse">|</span>
         </p>
+        {auctionState && (
+          <p className="text-xl sm:text-2xl text-white/90 mt-4 drop-shadow-[0_0_12px_#000000]">
+            {(() => {
+              const now = Date.now();
+              const roundStartMs = auctionState.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+              if (roundStartMs && now < roundStartMs) return `Round starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+              const startMs = auctionState.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+              const endMs = auctionState.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
+              if (startMs && now < startMs) return `Auction starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+              if (endMs && now < endMs) return `Auction live • ends in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+              if (endMs && now >= endMs) return "Auction finished";
+              return "Auction status pending";
+            })()}
+          </p>
+        )}
         {!audioStarted && displayText.length > 0 && (
           <p className="text-sm text-gray-400 mt-8 animate-pulse">
             Click or tap anywhere to enable sound
@@ -153,17 +188,25 @@ export default function ProjectorDisplay() {
   const teamRef = useRef<Team | null>(null);
   const bidSoundRef = useRef<HTMLAudioElement | null>(null);
   const winnerSoundRef = useRef<HTMLAudioElement | null>(null);
-  const pollDelayRef = useRef<number>(10000);
-  const retryCountRef = useRef<number>(0);
-  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Socket.IO integration for real-time updates
-  const { socket, isConnected } = useSocket();
+  const { socket, auctionState } = useSocket();
+
+  //console.log(auctionState);
+
+  const startIso = auctionState?.currentRoundStartTime || null;
+  const endIso = auctionState?.currentRoundEndTime || null;
+  const nowMs = Date.now();
+  const startMs = startIso ? new Date(startIso).getTime() : null;
+  const endMs = endIso ? new Date(endIso).getTime() : null;
+  const isActive = !!(startMs && endMs && nowMs >= startMs && nowMs < endMs);
+  const isUpcoming = !!(startMs && nowMs < startMs);
+  const isEnded = !!(endMs && nowMs >= endMs);
+
+  const derivedEnd = endIso;
 
   const { remainingMs: projRemaining } = useSynchronizedCountdown(
-    status?.roundStatus === "active" && status?.timerEnd
-      ? status.timerEnd
-      : null
+    derivedEnd
   );
   
   useEffect(() => {
@@ -173,15 +216,6 @@ export default function ProjectorDisplay() {
   useEffect(() => {
     teamRef.current = team;
   }, [team]);
-
-  // Adjust polling interval based on socket connection
-  useEffect(() => {
-    if (isConnected) {
-      pollDelayRef.current = 15000; // Reduce polling when socket connected
-    } else {
-      pollDelayRef.current = 10000; // Normal polling when socket disconnected
-    }
-  }, [isConnected]);
 
   // Lazy-initialize bid sound
   useEffect(() => {
@@ -199,17 +233,6 @@ export default function ProjectorDisplay() {
 
   const fetchData = async () => {
     try {
-      const statusRes = await fetch("/api/status", { cache: "no-store" });
-      const statusData: Status = await statusRes.json();
-      if (process.env.NODE_ENV === "development") {
-        console.log('🎯 Projector fetchData - Full status:', statusData);
-      }
-      setStatus(statusData);
-      
-      // Reset retry count on success
-      retryCountRef.current = 0;
-      pollDelayRef.current = 10000;
-
       // Fetch houses first
       let housesData: House[] = [];
       try {
@@ -223,126 +246,91 @@ export default function ProjectorDisplay() {
       } catch {
         setHouses([]);
       }
+      // If active, fetch bids to build bid states and team details from current round
+      const roundId = auctionState?.currentRound || null;
+      if (isActive && roundId) {
+        // Fetch team
+        try {
+          const roundRes = await fetch(`/api/rounds/${roundId}`, { cache: "no-store" });
+          if (roundRes.ok) {
+            const r = await roundRes.json();
+            const teamRes = await fetch(`/api/teams/${r.teamId}`, { cache: "no-store" });
+            if (teamRes.ok) {
+              const t = await teamRes.json();
+              setTeam({
+                teamId: t.teamId,
+                rank: t.rank,
+                batch: t.batch,
+                memberCount: t.memberCount,
+                successfulAttempts: t.successfulAttempts,
+                totalPoints: t.totalPoints,
+                timeTaken: undefined,
+              });
+            }
+            setLastRoundId(roundId);
+            winnerShownRef.current = false;
+          }
+        } catch {}
 
-      if (statusData.roundStatus === "active" && statusData.team) {
-        setTeam(statusData.team);
-        setLastRoundId(statusData.roundId || null);
-        winnerShownRef.current = false;
-        
-        // Track bid states - use the fetched housesData, not state
-        const bidsPlaced = statusData.bidsPlaced || [];
-        if (process.env.NODE_ENV === "development") {
-          console.log('📊 Bids placed:', bidsPlaced);
-          console.log('🏠 Houses:', housesData.map(h => ({ id: h._id?.toString(), houseId: h.houseId, name: h.name })));
-        }
-        
-        setHouseBidStates((prevStates) => {
-          const newStates: Record<string, HouseBidState> = {};
-          
-          housesData.forEach((house) => {
-            const houseId = house.houseId || house._id?.toString();
-            if (!houseId) return;
-            
-            const bid = bidsPlaced.find(b => b.houseId === houseId || b.houseId === house._id?.toString());
-            if (process.env.NODE_ENV === "development") {
-              console.log(`🏯 ${house.name} (${houseId}): bid =`, bid);
-            }
-            const prevState = prevStates[houseId];
-            
-            if (!bid) {
-              newStates[houseId] = {
-                status: "no-bid",
-                showFlash: false,
-              };
-            } else if (!prevState || prevState.status === "no-bid") {
-              // First bid
-              newStates[houseId] = {
-                status: "bid-placed",
-                showFlash: true,
-                previousAmount: bid.amount,
-              };
-              // Play bid sound
-              if (bidSoundRef.current) {
-                try {
-                  bidSoundRef.current.currentTime = 0;
-                  void bidSoundRef.current.play();
-                } catch (e) {
-                  console.warn("Bid sound play failed", e);
+        // Fetch current round bids to update bid states
+        try {
+          const bidsRes = await fetch(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+          const bidsData = await bidsRes.json();
+          const bidsPlaced: Array<{ houseId: string; amount: number }> = Array.isArray(bidsData)
+            ? bidsData.map((b: any) => ({ houseId: b.houseId, amount: b.amount }))
+            : [];
+
+          setHouseBidStates((prevStates) => {
+            const newStates: Record<string, HouseBidState> = {};
+            housesData.forEach((house) => {
+              const hId = house.houseId || (house as any)._id?.toString();
+              if (!hId) return;
+              const bid = bidsPlaced.find((b) => b.houseId === hId);
+              const prevState = prevStates[hId];
+              if (!bid) {
+                newStates[hId] = { status: "no-bid", showFlash: false };
+              } else if (!prevState || prevState.status === "no-bid") {
+                newStates[hId] = { status: "bid-placed", showFlash: true, previousAmount: bid.amount };
+                if (bidSoundRef.current) {
+                  try { bidSoundRef.current.currentTime = 0; void bidSoundRef.current.play(); } catch {}
                 }
-              }
-              // Auto-hide flash after 2s
-              setTimeout(() => {
-                setHouseBidStates(prev => ({
-                  ...prev,
-                  [houseId]: { ...prev[houseId], showFlash: false }
-                }));
-              }, 2000);
-            } else if (prevState.previousAmount !== bid.amount) {
-              // Bid updated
-              newStates[houseId] = {
-                status: "bid-updated",
-                showFlash: true,
-                previousAmount: bid.amount,
-              };
-              if (bidSoundRef.current) {
-                try {
-                  bidSoundRef.current.currentTime = 0;
-                  void bidSoundRef.current.play();
-                } catch (e) {
-                  console.warn("Bid sound play failed", e);
+                setTimeout(() => {
+                  setHouseBidStates((prev) => ({ ...prev, [hId]: { ...prev[hId], showFlash: false } }));
+                }, 2000);
+              } else if (prevState.previousAmount !== bid.amount) {
+                newStates[hId] = { status: "bid-updated", showFlash: true, previousAmount: bid.amount };
+                if (bidSoundRef.current) {
+                  try { bidSoundRef.current.currentTime = 0; void bidSoundRef.current.play(); } catch {}
                 }
+                setTimeout(() => {
+                  setHouseBidStates((prev) => ({ ...prev, [hId]: { ...prev[hId], showFlash: false } }));
+                }, 2000);
+              } else {
+                newStates[hId] = prevState;
               }
-              setTimeout(() => {
-                setHouseBidStates(prev => ({
-                  ...prev,
-                  [houseId]: { ...prev[houseId], showFlash: false }
-                }));
-              }, 2000);
-            } else {
-              // No change
-              newStates[houseId] = prevState;
-            }
+            });
+            return newStates;
           });
-          
-          return newStates;
-        });
+        } catch {}
       } else {
         setTimeLeft(0);
-        // Don't reset bid states immediately - keep them visible
       }
 
-      // Check for winner from API or detect round completion
-      if (process.env.NODE_ENV === "development") {
-        console.log("🎯 Projector winner check:", {
-          roundEnded: statusData.roundEnded,
-          winner: statusData.winner,
-          lastRoundId,
-          currentRoundId: statusData.roundId,
-          roundStatus: statusData.roundStatus,
-          winnerShown: winnerShownRef.current,
-          showWinnerState: showWinner,
-        });
-      }
-
-      // Treat either an explicit roundEnded flag OR a winner object as signal
-      const hasWinnerFromStatus =
-        !!statusData.winner || statusData.roundEnded === true;
-
-      if (hasWinnerFromStatus && !winnerShownRef.current) {
+      // If ended and not shown, show winner for the last round id
+      if (isEnded && !winnerShownRef.current) {
         if (process.env.NODE_ENV === "development") {
-          console.log('🏆 Projector: Showing winner from API');
+          //console.log('🏆 Projector: Showing winner from API');
         }
         // Fetch all bids for this round to display in winner modal
         let allBids: Array<{ houseId: string; houseName: string; amount: number }> = [];
-        // Prefer explicit roundId, otherwise fall back to our lastActive
-        const roundIdToFetch = statusData.roundId || lastRoundId;
+        const roundIdToFetch = auctionState?.currentRound || lastRoundId;
         if (roundIdToFetch) {
           try {
             const bidsRes = await fetch(`/api/bids?roundId=${roundIdToFetch}`, { cache: "no-store" });
             if (bidsRes.ok) {
               const bidsData = await bidsRes.json();
               if (process.env.NODE_ENV === "development") {
-                console.log('📊 Fetched bids for winner popup:', bidsData);
+                //console.log('📊 Fetched bids for winner popup:', bidsData);
               }
               allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
                 const house = housesData.find(h => 
@@ -361,8 +349,8 @@ export default function ProjectorDisplay() {
         }
         
         // If API didn't send winner details, derive the winning bid from bids list
-        let winnerHouseName = statusData.winner?.houseName || "";
-        let winnerAmount = statusData.winner?.amount ?? 0;
+        let winnerHouseName = "";
+        let winnerAmount = 0;
 
         if (!winnerHouseName && allBids.length > 0) {
           const topBid = allBids[0];
@@ -398,7 +386,7 @@ export default function ProjectorDisplay() {
             winnerSoundRef.current.pause();
           }
         }, 15000);
-      } else if (lastRoundId && statusData.roundStatus === "idle" && !statusData.roundId && !winnerShownRef.current) {
+      } else if (lastRoundId && isEnded && !winnerShownRef.current) {
         // Round just ended, fetch the last completed round's winner
         try {
           const roundsRes = await fetch("/api/rounds");
@@ -418,7 +406,7 @@ export default function ProjectorDisplay() {
                 
                 if (winningHouse) {
                   if (process.env.NODE_ENV === "development") {
-                    console.log('🏆 Projector: Showing winner from fallback completed rounds');
+                    //console.log('🏆 Projector: Showing winner from fallback completed rounds');
                   }
                   // Fetch all bids for this round
                   let allBids: Array<{ houseId: string; houseName: string; amount: number }> = [];
@@ -427,7 +415,7 @@ export default function ProjectorDisplay() {
                     if (bidsRes.ok) {
                       const bidsData = await bidsRes.json();
                       if (process.env.NODE_ENV === "development") {
-                        console.log('📊 Fetched bids for fallback winner popup:', bidsData);
+                        //console.log('📊 Fetched bids for fallback winner popup:', bidsData);
                       }
                       allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
                         const house = housesData.find(h => 
@@ -481,37 +469,14 @@ export default function ProjectorDisplay() {
       }
     } catch (error) {
       console.error("Error fetching data:", error);
-      // Exponential backoff on errors
-      retryCountRef.current++;
-      const backoffDelay = Math.min(
-        10000 * Math.pow(2, retryCountRef.current),
-        60000
-      );
-      pollDelayRef.current = backoffDelay;
     }
   };
 
   useEffect(() => {
-    const scheduleNextPoll = () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
-      }
-      pollTimeoutRef.current = setTimeout(() => {
-        fetchData().then(() => {
-          scheduleNextPoll();
-        }).catch(() => {
-          scheduleNextPoll();
-        });
-      }, pollDelayRef.current);
-    };
+    // Initial hydrate once on mount and on socket connect or auction state change
+    fetchData().catch(() => {});
 
-    fetchData().then(() => {
-      scheduleNextPoll();
-    }).catch(() => {
-      scheduleNextPoll();
-    });
-
-    // Listen to socket events for real-time updates
+    // Listen to socket events for real-time updates (no polling)
     if (socket) {
       const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
         // Immediately update bid state when a bid is placed
@@ -573,43 +538,23 @@ export default function ProjectorDisplay() {
           });
           
           // Also trigger a data refresh to get latest bid amounts
-          if (pollTimeoutRef.current) {
-            clearTimeout(pollTimeoutRef.current);
-          }
-          pollTimeoutRef.current = setTimeout(() => {
-            fetchData();
-          }, 500);
+          fetchData().catch(() => {});
         }
       };
 
       const handleRoundStarted = () => {
         // Refresh when a new round starts
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData();
-        }, 500);
+        fetchData().catch(() => {});
       };
 
       const handleRoundEnded = () => {
         // Refresh when round ends to show winner
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData();
-        }, 500);
+        fetchData().catch(() => {});
       };
 
       const handleStateUpdate = () => {
         // Refresh on state updates
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData();
-        }, 500);
+        fetchData().catch(() => {});
       };
 
       socket.on("bid-notification", handleBidNotification);
@@ -618,9 +563,6 @@ export default function ProjectorDisplay() {
       socket.on("state-update", handleStateUpdate);
 
       return () => {
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
         socket.off("bid-notification", handleBidNotification);
         socket.off("round-started", handleRoundStarted);
         socket.off("round-ended", handleRoundEnded);
@@ -628,13 +570,9 @@ export default function ProjectorDisplay() {
       };
     }
 
-    return () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
-      }
-    };
+    return () => {};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, status?.roundId]);
+  }, [socket, auctionState?.currentRound, isActive]);
 
   const formatTime = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);
@@ -653,13 +591,13 @@ export default function ProjectorDisplay() {
 
   // Debug rendering logic (development only)
   if (process.env.NODE_ENV === "development") {
-    console.log('🖥️ Projector render state:', {
-      showWinner,
-      hasWinnerData: !!winnerData,
-      winnerData,
-      roundStatus: status?.roundStatus,
-      hasStatus: !!status
-    });
+    //console.log('🖥️ Projector render state:', {
+    //   showWinner,
+    //   hasWinnerData: !!winnerData,
+    //   winnerData,
+    //   roundStatus: status?.roundStatus,
+    //   hasStatus: !!status
+    // });
   }
 
   // Winner Screen
@@ -669,12 +607,12 @@ export default function ProjectorDisplay() {
         className="min-h-screen bg-cover bg-center relative flex items-center justify-center"
         style={{ backgroundImage: "url('/arena-background.jpg')" }}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 via-orange-500/30 to-red-600/30 backdrop-blur-sm"></div>
+        <div className="absolute inset-0 bg-linear-to-br from-yellow-500/30 via-orange-500/30 to-red-600/30 backdrop-blur-sm"></div>
         <div className="relative z-10 text-center max-w-5xl mx-auto p-8">
           <h1 className="text-8xl sm:text-9xl font-bold mb-12 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700] animate-pulse">
             🏆 SOLD! 🏆
           </h1>
-          <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]">
+          <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-full bg-linear-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center mx-auto mb-8 border-8 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.8)]">
             <span className="text-9xl sm:text-[12rem] font-bold text-black">#{team?.rank || "?"}</span>
           </div>
           <h2 className="text-5xl sm:text-7xl font-bold mb-4 text-white drop-shadow-[0_0_30px_#000000]">
@@ -781,8 +719,9 @@ export default function ProjectorDisplay() {
     }, 0);
   }
 
-  if (!status || status.roundStatus !== "active") {
-    return <WaitingScreen />;
+  // Render waiting screen when not active and not force-showing winner
+  if (!isActive && !(showWinner && winnerData)) {
+    return <WaitingScreen auctionState={auctionState} />;
   }
 
   const isTimeRunningOut = timeLeft < 10000;
@@ -797,7 +736,7 @@ export default function ProjectorDisplay() {
       style={{ backgroundImage: "url('/arena-background.jpg')" }}
     >
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70008_1px,transparent_1px),linear-gradient(to_bottom,#FFD70008_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70008_1px,transparent_1px),linear-gradient(to_bottom,#FFD70008_1px,transparent_1px)] bg-size-[4rem_4rem] opacity-20"></div>
 
       <div className="relative z-10 min-h-screen flex flex-col p-4">
         {/* Timer at top */}
@@ -905,12 +844,12 @@ export default function ProjectorDisplay() {
 
           {/* Center Team Card */}
           <div className="flex items-center justify-center">
-            <div className="bg-gradient-to-br from-gray-900/95 to-black/95 rounded-3xl p-8 w-full max-w-2xl border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.5)] backdrop-blur-md">
+            <div className="bg-linear-to-br from-gray-900/95 to-black/95 rounded-3xl p-8 w-full max-w-2xl border-4 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.5)] backdrop-blur-md">
               <h2 className="text-3xl font-bold text-[#FFD700] mb-6 text-center drop-shadow-[0_0_20px_#FFD700]">
                 👥 CURRENT TEAM
               </h2>
               <div className="flex flex-col items-center gap-4">
-                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.6)]">
+                <div className="w-40 h-40 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.6)]">
                   <span className="text-8xl font-bold text-black">#{team?.rank || "?"}</span>
                 </div>
                 <div className="text-center">

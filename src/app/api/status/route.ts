@@ -5,6 +5,7 @@ import { Participants } from "@/lib/models/participants";
 import type { Participant } from "@/lib/models/participants";
 import { Bids } from "@/lib/models/bids";
 import { checkAndAutoEndExpiredRound } from "@/lib/round-auto-end";
+import { Config } from "@/lib/models/config";
 
 // Simple in-memory cache for phase counts and unsold teams (30-second TTL)
 let cache: {
@@ -66,6 +67,8 @@ async function getCachedData() {
 // GET /api/status - Get current status for projector display
 export async function GET() {
   try {
+    // Always include authoritative auction state from config
+    const cfg = await Config.getAuctionState();
     // Check auto-end only occasionally (every 5th request or if no active round)
     // This prevents running expensive logic on every poll
     const shouldCheckAutoEnd = Math.random() < 0.2; // 20% chance
@@ -94,6 +97,12 @@ export async function GET() {
         serverTime: Date.now(),
         phaseCounts: cached.phaseCounts,
         unsoldTeams: cached.unsoldTeams,
+        // Authoritative config-based state
+        currentRound: cfg.currentRound || "",
+        auctionStartTime: cfg.auctionStartTime?.toISOString() || null,
+        auctionEndTime: cfg.auctionEndTime?.toISOString() || null,
+        currentRoundStartTime: cfg.currentRoundStartTime?.toISOString() || null,
+        currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
       });
     }
 
@@ -112,6 +121,11 @@ export async function GET() {
           serverTime: Date.now(),
           phaseCounts: cached.phaseCounts,
           unsoldTeams: cached.unsoldTeams,
+          currentRound: cfg.currentRound || "",
+          auctionStartTime: cfg.auctionStartTime?.toISOString() || null,
+          auctionEndTime: cfg.auctionEndTime?.toISOString() || null,
+          currentRoundStartTime: cfg.currentRoundStartTime?.toISOString() || null,
+          currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
         });
       }
     }
@@ -148,13 +162,13 @@ export async function GET() {
       roundId: activeRound._id?.toString(),
       team: team
         ? {
-            teamId: team._id?.toString(),
-            rank: team.rank,
-            batch: team.batch ?? null,
-            memberCount: getMemberCount(team._id?.toString() || ""),
-            successfulAttempts: team.successfulAttempts,
-            totalPoints: team.totalPoints,
-          }
+          teamId: team._id?.toString(),
+          rank: team.rank,
+          batch: team.batch ?? null,
+          memberCount: getMemberCount(team._id?.toString() || ""),
+          successfulAttempts: team.successfulAttempts,
+          totalPoints: team.totalPoints,
+        }
         : null,
       roundStatus: activeRound.status,
       roundNumber,
@@ -164,6 +178,11 @@ export async function GET() {
       serverTime: Date.now(),
       phaseCounts: cached.phaseCounts,
       unsoldTeams: cached.unsoldTeams,
+      currentRound: cfg.currentRound || "",
+      auctionStartTime: cfg.auctionStartTime?.toISOString() || null,
+      auctionEndTime: cfg.auctionEndTime?.toISOString() || null,
+      currentRoundStartTime: cfg.currentRoundStartTime?.toISOString() || null,
+      currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
     });
   } catch (error) {
     console.error("Error fetching status:", error);

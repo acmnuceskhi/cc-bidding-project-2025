@@ -1,19 +1,28 @@
-// Shared Socket.IO instance for use in both server.js and API routes
-// This allows API routes to emit socket events
+// Shared Socket.IO instance across server.js and Next API routes.
+// Use a global holder to avoid separate webpack module instances.
 
-let ioInstance = null;
+const GLOBAL_KEY = "__SOCKET_IO_INSTANCE__";
+
+function getGlobal() {
+  // Works in both Node and Next server runtime
+  // eslint-disable-next-line no-new-func
+  return Function("return this")();
+}
 
 function setSocketInstance(io) {
-  ioInstance = io;
+  const g = getGlobal();
+  g[GLOBAL_KEY] = io;
 }
 
 function getSocketInstance() {
-  return ioInstance;
+  const g = getGlobal();
+  return g[GLOBAL_KEY] || null;
 }
 
 function emitSocketEvent(event, data) {
-  if (ioInstance) {
-    ioInstance.emit(event, data);
+  const io = getSocketInstance();
+  if (io) {
+    io.emit(event, data);
   } else if (process.env.NODE_ENV === "development") {
     console.warn(`Socket.IO instance not available. Event "${event}" not emitted.`);
   }

@@ -9,6 +9,8 @@ interface AuctionConfig {
   countdownWarningSeconds: number;
   autoStartNextRound: boolean;
   delayBetweenRoundsSeconds: number;
+  auctionStartTime?: string | null;
+  auctionEndTime?: string | null;
 }
 
 export default function ConfigPage() {
@@ -23,6 +25,32 @@ export default function ConfigPage() {
   const [countdownWarningSeconds, setCountdownWarningSeconds] = useState("30");
   const [autoStartNextRound, setAutoStartNextRound] = useState(false);
   const [delayBetweenRoundsSeconds, setDelayBetweenRoundsSeconds] = useState("5");
+  const [auctionStartTimeLocal, setAuctionStartTimeLocal] = useState<string>("");
+  const [auctionEndTimeLocal, setAuctionEndTimeLocal] = useState<string>("");
+
+  // Helpers to convert between ISO and input[type=datetime-local] values
+  const isoToLocalInput = (iso?: string | null): string => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hours = String(d.getHours()).padStart(2, "0");
+      const minutes = String(d.getMinutes()).padStart(2, "0");
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const localInputToIso = (local: string): string | null => {
+    if (!local) return null;
+    const d = new Date(local);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  };
 
   useEffect(() => {
     fetchConfig();
@@ -32,6 +60,10 @@ export default function ConfigPage() {
     try {
       setLoading(true);
       const res = await fetchWithAuth("/api/config");
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`GET /api/config ${res.status}: ${text || res.statusText}`);
+      }
       const data = await res.json();
       setConfig(data);
       
@@ -41,6 +73,9 @@ export default function ConfigPage() {
       setCountdownWarningSeconds(String(data.countdownWarningSeconds));
       setAutoStartNextRound(data.autoStartNextRound);
       setDelayBetweenRoundsSeconds(String(data.delayBetweenRoundsSeconds));
+      // Times into datetime-local inputs (local timezone display)
+      setAuctionStartTimeLocal(isoToLocalInput(data.auctionStartTime));
+      setAuctionEndTimeLocal(isoToLocalInput(data.auctionEndTime));
     } catch (error) {
       console.error("Error fetching config:", error);
       setMessage("❌ Failed to load configuration");
@@ -63,6 +98,8 @@ export default function ConfigPage() {
           countdownWarningSeconds: parseInt(countdownWarningSeconds),
           autoStartNextRound,
           delayBetweenRoundsSeconds: parseInt(delayBetweenRoundsSeconds),
+          auctionStartTime: localInputToIso(auctionStartTimeLocal),
+          auctionEndTime: localInputToIso(auctionEndTimeLocal),
         }),
       });
 
@@ -79,6 +116,8 @@ export default function ConfigPage() {
         setCountdownWarningSeconds(String(newConfig.countdownWarningSeconds));
         setAutoStartNextRound(newConfig.autoStartNextRound);
         setDelayBetweenRoundsSeconds(String(newConfig.delayBetweenRoundsSeconds));
+        setAuctionStartTimeLocal(isoToLocalInput(newConfig.auctionStartTime));
+        setAuctionEndTimeLocal(isoToLocalInput(newConfig.auctionEndTime));
         setTimeout(() => setMessage(""), 3000);
       } else {
         setMessage(`❌ Error: ${data.error || "Failed to save"}`);
@@ -119,6 +158,51 @@ export default function ConfigPage() {
         )}
 
         <div className="space-y-6">
+          {/* Auction Window Times */}
+          <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
+            <label className="block text-xl font-bold text-[#FFD700] mb-3">
+              🗓️ Auction Window
+            </label>
+            <p className="text-gray-300 mb-4">
+              Set the overall start and end time of the auction. These values drive the global status banners and countdowns for all clients.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Auction Start</label>
+                <input
+                  type="datetime-local"
+                  value={auctionStartTimeLocal}
+                  onChange={(e) => setAuctionStartTimeLocal(e.target.value)}
+                  className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAuctionStartTimeLocal("")}
+                  className="mt-2 text-sm text-yellow-300 hover:text-yellow-200"
+                >
+                  Clear start
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Auction End</label>
+                <input
+                  type="datetime-local"
+                  value={auctionEndTimeLocal}
+                  onChange={(e) => setAuctionEndTimeLocal(e.target.value)}
+                  className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAuctionEndTimeLocal("")}
+                  className="mt-2 text-sm text-yellow-300 hover:text-yellow-200"
+                >
+                  Clear end
+                </button>
+              </div>
+            </div>
+            <p className="text-sm text-gray-400 mt-3">Times are interpreted in your local timezone and saved as ISO-8601 (UTC) on the server.</p>
+          </div>
+
           {/* Max Teams Per Batch */}
           <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
             <label className="block text-xl font-bold text-[#FFD700] mb-3">
@@ -231,7 +315,7 @@ export default function ConfigPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="flex-1 bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {saving ? "Saving..." : "💾 Save Configuration"}
             </button>

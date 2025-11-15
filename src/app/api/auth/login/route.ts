@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Users } from "@/lib/models/users";
-import {
-  verifyPassword,
-  generateToken,
-  SESSION_TIMEOUT_MINUTES,
-} from "@/lib/auth";
+import { verifyPassword, generateToken } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {

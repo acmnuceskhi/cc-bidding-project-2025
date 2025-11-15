@@ -54,13 +54,10 @@ export default function HouseDashboard() {
   const [canBid, setCanBid] = useState<boolean>(true);
   const [canBidMessage, setCanBidMessage] = useState<string>("");
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
-  const [isPolling, setIsPolling] = useState<boolean>(false);
-  const pollDelayRef = useRef<number>(10000);
-  const retryCountRef = useRef<number>(0);
-  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
-  const { socket, isConnected, currentState, emit } = useSocket();
+  const { socket, isConnected, currentState, emit, auctionState } = useSocket();
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -73,22 +70,11 @@ export default function HouseDashboard() {
     return houseMap[houseName] || "/arena-background.jpg";
   };
 
-  // Adjust polling interval based on socket connection
-  useEffect(() => {
-    if (isConnected) {
-      pollDelayRef.current = 15000; // Reduce polling when socket connected
-    } else {
-      pollDelayRef.current = 10000; // Normal polling when socket disconnected
-    }
-  }, [isConnected]);
-
   useEffect(() => {
     const fetchData = async (isInitialLoad = false) => {
       try {
         if (isInitialLoad) {
           setInitialLoading(true);
-        } else {
-          setIsPolling(true);
         }
         const housesResponse = await fetchWithAuth("/api/houses", {
           cache: "no-store",
@@ -105,67 +91,80 @@ export default function HouseDashboard() {
         }
         setHouse(selectedHouse);
 
-        const statusRes = await fetchWithAuth("/api/status", {
-          cache: "no-store",
-        });
-        const statusData = await statusRes.json();
+        // Drive state from auctionState only
+        const roundId = auctionState?.currentRound || "";
+        const startIso = auctionState?.currentRoundStartTime || null;
+        const endIso = auctionState?.currentRoundEndTime || null;
+        const now = Date.now();
+        const startMs = startIso ? new Date(startIso).getTime() : null;
+        const endMs = endIso ? new Date(endIso).getTime() : null;
 
-        // Reset retry count on success
-        retryCountRef.current = 0;
-        pollDelayRef.current = 10000;
+        const isActive = !!(roundId && startMs && endMs && now >= startMs && now < endMs);
 
-        const hasActiveRound =
-          statusData &&
-          statusData.roundId &&
-          statusData.roundStatus === "active";
+        if (isActive) {
+          // Populate activeRound from auctionState
+          setActiveRound({
+            _id: roundId,
+            roundId,
+            teamId: "", // filled after fetching round
+            status: "active",
+            timerEnd: endIso || undefined,
+          });
 
-        if (hasActiveRound) {
-          const serverTimerEnd = statusData.timerEnd
-            ? new Date(statusData.timerEnd)
-            : null;
+          // Fetch round to discover teamId
+          let teamId: string | null = null;
+          try {
+            const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
+            if (roundRes.ok) {
+              const r = await roundRes.json();
+              teamId = r.teamId || null;
+            }
+          } catch {}
 
-          if (serverTimerEnd) {
-            setActiveRound({
-              _id: statusData.roundId,
-              roundId: statusData.roundId,
-              teamId: statusData.team?.teamId || "",
-              status: "active",
-              timerEnd: serverTimerEnd.toISOString(),
-              roundNumber: statusData.roundNumber,
-            });
+          // Fetch team details for display
+          if (teamId) {
+            try {
+              const teamRes = await fetchWithAuth(`/api/teams/${teamId}`, { cache: "no-store" });
+              if (teamRes.ok) {
+                const t = await teamRes.json();
+                setCurrentTeam({
+                  teamId: t.teamId,
+                  rank: t.rank,
+                  batch: t.batch,
+                  memberCount: t.memberCount,
+                  successfulAttempts: t.successfulAttempts,
+                  totalPoints: t.totalPoints,
+                  timeTaken: undefined,
+                });
+              } else {
+                setCurrentTeam(null);
+              }
+            } catch {
+              setCurrentTeam(null);
+            }
 
-            setCurrentTeam(statusData.team || null);
-
-            if (selectedHouse && statusData.team?.teamId) {
+            // Check bidding eligibility
+            if (selectedHouse) {
               try {
                 const canBidRes = await fetchWithAuth(
-                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?teamId=${statusData.team.teamId}`,
+                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?teamId=${teamId}`,
                   { cache: "no-store" }
                 );
                 const canBidData = await canBidRes.json();
-
                 setCanBid(!!canBidData.canBid);
                 setCanBidMessage(canBidData.message || "");
               } catch (err) {
                 console.error("Failed to check canBid:", err);
-                setCanBid(true); // default to true to not block bidding if check fails
+                setCanBid(true);
               }
             }
 
             // Fetch current bid for this house in this round
             try {
-              const bidsRes = await fetchWithAuth(
-                `/api/bids?roundId=${statusData.roundId}`,
-                {
-                  cache: "no-store",
-                }
-              );
+              const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
               const bidsData = await bidsRes.json();
-
               if (Array.isArray(bidsData)) {
-                const myBid = bidsData.find(
-                  (bid: any) => bid.houseId === houseId
-                );
+                const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
                 setCurrentBid(myBid ? myBid.amount : null);
               } else {
                 setCurrentBid(null);
@@ -175,9 +174,7 @@ export default function HouseDashboard() {
               setCurrentBid(null);
             }
           } else {
-            setActiveRound(null);
             setCurrentTeam(null);
-            setCurrentBid(null);
           }
         } else {
           setActiveRound(null);
@@ -186,37 +183,11 @@ export default function HouseDashboard() {
           setTimeLeft(0);
         }
 
-        // Schedule next poll only if there's an active round or we're still initializing
-        if (hasActiveRound || isInitialLoad) {
-          if (pollTimeoutRef.current) {
-            clearTimeout(pollTimeoutRef.current);
-          }
-          pollTimeoutRef.current = setTimeout(() => {
-            fetchData(false);
-          }, pollDelayRef.current);
-        }
       } catch (error) {
         console.error("Failed to fetch house data:", error);
-        // Exponential backoff on errors
-        retryCountRef.current++;
-        const backoffDelay = Math.min(
-          10000 * Math.pow(2, retryCountRef.current),
-          60000
-        );
-        pollDelayRef.current = backoffDelay;
-
-        // Still schedule next poll even on error (with backoff)
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, backoffDelay);
       } finally {
         if (isInitialLoad) {
           setInitialLoading(false);
-        } else {
-          setIsPolling(false);
         }
       }
     };
@@ -228,43 +199,23 @@ export default function HouseDashboard() {
       const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
         // Refresh data when another house places a bid
         if (data.roundId === activeRound?.roundId && data.houseId !== houseId) {
-          if (pollTimeoutRef.current) {
-            clearTimeout(pollTimeoutRef.current);
-          }
-          pollTimeoutRef.current = setTimeout(() => {
-            fetchData(false);
-          }, 1000);
+          fetchData(false);
         }
       };
 
       const handleRoundStarted = () => {
         // Refresh when a new round starts
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, 500);
+        fetchData(false);
       };
 
       const handleRoundEnded = () => {
         // Refresh when round ends
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, 500);
+        fetchData(false);
       };
 
       const handleStateUpdate = () => {
         // Refresh on state updates
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
-        pollTimeoutRef.current = setTimeout(() => {
-          fetchData(false);
-        }, 500);
+        fetchData(false);
       };
 
       socket.on("bid-notification", handleBidNotification);
@@ -273,9 +224,6 @@ export default function HouseDashboard() {
       socket.on("state-update", handleStateUpdate);
 
       return () => {
-        if (pollTimeoutRef.current) {
-          clearTimeout(pollTimeoutRef.current);
-        }
         socket.off("bid-notification", handleBidNotification);
         socket.off("round-started", handleRoundStarted);
         socket.off("round-ended", handleRoundEnded);
@@ -283,15 +231,43 @@ export default function HouseDashboard() {
       };
     }
 
-    return () => {
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
-      }
-    };
-  }, [houseId, socket, activeRound?.roundId]);
+    return () => {};
+  }, [houseId, socket, auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime]);
 
+  const startIso = auctionState?.currentRoundStartTime || null;
+  const endIso = auctionState?.currentRoundEndTime || null;
+  const nowMs = Date.now();
+  const startMs = startIso ? new Date(startIso).getTime() : null;
+  const endMs = endIso ? new Date(endIso).getTime() : null;
+  const isActive = !!(startMs && endMs && nowMs >= startMs && nowMs < endMs);
+  const isUpcoming = !!(startMs && nowMs < startMs);
+
+  const derivedEnd = endIso || null;
   const { remainingMs: houseRemaining } = useSynchronizedCountdown(
-    activeRound?.timerEnd ?? null
+    derivedEnd
+  );
+
+  // Auction-level countdown (to show when no active round)
+  const auctionCountdownEnd = (() => {
+    if (!auctionState) return null;
+    const now = Date.now();
+    // Prefer round-specific start countdown if upcoming
+    const roundStartMs = auctionState.currentRoundStartTime
+      ? new Date(auctionState.currentRoundStartTime).getTime()
+      : null;
+    if (roundStartMs && now < roundStartMs) return auctionState.currentRoundStartTime;
+    const aStartMs = auctionState.auctionStartTime
+      ? new Date(auctionState.auctionStartTime).getTime()
+      : null;
+    const aEndMs = auctionState.auctionEndTime
+      ? new Date(auctionState.auctionEndTime).getTime()
+      : null;
+    if (aStartMs && now < aStartMs) return auctionState.auctionStartTime;
+    if (aEndMs && now < aEndMs) return auctionState.auctionEndTime;
+    return null;
+  })();
+  const { remainingMs: auctionRemainingMs } = useSynchronizedCountdown(
+    auctionCountdownEnd
   );
   useEffect(() => {
     setTimeLeft(houseRemaining);
@@ -398,7 +374,7 @@ export default function HouseDashboard() {
 
   if (!house) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
         <div className="text-xl text-white">House not found.</div>
       </div>
     );
@@ -422,13 +398,13 @@ export default function HouseDashboard() {
       <div className="absolute inset-0 bg-black/75 backdrop-blur-xs"></div>
 
       {/* Neon grid overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-size-[4rem_4rem] opacity-20"></div>
 
       {/* Content */}
       <div className="relative z-10 min-h-screen p-4 sm:p-8">
         <div className="max-w-7xl mx-auto">
           {/* Enhanced Header */}
-          <div className="bg-gradient-to-r from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+          <div className="bg-linear-to-r from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
               <div className="text-center sm:text-left">
                 <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-2">
@@ -437,6 +413,21 @@ export default function HouseDashboard() {
                 <p className="text-lg sm:text-xl text-gray-200">
                   Command Center
                 </p>
+                {auctionState && (!activeRound || activeRound.status !== "active") && (
+                  <div className="mt-2 inline-block px-3 py-1 rounded-lg bg-black/40 border border-white/10 text-gray-100 text-sm">
+                    {(() => {
+                      const now = Date.now();
+                      const roundStartMs = auctionState.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+                      if (roundStartMs && now < roundStartMs) return `Round starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+                      const aStartMs = auctionState.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+                      const aEndMs = auctionState.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
+                      if (aStartMs && now < aStartMs) return `Auction starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+                      if (aEndMs && now < aEndMs) return `Auction live • ends in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+                      if (aEndMs && now >= aEndMs) return "Auction finished";
+                      return "Auction status pending";
+                    })()}
+                  </div>
+                )}
               </div>
               <button
                 onClick={async () => {
@@ -450,7 +441,7 @@ export default function HouseDashboard() {
                     console.error("Logout failed:", err);
                   }
                 }}
-                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+                className="bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
               >
                 Logout
               </button>
@@ -497,7 +488,7 @@ export default function HouseDashboard() {
           {activeRound && currentTeam ? (
             <div className="space-y-6 sm:space-y-8">
               {/* Enhanced Round & Team Info */}
-              <div className="bg-gradient-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+              <div className="bg-linear-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0 mb-6">
                   <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
                     ⚔️ ROUND {activeRound.roundNumber || "?"}
@@ -533,7 +524,7 @@ export default function HouseDashboard() {
                 <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8">
                   {/* Team Rank Badge */}
                   <div className="relative shrink-0 mx-auto sm:mx-0">
-                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-gradient-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
+                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
                       <span className="text-5xl sm:text-6xl font-bold text-black">#{currentTeam.rank}</span>
                     </div>
                   </div>
@@ -582,7 +573,7 @@ export default function HouseDashboard() {
                       </h2>
 
                       {currentBid !== null && (
-                        <div className="bg-gradient-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
+                        <div className="bg-linear-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
                           <div className="text-gray-200 text-sm sm:text-base mb-1">
                             Your Active Bid
                           </div>
@@ -623,7 +614,7 @@ export default function HouseDashboard() {
                             bidAmount <= 0 ||
                             bidAmount > house.remainingBudget
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                              : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
+                              : "bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
                           }`}
                         >
                           {loading ? "⏳ Placing..." : "✅ Place Bid"}

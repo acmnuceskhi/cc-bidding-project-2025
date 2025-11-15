@@ -163,13 +163,29 @@ export async function POST(request: NextRequest) {
         roundId: targetRoundId,
         timerEnd: timerEnd.toISOString(),
       });
-      
+
       // Emit state-update event (will trigger clients to fetch fresh state)
       io.emit("state-update", {
         screen: "bidding",
         roundId: targetRoundId,
         teamId: team._id?.toString() || "",
         timeLeft: durationMs,
+      });
+
+      // Update authoritative config state and broadcast auction-state
+      await Config.update({
+        currentRound: targetRoundId,
+        currentRoundStartTime: new Date(),
+        currentRoundEndTime: timerEnd,
+      });
+      const cfgState = await Config.getAuctionState();
+      io.emit("auction-state", {
+        currentRound: cfgState.currentRound || "",
+        auctionStartTime: cfgState.auctionStartTime?.toISOString() || null,
+        auctionEndTime: cfgState.auctionEndTime?.toISOString() || null,
+        currentRoundStartTime: cfgState.currentRoundStartTime?.toISOString() || null,
+        currentRoundEndTime: cfgState.currentRoundEndTime?.toISOString() || null,
+        serverTime: Date.now(),
       });
     }
 

@@ -7,6 +7,7 @@ import { Team } from "@/lib/models/teams";
 import { Round } from "@/lib/models/rounds";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
+import { useSocket } from "@/hooks/useSocket";
 import { FullPageSpinner } from "@/components/Spinner";
 
 interface WinnerData {
@@ -34,6 +35,8 @@ export default function OverviewPage() {
   const [currentBids, setCurrentBids] = useState<any[]>([]);
   // Prevent repeatedly showing the winner modal across polling cycles
   const winnerShownRef = useRef<boolean>(false);
+  // Socket subscription + auction state
+  const { socket, auctionState } = useSocket();
 
   // Use ref to capture current team without causing re-renders
   const currentTeamRef = useRef<Team | null>(null);
@@ -60,81 +63,106 @@ export default function OverviewPage() {
       if (showLoadingScreen) {
         setLoading(true);
       }
-
-      const statusRes = await fetchWithAuth("/api/status", {
-        cache: "no-store",
-      });
-      const statusData = await statusRes.json();
-
       const housesRes = await fetchWithAuth("/api/houses", {
         cache: "no-store",
       });
       const housesData = await housesRes.json();
 
       setHouses(housesData || []);
+      // Derive state solely from auctionState
+      const roundId = auctionState?.currentRound || "";
+      const startIso = auctionState?.currentRoundStartTime || null;
+      const endIso = auctionState?.currentRoundEndTime || null;
+      const now = Date.now();
+      const startMs = startIso ? new Date(startIso).getTime() : null;
+      const endMs = endIso ? new Date(endIso).getTime() : null;
+      const isActive = !!(roundId && startMs && endMs && now >= startMs && now < endMs);
+      const isEnded = !!(roundId && endMs && now >= endMs);
 
-      // Check if round just ended (server-side auto-end)
-      console.log("🔍 Status check:", {
-        roundEnded: statusData.roundEnded,
-        winner: statusData.winner,
-        alreadyShown: winnerShownRef.current,
-      });
+      if (isActive) {
+        // Populate active round
+        setActiveRound({
+          _id: roundId as any,
+          teamId: undefined as any,
+          status: "active",
+          timerEnd: endIso ? new Date(endIso) : null,
+        } as any);
+        lastActiveRoundIdRef.current = roundId;
+        winnerShownRef.current = false;
 
-      if (
-        statusData.roundEnded &&
-        statusData.winner &&
-        !winnerShownRef.current
-      ) {
-        console.log(
-          "🏆 Server detected round end with winner:",
-          statusData.winner
-        );
-        // Use team from current state ref OR from status data
-
-        const team =
-          currentTeamRef.current || statusData.team;
-        console.log("📝 Using team for winner modal:", team);
-
-        setWinnerData({
-          teamName: `Team ${team?.rank || "?"}`,
-          teamBatch: team?.batch,
-          teamRank: team?.rank,
-          memberCount: team?.memberCount,
-          houseName: statusData.winner.houseName,
-          amount: statusData.winner.amount,
-        });
-        setShowWinnerModal(true);
-        winnerShownRef.current = true;
-
-        // Auto-close after 15 seconds
-        setTimeout(() => {
-          setShowWinnerModal(false);
-          setWinnerData(null);
-        }, 15000);
-      } else if (!statusData.roundEnded && !statusData.roundId && activeRound && !winnerShownRef.current) {
-        // Round ended but winner not in status - fetch from completed rounds
+        // Resolve team
         try {
-          const roundsRes = await fetchWithAuth("/api/rounds");
-          if (roundsRes.ok) {
-            const rounds = await roundsRes.json();
-            const lastCompleted = rounds.find((r: { status: string; roundId: string }) => 
-              r.status === "completed" && r.roundId === activeRound._id?.toString()
-            );
-            
-            if (lastCompleted && lastCompleted.winningBid && lastCompleted.winningHouseId) {
-              const winningHouse = housesData.find((h: { _id: { toString: () => string } }) => 
-                h._id?.toString() === lastCompleted.winningHouseId?.toString()
-              );
-              
-              if (winningHouse) {
-                const team = currentTeamRef.current || statusData.team;
+          const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
+          if (roundRes.ok) {
+            const r = await roundRes.json();
+            const teamRes = await fetchWithAuth(`/api/teams/${r.teamId}`, { cache: "no-store" });
+            if (teamRes.ok) {
+              const t = await teamRes.json();
+              setCurrentTeam({ ...t, _id: undefined } as any);
+            } else {
+              setCurrentTeam(null);
+            }
+          }
+        } catch {
+          setCurrentTeam(null);
+        }
+
+        // Fetch current bids for this round
+        try {
+          const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+          const bidsData = await bidsRes.json();
+          if (Array.isArray(bidsData)) {
+            const enriched = bidsData.map((bid: any) => {
+              const house = housesData.find((h: any) => h.houseId === bid.houseId);
+              return { ...bid, houseName: house?.name || "Unknown House" };
+            });
+            setCurrentBids(enriched);
+          } else {
+            setCurrentBids([]);
+          }
+        } catch {
+          setCurrentBids([]);
+        }
+      } else {
+        setActiveRound(null);
+        setCurrentTeam(null);
+        setCurrentBids([]);
+        setRoundNumber(null);
+
+        // If ended, show winner modal by deriving from bids
+        if (isEnded && !winnerShownRef.current) {
+          try {
+            const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+            if (bidsRes.ok) {
+              const bids = await bidsRes.json();
+              const top = Array.isArray(bids) ? bids.sort((a: any, b: any) => b.amount - a.amount)[0] : null;
+              if (top) {
+                const winningHouse = housesData.find((h: any) => h.houseId === top.houseId);
+                // Resolve team for modal
+                let teamText = "Team";
+                let teamBatch: string | undefined = undefined;
+                let teamRank: number | undefined = undefined;
+                try {
+                  const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
+                  if (roundRes.ok) {
+                    const r = await roundRes.json();
+                    const teamRes = await fetchWithAuth(`/api/teams/${r.teamId}`, { cache: "no-store" });
+                    if (teamRes.ok) {
+                      const t = await teamRes.json();
+                      teamText = `Team ${t.rank}`;
+                      teamBatch = t.batch;
+                      teamRank = t.rank;
+                    }
+                  }
+                } catch {}
+
                 setWinnerData({
-                  teamName: `Team ${team?.rank || "?"}`,
-                  teamBatch: team?.batch,
-                  teamRank: team?.rank,
-                  memberCount: team?.memberCount,
-                  houseName: winningHouse.name,
-                  amount: lastCompleted.winningBid,
+                  teamName: teamText,
+                  teamBatch,
+                  teamRank,
+                  memberCount: undefined,
+                  houseName: winningHouse?.name || "Unknown House",
+                  amount: top.amount,
                 });
                 setShowWinnerModal(true);
                 winnerShownRef.current = true;
@@ -144,192 +172,69 @@ export default function OverviewPage() {
                 }, 15000);
               }
             }
-          }
-        } catch (err) {
-          console.error("Error fetching completed round:", err);
-        }
-      }
-      
-      // Only set active round if status is "active", not "completed"
-
-      if (
-        statusData &&
-        statusData.roundId &&
-        statusData.roundStatus === "active"
-      ) {
-        const serverTimerEnd = statusData.timerEnd
-          ? new Date(statusData.timerEnd)
-          : null;
-
-        if (serverTimerEnd) {
-          setActiveRound({
-            _id: statusData.roundId,
-            teamId: statusData.team?.teamId,
-            status: statusData.roundStatus,
-            timerEnd: serverTimerEnd,
-            bids: [],
-          } as any);
-          lastActiveRoundIdRef.current = statusData.roundId;
-
-          setCurrentTeam(statusData.team || null);
-          setRoundNumber(statusData.roundNumber || null);
-          winnerShownRef.current = false;
-
-          // Fetch current bids for this round
-          try {
-            const bidsRes = await fetchWithAuth(
-              `/api/bids?roundId=${statusData.roundId}`,
-              {
-                cache: "no-store",
-              }
-            );
-            const bidsData = await bidsRes.json();
-
-            if (Array.isArray(bidsData)) {
-              // Enrich bids with house names
-              const enrichedBids = bidsData.map((bid: any) => {
-                const house = housesData.find(
-                  (h: any) => h.houseId === bid.houseId
-                );
-                return {
-                  ...bid,
-                  houseName: house?.name || "Unknown House",
-                };
-              });
-              setCurrentBids(enrichedBids);
-            } else {
-              setCurrentBids([]);
-            }
-          } catch (error) {
-            console.error("Failed to fetch current bids:", error);
-            setCurrentBids([]);
-          }
-        } else {
-          setActiveRound(null);
-          setCurrentTeam(null);
-          setCurrentBids([]);
-          setRoundNumber(null);
-        }
-      } else {
-        if (
-          lastActiveRoundIdRef.current &&
-          !winnerShownRef.current &&
-          !statusData.roundEnded &&
-          !statusData.winner
-        ) {
-          console.log(
-            "⚠️ Possible missed auto-end response. Attempting fallback winner fetch."
-          );
-          try {
-            const roundsResp = await fetchWithAuth("/api/rounds", {
-              cache: "no-store",
-            });
-            if (roundsResp.ok) {
-              const allRounds = await roundsResp.json();
-              const completedRounds = allRounds.filter(
-                (r: any) => r.status === "completed"
-              );
-              const targetRound =
-                completedRounds.find(
-                  (r: any) => r.roundId === lastActiveRoundIdRef.current
-                ) || completedRounds[0];
-              if (targetRound && targetRound.winningBid) {
-                console.log(
-                  "✅ Fallback found winning bid for round",
-                  targetRound.roundId
-                );
-                const bidsResp = await fetchWithAuth(
-                  `/api/bids?roundId=${targetRound.roundId}`,
-                  { cache: "no-store" }
-                );
-                let houseName = "Unknown House";
-                if (bidsResp.ok) {
-                  const bids = await bidsResp.json();
-                  const winningBidObj = bids.find(
-                    (b: any) => b.amount === targetRound.winningBid
-                  );
-                  if (winningBidObj) {
-                    const housesResp2 = await fetchWithAuth("/api/houses", {
-                      cache: "no-store",
-                    });
-                    if (housesResp2.ok) {
-                      const housesList = await housesResp2.json();
-                      const house = housesList.find(
-                        (h: any) => h.houseId === winningBidObj.houseId
-                      );
-                      if (house) houseName = house.name;
-                    }
-                  }
-                }
-                const teamsResp = await fetchWithAuth(
-                  "/api/teams",
-                  { cache: "no-store" }
-                );
-                let teamName = "Unknown Team";
-                let teamBatch: string | undefined = undefined;
-                let teamRank: number | undefined = undefined;
-                let memberCount: number | undefined = undefined;
-                if (teamsResp.ok) {
-                  const teamsList = await teamsResp.json();
-                  const tMatch = teamsList.find(
-                    (t: any) => t.teamId === targetRound.teamId
-                  );
-                  if (tMatch) {
-                    teamName = `Team ${tMatch.rank}`;
-                    teamBatch = tMatch.batch;
-                    teamRank = tMatch.rank;
-                    memberCount = tMatch.memberCount;
-                  }
-                }
-                setWinnerData({
-                  teamName,
-                  teamBatch,
-                  teamRank,
-                  memberCount,
-                  houseName,
-                  amount: targetRound.winningBid,
-                });
-                setShowWinnerModal(true);
-                winnerShownRef.current = true;
-                setTimeout(() => {
-                  setShowWinnerModal(false);
-                  setWinnerData(null);
-                }, 10000);
-              } else {
-                console.log(
-                  "ℹ️ Fallback: No completed round with winning bid found."
-                );
-              }
-            }
-          } catch (fallbackErr) {
-            console.warn("Fallback winner fetch failed:", fallbackErr);
-          } finally {
-            lastActiveRoundIdRef.current = null;
+          } catch (err) {
+            console.error("Error deriving winner modal:", err);
           }
         }
-        setActiveRound(null);
-        setCurrentTeam(null);
-        setRoundNumber(null);
       }
     } catch (error) {
       console.error("Error fetching overview data:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime]);
 
   useEffect(() => {
+    // Initial hydrate
     fetchOverviewData(true);
-    const pollInterval = setInterval(() => fetchOverviewData(false), 2000);
-    return () => clearInterval(pollInterval);
-  }, [fetchOverviewData]);
 
+    if (!socket) return;
+
+    const refresh = () => fetchOverviewData(false);
+    const refreshBids = () => fetchOverviewData(false);
+
+    socket.on("round-started", refresh);
+    socket.on("round-ended", refresh);
+    socket.on("state-update", refresh);
+    socket.on("bid-notification", refreshBids);
+
+    return () => {
+      socket.off("round-started", refresh);
+      socket.off("round-ended", refresh);
+      socket.off("state-update", refresh);
+      socket.off("bid-notification", refreshBids);
+    };
+  }, [socket, fetchOverviewData]);
+
+  const derivedEnd = auctionState?.currentRoundEndTime
+    ? auctionState.currentRoundEndTime
+    : activeRound?.timerEnd
+    ? activeRound.timerEnd.toISOString()
+    : null;
   const { remainingMs: syncedRemainingMs } = useSynchronizedCountdown(
-    activeRound?.timerEnd ? activeRound.timerEnd.toISOString() : null
+    derivedEnd
   );
   useEffect(() => {
     setTimeLeft(syncedRemainingMs);
   }, [syncedRemainingMs]);
+
+  // Auction-level countdown for admin banner
+  const auctionCountdownEnd = (() => {
+    if (!auctionState) return null;
+    const now = Date.now();
+    const startMs = auctionState.auctionStartTime
+      ? new Date(auctionState.auctionStartTime).getTime()
+      : null;
+    const endMs = auctionState.auctionEndTime
+      ? new Date(auctionState.auctionEndTime).getTime()
+      : null;
+    if (startMs && now < startMs) return auctionState.auctionStartTime;
+    if (endMs && now < endMs) return auctionState.auctionEndTime;
+    return null;
+  })();
+  const { remainingMs: auctionRemainingMs } = useSynchronizedCountdown(
+    auctionCountdownEnd
+  );
 
   const handleStartNextRound = async () => {
     if (isStartingRound) return;
@@ -472,6 +377,21 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-8">
+      {auctionState && (
+        <div className="flex justify-center">
+          <div className="inline-block px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-gray-100 text-sm">
+            {(() => {
+              const now = Date.now();
+              const startMs = auctionState.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+              const endMs = auctionState.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
+              if (startMs && now < startMs) return `Auction starts in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+              if (endMs && now < endMs) return `Auction live • ends in ${Math.max(0, Math.floor(auctionRemainingMs / 1000))}s`;
+              if (endMs && now >= endMs) return "Auction finished";
+              return "Auction status pending";
+            })()}
+          </div>
+        </div>
+      )}
       {/* Round Info */}
       <div className="bg-black/40 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
         {activeRound ? (
@@ -634,21 +554,21 @@ export default function OverviewPage() {
           <button
             onClick={handleStartNextRound}
             disabled={!!activeRound || isStartingRound}
-            className={`bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
+            className={`bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
           >
             {isStartingRound ? "⏳ Starting..." : "Start Next Round"}
           </button>
           <button
             onClick={handleEndCurrentRound}
             disabled={!activeRound || timeLeft === 0}
-            className={`bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
+            className={`bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
           >
             End Current Round
           </button>
           <button
             onClick={handleReStartRound}
             disabled={!activeRound || isStartingRound}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+            className="bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
           >
             {isStartingRound ? "⏳ Restarting..." : "Restart Round"}
           </button>
@@ -658,9 +578,9 @@ export default function OverviewPage() {
       {/* Winner Modal - Neon Theme */}
       {showWinnerModal && winnerData && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.4)] max-w-2xl w-full mx-4 relative overflow-hidden animate-slide-up">
+          <div className="bg-linear-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.4)] max-w-2xl w-full mx-4 relative overflow-hidden animate-slide-up">
             {/* Subtle grid overlay */}
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70005_1px,transparent_1px),linear-gradient(to_bottom,#FFD70005_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-20"></div>
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70005_1px,transparent_1px),linear-gradient(to_bottom,#FFD70005_1px,transparent_1px)] bg-size-[3rem_3rem] opacity-20"></div>
 
             <div className="relative z-10 text-center">
               <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] mb-6 drop-shadow-[0_0_20px_#FFD700]">
@@ -687,7 +607,7 @@ export default function OverviewPage() {
                 </p>
               </div>
 
-              <div className="bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-xl p-6 border-2 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+              <div className="bg-linear-to-r from-green-900/50 to-emerald-900/50 rounded-xl p-6 border-2 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.3)]">
                 <h3 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-3 drop-shadow-[0_0_20px_#FFD700]">
                   🏯 {winnerData.houseName}
                 </h3>

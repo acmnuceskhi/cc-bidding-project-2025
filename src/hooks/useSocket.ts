@@ -6,12 +6,18 @@ import type {
   AppState,
   ServerToClientEvents,
   ClientToServerEvents,
+  AuctionState,
 } from "@/types/socket";
 
 export function useSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [currentState, setCurrentState] = useState<AppState | null>(null);
+  const [auctionState, setAuctionState] = useState<AuctionState | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [socketObj, setSocketObj] = useState<Socket<
+    ServerToClientEvents,
+    ClientToServerEvents
+  > | null>(null);
   const socketRef = useRef<Socket<
     ServerToClientEvents,
     ClientToServerEvents
@@ -30,52 +36,48 @@ export function useSocket() {
       });
 
       const socket = socketRef.current;
+      setSocketObj(socket);
 
-      const handleConnect = async () => {
+      const handleConnect = () => {
         if (process.env.NODE_ENV === "development") {
           console.log("Socket connected");
         }
         setIsConnected(true);
         setIsReconnecting(false);
-
-        try {
-          const res = await fetch("/api/status", { cache: "no-store" });
-          const freshState = await res.json();
-          if (freshState.roundStatus === "active" && freshState.roundId) {
-            const timeLeft = freshState.timerEnd
-              ? Math.max(0, new Date(freshState.timerEnd).getTime() - Date.now())
-              : 0;
-            setCurrentState({
-              screen: "bidding",
-              roundId: freshState.roundId,
-              teamId: freshState.team?.teamId || "",
-              timeLeft,
-            });
-          } else if (freshState.roundEnded && freshState.winner) {
-            setCurrentState({
-              screen: "results",
-              roundId: freshState.roundId || null,
-              winner: freshState.winner
-                ? {
-                    houseId: freshState.winner.houseId || "",
-                    houseName: freshState.winner.houseName || "",
-                    amount: freshState.winner.amount || 0,
-                    timestamp: new Date().toISOString(),
-                  }
-                : null,
-              losers: freshState.allBids || [],
-            });
-          } else {
-            setCurrentState({
-              screen: "waiting",
-              message: "Waiting for admin to start...",
-            });
-          }
-        } catch (error) {
+        // Request an authoritative snapshot via socket ack (no /status fetch)
+        socket.emit("request-state", async (snapshot: AuctionState) => {
           if (process.env.NODE_ENV === "development") {
-            console.error("Error syncing state after reconnect:", error);
+            console.log("request-state ack:", snapshot);
           }
-        }
+          const isEmpty =
+            (!snapshot.currentRound || snapshot.currentRound === "") &&
+            !snapshot.auctionStartTime &&
+            !snapshot.auctionEndTime &&
+            !snapshot.currentRoundStartTime &&
+            !snapshot.currentRoundEndTime;
+          if (isEmpty) {
+            try {
+              const res = await fetch("/api/config", { cache: "no-store" });
+              if (res.ok) {
+                const cfg = await res.json();
+                setAuctionState({
+                  currentRound: cfg.currentRound || "",
+                  auctionStartTime: cfg.auctionStartTime || null,
+                  auctionEndTime: cfg.auctionEndTime || null,
+                  currentRoundStartTime: cfg.currentRoundStartTime || null,
+                  currentRoundEndTime: cfg.currentRoundEndTime || null,
+                  serverTime: Date.now(),
+                });
+                return;
+              }
+            } catch (e) {
+              if (process.env.NODE_ENV === "development") {
+                console.warn("/api/config fallback failed", e);
+              }
+            }
+          }
+          setAuctionState(snapshot);
+        });
       };
 
       const handleDisconnect = (reason: string) => {
@@ -85,17 +87,6 @@ export function useSocket() {
         setIsConnected(false);
       };
 
-      const handleReconnectAttempt = () => {
-        setIsReconnecting(true);
-      };
-
-      const handleReconnectFailed = () => {
-        setIsReconnecting(false);
-        if (process.env.NODE_ENV === "development") {
-          console.warn("Socket reconnection failed");
-        }
-      };
-
       const handleStateUpdate = (state: AppState) => {
         if (process.env.NODE_ENV === "development") {
           console.log("State update received:", state);
@@ -103,37 +94,28 @@ export function useSocket() {
         setCurrentState(state);
       };
 
-      const handleError = (error: Error) => {
+      const handleAuctionState = (data: AuctionState) => {
         if (process.env.NODE_ENV === "development") {
-          console.error("Socket error:", error);
+          console.log("Auction state received:", data);
         }
-      };
-
-      const handleConnectError = (error: Error) => {
-        if (process.env.NODE_ENV === "development") {
-          console.error("Socket connection error:", error);
-        }
+        setAuctionState(data);
       };
 
       socket.on("connect", handleConnect);
       socket.on("disconnect", handleDisconnect);
-      socket.on("reconnect_attempt" as any, handleReconnectAttempt);
-      socket.on("reconnect_failed" as any, handleReconnectFailed);
       socket.on("state-update", handleStateUpdate);
-      socket.on("error" as any, handleError);
-      socket.on("connect_error", handleConnectError);
+      socket.on("auction-state", handleAuctionState);
     }
 
     return () => {
       if (socketRef.current) {
         socketRef.current.off("connect");
         socketRef.current.off("disconnect");
-        socketRef.current.off("reconnect_attempt" as any);
-        socketRef.current.off("reconnect_failed" as any);
         socketRef.current.off("state-update");
-        socketRef.current.off("error" as any);
-        socketRef.current.off("connect_error");
+        socketRef.current.off("auction-state");
+        // No additional engine event cleanup
       }
+      setSocketObj(null);
     };
   }, []);
 
@@ -142,29 +124,24 @@ export function useSocket() {
     ...args: Parameters<ClientToServerEvents[K]>
   ) => {
     if (socketRef.current) {
-      socketRef.current.emit(event, ...(args as any));
+      socketRef.current.emit(event, ...args);
     }
   };
 
-  const on = <K extends keyof ServerToClientEvents>(
-    event: K,
-    callback: ServerToClientEvents[K]
-  ) => {
-    if (socketRef.current) {
-      socketRef.current.on(event, callback as any);
-      return () => {
-        socketRef.current?.off(event, callback as any);
-      };
-    }
-    return () => {};
-  };
 
   return {
-    socket: socketRef.current,
+    socket: socketObj,
     isConnected,
     isReconnecting,
     currentState,
+    auctionState,
     emit,
-    on,
+    requestState: () => {
+      if (socketRef.current) {
+        socketRef.current.emit("request-state", (snapshot: AuctionState) => {
+          setAuctionState(snapshot);
+        });
+      }
+    },
   };
 }

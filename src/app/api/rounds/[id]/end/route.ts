@@ -179,10 +179,10 @@ export async function POST(
         roundId: id,
         winner: winningBid && winningHouse
           ? {
-              houseId: winningBid.houseId.toString(),
-              houseName: winningHouse.name,
-              amount: winningBid.amount,
-            }
+            houseId: winningBid.houseId.toString(),
+            houseName: winningHouse.name,
+            amount: winningBid.amount,
+          }
           : null,
         losers: allBidsData.filter(
           (bid) =>
@@ -197,11 +197,11 @@ export async function POST(
         roundId: id,
         winner: winningBid && winningHouse
           ? {
-              houseId: winningBid.houseId.toString(),
-              houseName: winningHouse.name,
-              amount: winningBid.amount,
-              timestamp: winningBid.timestamp?.toISOString() || new Date().toISOString(),
-            }
+            houseId: winningBid.houseId.toString(),
+            houseName: winningHouse.name,
+            amount: winningBid.amount,
+            timestamp: winningBid.timestamp?.toISOString() || new Date().toISOString(),
+          }
           : null,
         losers: allBidsData.filter(
           (bid) =>
@@ -209,17 +209,34 @@ export async function POST(
             bid.amount !== winningBid?.amount
         ),
       });
+
+      // Update authoritative config state and broadcast auction-state
+      const { Config } = await import("@/lib/models/config");
+      await Config.update({
+        // currentRound can be cleared or left as last completed
+        currentRound: "",
+        currentRoundEndTime: new Date(),
+      });
+      const cfgState = await Config.getAuctionState();
+      io.emit("auction-state", {
+        currentRound: cfgState.currentRound || "",
+        auctionStartTime: cfgState.auctionStartTime?.toISOString() || null,
+        auctionEndTime: cfgState.auctionEndTime?.toISOString() || null,
+        currentRoundStartTime: cfgState.currentRoundStartTime?.toISOString() || null,
+        currentRoundEndTime: cfgState.currentRoundEndTime?.toISOString() || null,
+        serverTime: Date.now(),
+      });
     }
 
     return NextResponse.json({
       success: true,
       winningBid: winningBid
         ? {
-            houseId: winningBid.houseId,
-            houseName: winningHouse?.name,
-            amount: winningBid.amount,
-            timestamp: winningBid.timestamp,
-          }
+          houseId: winningBid.houseId,
+          houseName: winningHouse?.name,
+          amount: winningBid.amount,
+          timestamp: winningBid.timestamp,
+        }
         : null,
       allBids: bids.map((bid) => ({
         houseId: bid.houseId,
