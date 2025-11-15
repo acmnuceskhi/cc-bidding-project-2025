@@ -2,6 +2,7 @@ const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
 const { Server } = require("socket.io");
+const { setSocketInstance } = require("./src/lib/socket-instance");
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -116,6 +117,9 @@ app.prepare().then(() => {
       methods: ["GET", "POST"],
     },
   });
+
+  // Export socket instance for use in API routes
+  setSocketInstance(io);
 
   io.on("connection", async (socket) => {
     if (dev) {
