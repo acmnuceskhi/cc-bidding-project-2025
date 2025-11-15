@@ -333,7 +333,7 @@ export default function ProjectorDisplay() {
           console.log('🏆 Projector: Showing winner from API');
         }
         // Fetch all bids for this round to display in winner modal
-        let allBids: Array<{ houseName: string; amount: number }> = [];
+        let allBids: Array<{ houseId: string; houseName: string; amount: number }> = [];
         // Prefer explicit roundId, otherwise fall back to our lastActive
         const roundIdToFetch = statusData.roundId || lastRoundId;
         if (roundIdToFetch) {
@@ -421,7 +421,7 @@ export default function ProjectorDisplay() {
                     console.log('🏆 Projector: Showing winner from fallback completed rounds');
                   }
                   // Fetch all bids for this round
-                  let allBids: Array<{ houseName: string; amount: number }> = [];
+                  let allBids: Array<{ houseId: string; houseName: string; amount: number }> = [];
                   try {
                     const bidsRes = await fetch(`/api/bids?roundId=${lastRound.roundId}`, { cache: "no-store" });
                     if (bidsRes.ok) {
