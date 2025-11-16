@@ -103,11 +103,11 @@ export default function AdminLayout({
         {/* Enhanced Tab Navigation - This will be sticky */}
         <div className="sticky top-0 z-20 bg-black/40 border-b-2 border-[#FFD700]/50 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="flex justify-center space-x-1 sm:space-x-2 overflow-x-auto">
+            <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
               {tabs.map((tab) => (
                 <Link key={tab.path} href={tab.path}>
                   <div
-                    className={`px-4 sm:px-6 py-3 sm:py-4 font-semibold text-base sm:text-lg transition-all cursor-pointer whitespace-nowrap ${
+                    className={`px-3 sm:px-6 py-3 sm:py-4 font-semibold text-sm sm:text-lg transition-all cursor-pointer whitespace-nowrap ${
                       isActiveTab(tab.path)
                         ? "bg-linear-to-r from-[#FFD700] to-[#FFB800] text-black border-t-4 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]"
                         : "bg-black/20 text-gray-300 hover:bg-black/40 hover:text-white hover:shadow-[0_0_15px_rgba(255,215,0,0.3)]"

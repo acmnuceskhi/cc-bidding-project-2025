@@ -105,10 +105,14 @@ export async function POST(
           ? teamDoc.houseId.toString()
           : undefined;
 
+        console.log(`[RESTART] Round ${id}, Team ${round.teamId}, Current houseId: ${currentWinningHouseId || 'none'}`);
+
         // Read current round state for pass phase logic
         const roundBefore = await db
           .collection<Round>("rounds")
           .findOne({ _id: new ObjectId(id) }, { session });
+
+        console.log(`[RESTART] Round before - status: ${roundBefore?.status}, finalized: ${roundBefore?.finalized}, winningBid: ${roundBefore?.winningBid || 'none'}`);
 
         // Atomically flip the round.finalized flag from true -> false and
         // use the previous value to determine if a refund is necessary.
@@ -162,26 +166,28 @@ export async function POST(
           .deleteMany({ roundId: new ObjectId(id) }, { session });
         numBids = deleteRes.deletedCount ?? 0;
 
-        // Unassign team and all its participants from house if they were assigned
-        if (currentWinningHouseId) {
-          // Unassign the team
-          await db
-            .collection("teams")
-            .updateOne(
-              { _id: new ObjectId(round.teamId) },
-              { $unset: { houseId: "" } },
-              { session }
-            );
-          
-          // Unassign all participants in the team
-          await db
-            .collection("participants")
-            .updateMany(
-              { teamId: new ObjectId(round.teamId) },
-              { $unset: { houseId: "" } },
-              { session }
-            );
-        }
+        // Always unassign team and all its participants from house when restarting
+        // Unassign the team
+        const teamUpdateResult = await db
+          .collection("teams")
+          .updateOne(
+            { _id: new ObjectId(round.teamId) },
+            { $unset: { houseId: "" } },
+            { session }
+          );
+        
+        console.log(`[RESTART] Team unassignment - matched: ${teamUpdateResult.matchedCount}, modified: ${teamUpdateResult.modifiedCount}`);
+        
+        // Unassign all participants in the team
+        const participantsUpdateResult = await db
+          .collection("participants")
+          .updateMany(
+            { teamId: new ObjectId(round.teamId) },
+            { $unset: { houseId: "" } },
+            { session }
+          );
+        
+        console.log(`[RESTART] Participants unassignment - matched: ${participantsUpdateResult.matchedCount}, modified: ${participantsUpdateResult.modifiedCount}`);
 
         // Reset the round's state so it's ready for restart (clear skipped flag for fresh start)
         let nextPassPhase: 1 | 2 = (roundBefore?.passPhase ?? 1) as 1 | 2;
@@ -189,7 +195,7 @@ export async function POST(
           // Move unsold/no-bid rounds from pass 1 to pass 2 on restart
           nextPassPhase = 2;
         }
-        await db.collection("rounds").updateOne(
+        const roundUpdateResult = await db.collection("rounds").updateOne(
           { _id: new ObjectId(id) },
           {
             $set: {
@@ -203,6 +209,8 @@ export async function POST(
           },
           { session }
         );
+        
+        console.log(`[RESTART] Round update - matched: ${roundUpdateResult.matchedCount}, modified: ${roundUpdateResult.modifiedCount}`);
       });
     } finally {
       try {
@@ -218,6 +226,39 @@ export async function POST(
     }
 
     const updatedRound = await Rounds.getById(id);
+    
+    console.log(`[RESTART] After transaction - round status: ${updatedRound?.status}, winningBid: ${updatedRound?.winningBid || 'none'}`);
+
+    // Clear config if this round was the active one and emit socket event
+    try {
+      const { Config } = await import("@/lib/models/config");
+      const cfg = await Config.get();
+      
+      // If the restarted round was the current round, clear it from config
+      if (cfg.currentRound === round.teamId.toString()) {
+        await Config.update({
+          currentRound: "",
+          currentRoundStartTime: null,
+          currentRoundEndTime: null,
+        });
+        
+        // Broadcast updated auction state to all clients
+        const { getSocketInstance } = await import("@/lib/socket-instance");
+        const io = getSocketInstance();
+        const cfgState = await Config.getAuctionState();
+        io.emit("auction-state", {
+          currentRound: cfgState.currentRound || "",
+          auctionStartTime: cfgState.auctionStartTime?.toISOString() || null,
+          auctionEndTime: cfgState.auctionEndTime?.toISOString() || null,
+          currentRoundStartTime: cfgState.currentRoundStartTime?.toISOString() || null,
+          currentRoundEndTime: cfgState.currentRoundEndTime?.toISOString() || null,
+          serverTime: Date.now(),
+        });
+      }
+    } catch (configErr) {
+      console.error("Error updating config after restart:", configErr);
+      // Non-critical, continue
+    }
 
     return NextResponse.json({
       success: true,

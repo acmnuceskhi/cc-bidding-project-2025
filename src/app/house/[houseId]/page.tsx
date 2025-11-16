@@ -54,6 +54,7 @@ export default function HouseDashboard() {
   const [currentBid, setCurrentBid] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [isPlacingBid, setIsPlacingBid] = useState(false); // Prevent concurrent bid submissions
   const [canBid, setCanBid] = useState<boolean>(true);
   const [canBidMessage, setCanBidMessage] = useState<string>("");
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
@@ -360,7 +361,8 @@ export default function HouseDashboard() {
     }
 
     return () => {};
-  }, [houseId, socket, auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime, auctionState, fetchData, activeRound?.roundId]);
+  }, [houseId, socket]);
+  // Removed fetchData, auctionState, and activeRound from dependencies to prevent refresh loops
 
   // Phase computation loop (1s) using auctionState timestamps
   useEffect(() => {
@@ -412,7 +414,31 @@ export default function HouseDashboard() {
   const toast = useToast();
 
   const placeBid = async () => {
-    if (!activeRound || !currentTeam || !house || bidAmount <= 0) return;
+    // Prevent concurrent bid submissions
+    if (isPlacingBid) {
+      console.log('[PLACE_BID] Already placing a bid, ignoring duplicate call');
+      return;
+    }
+    
+    if (!activeRound || !currentTeam || !house || bidAmount <= 0) {
+      console.log('[PLACE_BID] Rejected - preconditions not met:', { 
+        hasActiveRound: !!activeRound, 
+        hasCurrentTeam: !!currentTeam, 
+        hasHouse: !!house, 
+        bidAmount 
+      });
+      return;
+    }
+    
+    console.log('[PLACE_BID] Attempting to place bid:', {
+      roundId: activeRound.roundId,
+      teamId: currentTeam.teamId,
+      amount: bidAmount,
+      currentBid,
+      houseId
+    });
+    
+    setIsPlacingBid(true);
     setLoading(true);
 
     const toastId = toast.show("Placing bid…", { type: "info" });
@@ -438,6 +464,7 @@ export default function HouseDashboard() {
           duration: 3000,
         });
         setLoading(false);
+        setIsPlacingBid(false);
         return;
       }
 
@@ -480,6 +507,7 @@ export default function HouseDashboard() {
             });
           }
           setLoading(false);
+          setIsPlacingBid(false);
         })
         .catch(() => {
           toast.update(toastId, "Failed to parse response", {
@@ -487,6 +515,7 @@ export default function HouseDashboard() {
             duration: 3000,
           });
           setLoading(false);
+          setIsPlacingBid(false);
         });
     } catch (error: any) {
       toast.update(
@@ -495,6 +524,7 @@ export default function HouseDashboard() {
         { type: "error", duration: 3500 }
       );
       setLoading(false);
+      setIsPlacingBid(false);
     }
   };
 
@@ -749,7 +779,9 @@ export default function HouseDashboard() {
                             setBidAmount(val === "" ? 0 : parseInt(val, 10));
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && !loading && bidAmount > 0 && bidAmount <= house.remainingBudget) {
+                            if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= house.remainingBudget) {
+                              e.preventDefault(); // Prevent form submission or other default behavior
+                              console.log('[INPUT] Enter key pressed, calling placeBid');
                               placeBid();
                             }
                           }}
@@ -757,14 +789,20 @@ export default function HouseDashboard() {
                           placeholder="Enter bid amount"
                         />
                         <button
-                          onClick={placeBid}
+                          onClick={(e) => {
+                            e.preventDefault(); // Prevent any default behavior
+                            console.log('[BUTTON] Bid button clicked');
+                            placeBid();
+                          }}
                           disabled={
                             loading ||
+                            isPlacingBid ||
                             bidAmount <= 0 ||
                             bidAmount > house.remainingBudget
                           }
                           className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
                             loading ||
+                            isPlacingBid ||
                             bidAmount <= 0 ||
                             bidAmount > house.remainingBudget
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"

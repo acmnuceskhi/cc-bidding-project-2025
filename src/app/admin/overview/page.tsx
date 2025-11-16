@@ -33,10 +33,26 @@ export default function OverviewPage() {
   const [winnerData, setWinnerData] = useState<WinnerData | null>(null);
   const [isStartingRound, setIsStartingRound] = useState<boolean>(false);
   const [currentBids, setCurrentBids] = useState<any[]>([]);
-  // Prevent repeatedly showing the winner modal across polling cycles
-  const winnerShownRef = useRef<boolean>(false);
   // Socket subscription + auction state
   const { socket, auctionState } = useSocket();
+
+  // Check if winner modal was already shown for this round (persists across navigation)
+  const isWinnerShown = (roundId: string) => {
+    try {
+      const shown = localStorage.getItem(`winner-shown-${roundId}`);
+      return shown === "true";
+    } catch {
+      return false;
+    }
+  };
+
+  const markWinnerShown = (roundId: string) => {
+    try {
+      localStorage.setItem(`winner-shown-${roundId}`, "true");
+    } catch {
+      // Ignore localStorage errors
+    }
+  };
 
   // Use ref to capture current team without causing re-renders
   const currentTeamRef = useRef<Team | null>(null);
@@ -69,47 +85,49 @@ export default function OverviewPage() {
       const housesData = await housesRes.json();
 
       setHouses(housesData || []);
-      // Derive state solely from auctionState
+      
+      // Derive state from auctionState (like projector does)
       const roundId = auctionState?.currentRound || "";
-      const startIso = auctionState?.currentRoundStartTime || null;
-      const endIso = auctionState?.currentRoundEndTime || null;
       const now = Date.now();
-      const startMs = startIso ? new Date(startIso).getTime() : null;
-      const endMs = endIso ? new Date(endIso).getTime() : null;
-      const isActive = !!(roundId && startMs && endMs && now >= startMs && now < endMs);
-      const isEnded = !!(roundId && endMs && now >= endMs);
+      const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+      const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
+      const isActive = !!(rStart && rEnd && now >= rStart && now < rEnd);
+      const isEnded = !!(roundId && rEnd && now >= rEnd);
 
-      if (isActive) {
+      if (isActive && roundId) {
         // Populate active round
         setActiveRound({
-          _id: roundId as any,
+          _id: roundId as unknown as any,
           teamId: undefined as any,
           status: "active",
-          timerEnd: endIso ? new Date(endIso) : null,
+          timerEnd: rEnd ? new Date(rEnd) : null,
         } as any);
         lastActiveRoundIdRef.current = roundId;
-        winnerShownRef.current = false;
 
-        // Resolve team
+        // Fetch team directly using teamId (like projector)
         try {
-          const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
-          if (roundRes.ok) {
-            const r = await roundRes.json();
-            const teamRes = await fetchWithAuth(`/api/teams/${r.teamId}`, { cache: "no-store" });
-            if (teamRes.ok) {
-              const t = await teamRes.json();
-              setCurrentTeam({ ...t, _id: undefined } as any);
-            } else {
-              setCurrentTeam(null);
-            }
+          const teamRes = await fetchWithAuth(`/api/teams/${roundId}`, { cache: "no-store" });
+          if (teamRes.ok) {
+            const t = await teamRes.json();
+            setCurrentTeam({
+              _id: undefined,
+              teamId: t.teamId || t._id?.toString(),
+              rank: t.rank,
+              batch: t.batch,
+              memberCount: t.memberCount,
+              successfulAttempts: t.successfulAttempts,
+              totalPoints: t.totalPoints,
+            } as any);
+          } else {
+            setCurrentTeam(null);
           }
         } catch {
           setCurrentTeam(null);
         }
 
-        // Fetch current bids for this round
+        // Fetch current bids for this team
         try {
-          const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+          const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
           const bidsData = await bidsRes.json();
           if (Array.isArray(bidsData)) {
             const enriched = bidsData.map((bid: any) => {
@@ -130,31 +148,29 @@ export default function OverviewPage() {
         setRoundNumber(null);
 
         // If ended, show winner modal by deriving from bids
-        if (isEnded && !winnerShownRef.current) {
+        if (isEnded && !isWinnerShown(roundId) && roundId) {
           try {
-            const bidsRes = await fetchWithAuth(`/api/bids?roundId=${roundId}`, { cache: "no-store" });
+            const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
             if (bidsRes.ok) {
               const bids = await bidsRes.json();
               const top = Array.isArray(bids) ? bids.sort((a: any, b: any) => b.amount - a.amount)[0] : null;
               if (top) {
                 const winningHouse = housesData.find((h: any) => h.houseId === top.houseId);
-                // Resolve team for modal
+                // Resolve team for modal (roundId is teamId)
                 let teamText = "Team";
                 let teamBatch: string | undefined = undefined;
                 let teamRank: number | undefined = undefined;
                 try {
-                  const roundRes = await fetchWithAuth(`/api/rounds/${roundId}`, { cache: "no-store" });
-                  if (roundRes.ok) {
-                    const r = await roundRes.json();
-                    const teamRes = await fetchWithAuth(`/api/teams/${r.teamId}`, { cache: "no-store" });
-                    if (teamRes.ok) {
-                      const t = await teamRes.json();
-                      teamText = `Team ${t.rank}`;
-                      teamBatch = t.batch;
-                      teamRank = t.rank;
-                    }
+                  const teamRes = await fetchWithAuth(`/api/teams/${roundId}`, { cache: "no-store" });
+                  if (teamRes.ok) {
+                    const t = await teamRes.json();
+                    teamText = `Team ${t.rank}`;
+                    teamBatch = t.batch;
+                    teamRank = t.rank;
                   }
-                } catch {}
+                } catch {
+                  // Ignore errors
+                }
 
                 setWinnerData({
                   teamName: teamText,
@@ -165,7 +181,7 @@ export default function OverviewPage() {
                   amount: top.amount,
                 });
                 setShowWinnerModal(true);
-                winnerShownRef.current = true;
+                markWinnerShown(roundId);
                 setTimeout(() => {
                   setShowWinnerModal(false);
                   setWinnerData(null);
@@ -196,15 +212,19 @@ export default function OverviewPage() {
     socket.on("round-started", refresh);
     socket.on("round-ended", refresh);
     socket.on("state-update", refresh);
+    socket.on("auction-state", refresh); // Add auction-state listener
     socket.on("bid-notification", refreshBids);
 
     return () => {
       socket.off("round-started", refresh);
       socket.off("round-ended", refresh);
       socket.off("state-update", refresh);
+      socket.off("auction-state", refresh);
       socket.off("bid-notification", refreshBids);
     };
-  }, [socket, fetchOverviewData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
+  // Removed fetchOverviewData to prevent refresh loops
 
   const derivedEnd = auctionState?.currentRoundEndTime
     ? auctionState.currentRoundEndTime
@@ -292,7 +312,9 @@ export default function OverviewPage() {
           amount: result.winningBid.amount,
         });
         setShowWinnerModal(true);
-        winnerShownRef.current = true;
+        if (activeRound._id) {
+          markWinnerShown(activeRound._id.toString());
+        }
 
         setTimeout(() => {
           setShowWinnerModal(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSocket } from "@/hooks/useSocket";
 import type { ServerToClientEvents } from "@/types/socket";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
@@ -40,32 +40,39 @@ export default function AdminMainPage() {
     return () => clearInterval(t);
   }, []);
 
+  // Function to fetch unsold teams
+  const fetchUnsoldTeams = useCallback(async () => {
+    try {
+      const statusRes = await fetchWithAuth("/api/status", { cache: "no-store" });
+      const statusData: { unsoldTeams?: Array<{ teamId: string; rank: number; batch?: string | null; memberCount?: number }> } = await statusRes.json();
+      const unsold: TeamOption[] = (statusData?.unsoldTeams || []).map((t) => ({
+        teamId: t.teamId,
+        rank: t.rank,
+        batch: t.batch ?? null,
+        memberCount: t.memberCount,
+      }));
+
+      // Try to enrich names from /api/teams
+      try {
+        const teamsRes = await fetchWithAuth("/api/teams", { cache: "no-store" });
+        const teamsList: Array<{ teamId: string; name?: string | null }> = await teamsRes.json();
+        const nameMap = new Map<string, string | null>();
+        teamsList.forEach((t) => nameMap.set(t.teamId, t.name || null));
+        unsold.forEach((u) => (u.name = nameMap.get(u.teamId) ?? null));
+      } catch {}
+
+      setTeams(unsold);
+    } catch (e) {
+      console.error("Failed to load status/teams", e);
+    }
+  }, []);
+
   // Initial load: get status (for unsold teams) + full team list to enrich names
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const statusRes = await fetchWithAuth("/api/status", { cache: "no-store" });
-        const statusData: { unsoldTeams?: Array<{ teamId: string; rank: number; batch?: string | null; memberCount?: number }> } = await statusRes.json();
-        const unsold: TeamOption[] = (statusData?.unsoldTeams || []).map((t) => ({
-          teamId: t.teamId,
-          rank: t.rank,
-          batch: t.batch ?? null,
-          memberCount: t.memberCount,
-        }));
-
-        // Try to enrich names from /api/teams
-        try {
-          const teamsRes = await fetchWithAuth("/api/teams", { cache: "no-store" });
-          const teamsList: Array<{ teamId: string; name?: string | null }> = await teamsRes.json();
-          const nameMap = new Map<string, string | null>();
-          teamsList.forEach((t) => nameMap.set(t.teamId, t.name || null));
-          unsold.forEach((u) => (u.name = nameMap.get(u.teamId) ?? null));
-        } catch {}
-
-        if (mounted) setTeams(unsold);
-      } catch (e) {
-        console.error("Failed to load status/teams", e);
+        await fetchUnsoldTeams();
       } finally {
         if (mounted) setLoading(false);
       }
@@ -73,7 +80,7 @@ export default function AdminMainPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [fetchUnsoldTeams]);
 
   const filteredTeams = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -177,6 +184,19 @@ export default function AdminMainPage() {
       socket.off("bids-update", handler);
     };
   }, [socket, auctionState]);
+
+  // Refresh team list when rounds end (team gets assigned to a house)
+  useEffect(() => {
+    if (!socket) return;
+    const handleRoundEnded = () => {
+      console.log('[ADMIN_MAIN] Round ended, refreshing unsold teams list');
+      fetchUnsoldTeams();
+    };
+    socket.on("round-ended", handleRoundEnded);
+    return () => {
+      socket.off("round-ended", handleRoundEnded);
+    };
+  }, [socket, fetchUnsoldTeams]);
 
   async function startRound() {
     try {
@@ -353,12 +373,19 @@ export default function AdminMainPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end opacity-100">
           <div>
-            <label className="block text-sm font-semibold text-gray-200 mb-1">Duration (seconds)</label>
+            <label className="block text-sm font-semibold text-gray-200 mb-1">Duration (seconds, min 5)</label>
             <input
               type="number"
               min={5}
               value={duration}
-              onChange={(e) => setDuration(Math.max(5, Number(e.target.value || 0)))}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setDuration(isNaN(val) ? 5 : val);
+              }}
+              onBlur={(e) => {
+                const val = Number(e.target.value);
+                if (val < 5) setDuration(5);
+              }}
               disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
               className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
             />

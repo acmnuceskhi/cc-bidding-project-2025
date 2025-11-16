@@ -183,6 +183,7 @@ export default function ProjectorDisplay() {
   const teamRef = useRef<Team | null>(null);
   const bidSoundRef = useRef<HTMLAudioElement | null>(null);
   const winnerSoundRef = useRef<HTMLAudioElement | null>(null);
+  const fetchDataRef = useRef<(() => Promise<void>) | null>(null);
 
   // Socket.IO integration for real-time updates
   const { socket, auctionState } = useSocket();
@@ -207,31 +208,8 @@ export default function ProjectorDisplay() {
 
     // Fallbacks
     return "C_A_LIVE_IDLE";
-  }, [auctionState?.auctionStartTime, auctionState?.auctionEndTime, auctionState?.currentRound, auctionState?.currentRoundStartTime, auctionState?.currentRoundEndTime]);
+  }, [auctionState]);
 
-  // Re-evaluate phase every second and update timeLeft for C-D and A/B countdowns
-  useEffect(() => {
-    const tick = () => {
-      const now = Date.now();
-      const newPhase = computePhase();
-      setPhase((prev) => prev !== newPhase ? newPhase : prev);
-
-      if (newPhase === "C_D_LIVE_ACTIVE") {
-        const endMs = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
-        setTimeLeft(endMs ? Math.max(0, endMs - now) : 0);
-      } else if (newPhase === "A_NOT_STARTED") {
-        const aStart = auctionState?.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
-        setTimeLeft(aStart ? Math.max(0, aStart - now) : 0);
-      } else {
-        setTimeLeft(0);
-      }
-    };
-
-    const id = setInterval(tick, 1000);
-    tick();
-    return () => clearInterval(id);
-  }, [computePhase, auctionState?.currentRoundEndTime, auctionState?.auctionStartTime]);
-  
   useEffect(() => {
     teamRef.current = team;
   }, [team]);
@@ -250,7 +228,42 @@ export default function ProjectorDisplay() {
     }
   }, []);
 
-  const fetchData = async () => {
+  // Re-evaluate phase every second and update timeLeft for C-D and A/B countdowns
+  useEffect(() => {
+    const tick = () => {
+      const now = Date.now();
+      const newPhase = computePhase();
+      const prevPhase = phase;
+      
+      if (prevPhase !== newPhase) {
+        setPhase(newPhase);
+        // When transitioning to C_C (round ended), fetch winner data
+        if (newPhase === "C_C_LIVE_ENDED" && prevPhase === "C_D_LIVE_ACTIVE") {
+          fetchDataRef.current?.();
+        }
+        // When transitioning to C_B or C_D, fetch team data
+        if ((newPhase === "C_B_LIVE_PRESTART" || newPhase === "C_D_LIVE_ACTIVE") && prevPhase !== newPhase) {
+          fetchDataRef.current?.();
+        }
+      }
+
+      if (newPhase === "C_D_LIVE_ACTIVE") {
+        const endMs = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
+        setTimeLeft(endMs ? Math.max(0, endMs - now) : 0);
+      } else if (newPhase === "A_NOT_STARTED") {
+        const aStart = auctionState?.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+        setTimeLeft(aStart ? Math.max(0, aStart - now) : 0);
+      } else {
+        setTimeLeft(0);
+      }
+    };
+
+    const id = setInterval(tick, 1000);
+    tick();
+    return () => clearInterval(id);
+  }, [computePhase, auctionState?.currentRoundEndTime, auctionState?.auctionStartTime, phase]);
+
+  const fetchData = useCallback(async () => {
     try {
       // Fetch houses first
       let housesData: House[] = [];
@@ -271,6 +284,7 @@ export default function ProjectorDisplay() {
       const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
       const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
       const isActive = !!(rStart && rEnd && now >= rStart && now < rEnd);
+      
       if (isActive && roundId) {
         // Fetch team directly using teamId (round-less)
         try {
@@ -331,6 +345,8 @@ export default function ProjectorDisplay() {
           });
         } catch {}
       } else {
+        // Clear bid states when round is not active
+        setHouseBidStates({});
         setTimeLeft(0);
       }
       // If ended phase, build winner board from current round (fallback by bids)
@@ -379,95 +395,116 @@ export default function ProjectorDisplay() {
     } catch (error) {
       console.error("Error fetching data:", error);
     }
-  };
+  }, [auctionState, computePhase]);
 
   useEffect(() => {
-    // Initial hydrate
-    fetchData().catch(() => {});
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
 
-    // Listen to socket events for real-time updates (no polling)
-    if (socket) {
-      const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
-        // Immediately update bid state when a bid is placed
-        if (data.roundId === auctionState?.currentRound) {
-          setHouseBidStates((prevStates) => {
-            const houseId = data.houseId;
-            const prevState = prevStates[houseId];
-            
-            if (!prevState || prevState.status === "no-bid") {
-              // First bid for this house
-              if (bidSoundRef.current) {
-                try {
-                  bidSoundRef.current.currentTime = 0;
-                  void bidSoundRef.current.play();
-                } catch (e) {
-                  console.warn("Bid sound play failed", e);
-                }
-              }
-              
-              const newState: HouseBidState = {
-                status: "bid-placed",
-                showFlash: true,
-              };
-              
-              setTimeout(() => {
-                setHouseBidStates((prev) => ({
-                  ...prev,
-                  [houseId]: { ...prev[houseId], showFlash: false }
-                }));
-              }, 2000);
-              
-              return { ...prevStates, [houseId]: newState };
-            } else {
-              // Bid updated
-              if (bidSoundRef.current) {
-                try {
-                  bidSoundRef.current.currentTime = 0;
-                  void bidSoundRef.current.play();
-                } catch (e) {
-                  console.warn("Bid sound play failed", e);
-                }
-              }
-              
-              const newState: HouseBidState = {
-                status: "bid-updated",
-                showFlash: true,
-                previousAmount: prevState.previousAmount,
-              };
-              
-              setTimeout(() => {
-                setHouseBidStates((prev) => ({
-                  ...prev,
-                  [houseId]: { ...prev[houseId], showFlash: false }
-                }));
-              }, 2000);
-              
-              return { ...prevStates, [houseId]: newState };
-            }
-          });
+  // Initial data load
+  useEffect(() => {
+    let mounted = true;
+    const loadInitialData = async () => {
+      if (mounted) {
+        await fetchData().catch(() => {});
+      }
+    };
+    loadInitialData();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [fetchData]);
+
+  // Socket event listeners
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
+      // Immediately update bid state when a bid is placed
+      if (data.roundId === auctionState?.currentRound) {
+        setHouseBidStates((prevStates) => {
+          const houseId = data.houseId;
+          const prevState = prevStates[houseId];
           
-          // Also trigger a data refresh to get latest bid amounts
-          fetchData().catch(() => {});
-        }
-      };
-
-      const handleAuctionState = () => {
-        // Refresh on state updates
+          if (!prevState || prevState.status === "no-bid") {
+            // First bid for this house
+            if (bidSoundRef.current) {
+              try {
+                bidSoundRef.current.currentTime = 0;
+                void bidSoundRef.current.play();
+              } catch (e) {
+                console.warn("Bid sound play failed", e);
+              }
+            }
+            
+            const newState: HouseBidState = {
+              status: "bid-placed",
+              showFlash: true,
+            };
+            
+            setTimeout(() => {
+              setHouseBidStates((prev) => ({
+                ...prev,
+                [houseId]: { ...prev[houseId], showFlash: false }
+              }));
+            }, 2000);
+            
+            return { ...prevStates, [houseId]: newState };
+          } else {
+            // Bid updated
+            if (bidSoundRef.current) {
+              try {
+                bidSoundRef.current.currentTime = 0;
+                void bidSoundRef.current.play();
+              } catch (e) {
+                console.warn("Bid sound play failed", e);
+              }
+            }
+            
+            const newState: HouseBidState = {
+              status: "bid-updated",
+              showFlash: true,
+              previousAmount: prevState.previousAmount,
+            };
+            
+            setTimeout(() => {
+              setHouseBidStates((prev) => ({
+                ...prev,
+                [houseId]: { ...prev[houseId], showFlash: false }
+              }));
+            }, 2000);
+            
+            return { ...prevStates, [houseId]: newState };
+          }
+        });
+        
+        // Also trigger a data refresh to get latest bid amounts
         fetchData().catch(() => {});
-      };
+      }
+    };
 
-      socket.on("bid-notification", handleBidNotification);
-      socket.on("auction-state", handleAuctionState);
+    const handleAuctionState = () => {
+      // Refresh on state updates
+      fetchData().catch(() => {});
+    };
 
-      return () => {
-        socket.off("bid-notification", handleBidNotification);
-        socket.off("auction-state", handleAuctionState);
-      };
-    }
+    const handleRoundEnded = () => {
+      console.log('[PROJECTOR] Round ended, fetching winner data');
+      // Trigger immediate data fetch to show winner screen
+      fetchData().catch(() => {});
+    };
 
-    return () => {};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, auctionState?.currentRound]);
+    socket.on("bid-notification", handleBidNotification);
+    socket.on("auction-state", handleAuctionState);
+    socket.on("round-ended", handleRoundEnded);
+
+    return () => {
+      socket.off("bid-notification", handleBidNotification);
+      socket.off("auction-state", handleAuctionState);
+      socket.off("round-ended", handleRoundEnded);
+    };
+  }, [socket, auctionState?.currentRound, fetchData]);
 
   const formatTime = (milliseconds: number) => {
     const seconds = Math.floor(milliseconds / 1000);

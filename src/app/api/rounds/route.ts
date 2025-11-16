@@ -44,12 +44,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prevent creating new round if team already finalized (has round.finalized = true)
+    // Prevent creating new round if team already has ANY round
+    // (scheduled, active, or completed) - each team should have exactly one round
     const existingRounds = await Rounds.getByTeam(teamId);
-    const hasFinalized = existingRounds.some((r) => r.finalized === true);
-    if (hasFinalized) {
+    if (existingRounds.length > 0) {
       return NextResponse.json(
-        { error: "Cannot create new round: team already assigned" },
+        { error: "Cannot create new round: team already has a round" },
         { status: 400 }
       );
     }

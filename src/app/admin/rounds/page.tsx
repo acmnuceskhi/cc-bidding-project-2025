@@ -75,8 +75,8 @@ export default function RoundsPage() {
     try {
       setLoading(true);
 
-      // Fetch rounds
-      const roundsRes = await fetchWithAuth("/api/rounds");
+      // Fetch rounds with no-store to avoid stale cache
+      const roundsRes = await fetchWithAuth("/api/rounds", { cache: "no-store" });
       const roundsData: filteredRound[] = await roundsRes.json();
 
       // Ensure roundsData is an array
@@ -87,10 +87,10 @@ export default function RoundsPage() {
         return;
       }
 
-      // Fetch teams and houses
+      // Fetch teams and houses with no-store
       const [teamsRes, housesRes] = await Promise.all([
-        fetchWithAuth("/api/teams"),
-        fetchWithAuth("/api/houses"),
+        fetchWithAuth("/api/teams", { cache: "no-store" }),
+        fetchWithAuth("/api/houses", { cache: "no-store" }),
       ]);
 
       const teamsData: filteredTeam[] =
@@ -150,7 +150,7 @@ export default function RoundsPage() {
           status,
           timerEnd: timerEndDate,
           winningBid: round.winningBid,
-          winnerHouse: house?.name ?? "Unknown",
+          winnerHouse: house?.name ?? undefined, // Use undefined instead of "Unknown" for no winner
         };
       });
 
@@ -210,15 +210,31 @@ export default function RoundsPage() {
   };
 
   const handleReStartRound = async (roundId: string) => {
-    const res = await fetchWithAuth(`/api/rounds/${roundId}/restart`, {
-      method: "POST",
-    });
-    const response = await res.json();
-    if (response.canRestart === true) {
-      await fetchWithAuth(`/api/rounds/${roundId}/start`, { method: "POST" });
-      await fetchRounds();
+    try {
+      const res = await fetchWithAuth(`/api/rounds/${roundId}/restart`, {
+        method: "POST",
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Failed to restart round: ${error.error || 'Unknown error'}`);
+        return;
+      }
+      
+      const response = await res.json();
+      
+      if (response.success) {
+        alert(`Round reset successfully! ${response.message || ''}\nBids cleared: ${response.bidsCleared}\nAmount refunded: $${response.totalRefundAmount}\n\nThe round is now available to start from Admin Main.`);
+        // Small delay to ensure DB updates propagate
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await fetchRounds();
+      } else {
+        alert(`Could not restart: ${response.message || 'Round not in completed state'}`);
+      }
+    } catch (error) {
+      console.error('Restart error:', error);
+      alert('Failed to restart round');
     }
-    await fetchRounds();
   };
 
   const handleViewDetails = (round: RoundWithDetails) => {

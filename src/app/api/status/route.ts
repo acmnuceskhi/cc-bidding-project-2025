@@ -7,10 +7,22 @@ import { Config } from "@/lib/models/config";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { getSocketInstance } from "@/lib/socket-instance";
 
+interface PhaseCounts {
+  pass1: { total: number; scheduled: number; active: number; completed: number };
+  pass2: { total: number; scheduled: number; active: number; completed: number };
+}
+
+interface UnsoldTeam {
+  teamId: string;
+  rank: number;
+  batch: string | null;
+  memberCount: number;
+}
+
 // Simple in-memory cache for phase counts and unsold teams (30-second TTL)
 let cache: {
-  phaseCounts: any;
-  unsoldTeams: any[];
+  phaseCounts: PhaseCounts;
+  unsoldTeams: UnsoldTeam[];
   participants: Participant[];
   timestamp: number;
 } | null = null;
@@ -24,9 +36,9 @@ async function getCachedData() {
   }
 
   const allParticipants = await Participants.getAll();
-  const unsoldTeams = await Teams.getAll().then((list) => list.filter((t: any) => !t.houseId));
+  const unsoldTeams = await Teams.getAll().then((list) => list.filter((t) => !t.houseId));
 
-  const counts: any = {
+  const counts: PhaseCounts = {
     pass1: { total: 0, scheduled: 0, active: 0, completed: 0 },
     pass2: { total: 0, scheduled: 0, active: 0, completed: 0 },
   };
@@ -40,8 +52,8 @@ async function getCachedData() {
 
   cache = {
     phaseCounts: counts,
-    unsoldTeams: unsoldTeams.map((t: any) => ({
-      teamId: t._id?.toString(),
+    unsoldTeams: unsoldTeams.map((t) => ({
+      teamId: t._id?.toString() || "",
       rank: t.rank,
       batch: t.batch ?? null,
       memberCount: getMemberCount(t._id?.toString() || ""),
@@ -65,23 +77,29 @@ export async function GET() {
         .length;
     };
     // Team-based active state: use cfg.currentRound as teamId
+    // BUT validate that we're actually within the round window
+    const now = Date.now();
     const activeTeamId = cfg.currentRound || "";
-    let team = null as any;
+    const startMs = cfg.currentRoundStartTime ? new Date(cfg.currentRoundStartTime).getTime() : null;
+    const endMs = cfg.currentRoundEndTime ? new Date(cfg.currentRoundEndTime).getTime() : null;
+    const isActuallyActive = !!(activeTeamId && startMs && endMs && now >= startMs && now < endMs);
+    
+    let team: { teamId: string; rank: number; batch: string | null; memberCount: number; successfulAttempts?: number; totalPoints?: number } | null = null;
     let bidsPlaced: Array<{ houseId: string; amount: number }> = [];
     let timerRemaining = 0;
     let timerEndIso: string | null = null;
 
-    if (activeTeamId) {
+    if (isActuallyActive) {
       try {
         const t = await Teams.getById(activeTeamId);
         if (t) {
           team = {
-            teamId: t._id?.toString(),
+            teamId: t._id?.toString() || "",
             rank: t.rank,
             batch: t.batch ?? null,
             memberCount: getMemberCount(t._id?.toString() || ""),
-            successfulAttempts: (t as any).successfulAttempts,
-            totalPoints: (t as any).totalPoints,
+            successfulAttempts: (t as { successfulAttempts?: number }).successfulAttempts,
+            totalPoints: (t as { totalPoints?: number }).totalPoints,
           };
         }
       } catch { }
@@ -94,17 +112,15 @@ export async function GET() {
         }));
       } catch { }
 
-      const now = Date.now();
-      const endMs = cfg.currentRoundEndTime ? new Date(cfg.currentRoundEndTime).getTime() : null;
       timerRemaining = endMs ? Math.max(0, Math.floor((endMs - now) / 1000)) : 0;
       timerEndIso = cfg.currentRoundEndTime ? new Date(cfg.currentRoundEndTime).toISOString() : null;
     }
 
     return NextResponse.json({
       // Back-compat: roundId now carries teamId
-      roundId: activeTeamId || null,
+      roundId: isActuallyActive ? activeTeamId : null,
       team,
-      roundStatus: activeTeamId ? "active" : "idle",
+      roundStatus: isActuallyActive ? "active" : "idle",
       roundNumber: undefined,
       timerRemaining,
       timerEnd: timerEndIso,
