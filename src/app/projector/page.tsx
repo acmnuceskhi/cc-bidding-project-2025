@@ -12,6 +12,9 @@ interface Team {
   successfulAttempts?: number;
   totalPoints?: number;
   timeTaken?: number;
+  totalPenalty?: number;
+  members?: Array<{ name: string; participantId?: string; picture?: string | null }>;
+  name?: string | null;
 }
 
 interface WinnerData {
@@ -258,6 +261,9 @@ export default function ProjectorDisplay() {
       if (newPhase === "C_D_LIVE_ACTIVE") {
         const endMs = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
         setTimeLeft(endMs ? Math.max(0, endMs - now) : 0);
+      } else if (newPhase === "C_B_LIVE_PRESTART") {
+        const rStartMs = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+        setTimeLeft(rStartMs ? Math.max(0, rStartMs - now) : 0);
       } else if (newPhase === "A_NOT_STARTED") {
         const aStart = auctionState?.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
         setTimeLeft(aStart ? Math.max(0, aStart - now) : 0);
@@ -293,20 +299,73 @@ export default function ProjectorDisplay() {
       const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
       const isActive = !!(rStart && rEnd && now >= rStart && now < rEnd);
       
+      if (roundId) {
+        // Fetch team even in prestart so projector has data early
+        const beforeStart = rStart && now < rStart;
+        const duringActive = isActive;
+        if (beforeStart || duringActive) {
+          try {
+            let enrichedTeam: any = null;
+            const listRes = await fetch(`/api/teams`, { cache: "no-store" });
+            if (listRes.ok) {
+              const allTeams = await listRes.json();
+              enrichedTeam = allTeams.find((t: { teamId: string }) => t.teamId === roundId) || null;
+            }
+            if (!enrichedTeam) {
+              const teamRes = await fetch(`/api/teams/${roundId}`, { cache: "no-store" });
+              if (teamRes.ok) {
+                enrichedTeam = await teamRes.json();
+              }
+            }
+            if (enrichedTeam) {
+              setTeam({
+                teamId: enrichedTeam.teamId,
+                rank: enrichedTeam.rank,
+                batch: enrichedTeam.batch,
+                memberCount: enrichedTeam.memberCount,
+                successfulAttempts: enrichedTeam.successfulAttempts,
+                totalPoints: enrichedTeam.totalPoints,
+                totalPenalty: enrichedTeam.totalPenalty,
+                timeTaken: undefined,
+                members: enrichedTeam.members || [],
+                name: enrichedTeam.name || null,
+              });
+            }
+            if (duringActive) {
+              lastCompletedWinnerRef.current = null;
+            }
+          } catch {}
+        }
+      }
+
       if (isActive && roundId) {
-        // Fetch team directly using teamId (round-less)
+        // Fetch enriched team data (public list includes members & stats)
         try {
-          const teamRes = await fetch(`/api/teams/${roundId}`, { cache: "no-store" });
-          if (teamRes.ok) {
-            const t = await teamRes.json();
+          let enrichedTeam: any = null;
+          const listRes = await fetch(`/api/teams`, { cache: "no-store" });
+          if (listRes.ok) {
+            const allTeams = await listRes.json();
+            enrichedTeam = allTeams.find((t: { teamId: string }) => t.teamId === roundId) || null;
+          }
+          // Fallback to single team endpoint (may require auth) if not found
+          if (!enrichedTeam) {
+            const teamRes = await fetch(`/api/teams/${roundId}`, { cache: "no-store" });
+            if (teamRes.ok) {
+              enrichedTeam = await teamRes.json();
+            }
+          }
+          if (enrichedTeam) {
             setTeam({
-              teamId: t.teamId,
-              rank: t.rank,
-              batch: t.batch,
-              memberCount: t.memberCount,
-              successfulAttempts: t.successfulAttempts,
-              totalPoints: t.totalPoints,
+              teamId: enrichedTeam.teamId,
+              rank: enrichedTeam.rank,
+              batch: enrichedTeam.batch,
+              memberCount: enrichedTeam.memberCount,
+              successfulAttempts: enrichedTeam.successfulAttempts,
+              totalPoints: enrichedTeam.totalPoints,
+              totalPenalty: enrichedTeam.totalPenalty,
               timeTaken: undefined,
+              members: enrichedTeam.members || [],
+              name: enrichedTeam.name || null,
             });
           }
           lastCompletedWinnerRef.current = null;
@@ -596,9 +655,34 @@ export default function ProjectorDisplay() {
   if (phase === "C_B_LIVE_PRESTART") {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
-        <div className="text-3xl">Next round starting soon</div>
-        <div className="text-6xl font-bold">{Math.max(0, Math.floor(timeLeft / 1000))}s</div>
-        <div className="text-xl">Team #{team?.rank ?? "?"} • Batch {team?.batch ?? "N/A"} • {team?.memberCount ?? 0} members</div>
+        <div className="text-4xl font-bold mb-2">Next Round Incoming</div>
+        <div className="text-6xl font-extrabold drop-shadow-[0_0_25px_#FFD700] text-[#FFD700]">
+          {Math.max(0, Math.floor(timeLeft / 1000))}s
+        </div>
+        <div className="text-2xl mt-4">
+          {team?.teamId ? (
+            team?.name ? <span className="font-semibold">{team.name}</span> : <span className="font-semibold">Team #{team?.rank ?? "?"}</span>
+          ) : (
+            <span className="italic text-gray-400">Loading team…</span>
+          )}
+        </div>
+        {team?.members && team.members.length > 0 && (
+          <div className="text-lg text-white/80 flex flex-wrap justify-center max-w-3xl px-6">
+            {team.members.map((m, idx) => (
+              <span key={m.participantId || idx} className="mx-2">
+                {m.name}
+                {idx < (team.members?.length || 0) - 1 && <span className="mx-2 text-[#FFD700]">•</span>}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="text-lg mt-3 text-white/70 flex flex-wrap justify-center gap-4">
+          {team?.batch && <span>📚 Batch {team.batch}</span>}
+          {typeof team?.memberCount === 'number' && <span>👥 {team.memberCount} member{(team.memberCount||0) !== 1 ? 's' : ''}</span>}
+          {typeof team?.successfulAttempts === 'number' && <span>✅ {team.successfulAttempts} solved</span>}
+          {typeof team?.totalPoints === 'number' && <span>⭐ {team.totalPoints} pts</span>}
+          {typeof team?.totalPenalty === 'number' && <span>⏱️ {team.totalPenalty} penalty</span>}
+        </div>
       </div>
     );
   }
@@ -783,13 +867,32 @@ export default function ProjectorDisplay() {
                 👥 CURRENT TEAM
               </h2>
               <div className="flex flex-col items-center gap-4">
-                <div className="w-40 h-40 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.6)]">
-                  <span className="text-8xl font-bold text-black">#{team?.rank || "?"}</span>
+                <div className="w-48 h-48 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.6)] p-4">
+                  {team?.name ? (
+                    <span className="text-3xl font-extrabold text-black text-center leading-tight">
+                      {team.name}
+                    </span>
+                  ) : (
+                    <span className="text-8xl font-bold text-black">#{team?.rank || "?"}</span>
+                  )}
                 </div>
                 <div className="text-center">
                   <h3 className="text-4xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] mb-2">
-                    Team #{team?.rank || "?"}
+                    {team?.name || `Team #${team?.rank || "?"}`}
                   </h3>
+                  
+                  {/* Team Members */}
+                  {team?.members && team.members.length > 0 && (
+                    <div className="text-lg text-white/90 mb-3">
+                      {team.members.map((member: { name: string; participantId?: string }, idx: number) => (
+                        <span key={member.participantId || idx}>
+                          {member.name}
+                          {idx < team.members!.length - 1 && <span className="mx-2">•</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
                   <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
                     <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
                       📚 Batch {team?.batch}
@@ -798,16 +901,21 @@ export default function ProjectorDisplay() {
                       👥 {team?.memberCount || 0} members
                     </span>
                   </div>
-                  {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
-                    <div className="flex justify-center gap-3 mt-3">
+                  {team && (team.successfulAttempts !== undefined || team.totalPoints !== undefined || team.totalPenalty !== undefined) && (
+                    <div className="flex flex-wrap justify-center gap-2 mt-3">
                       {team.successfulAttempts !== undefined && (
-                        <span className="bg-green-500/20 text-green-300 px-4 py-2 rounded-lg font-semibold border border-green-500/40">
-                          ✓ {team.successfulAttempts} solved
+                        <span className="bg-green-500/20 text-green-300 px-3 py-2 rounded-lg font-semibold border border-green-500/40 text-sm">
+                          ✅ {team.successfulAttempts} solved
                         </span>
                       )}
                       {team.totalPoints !== undefined && (
-                        <span className="bg-yellow-500/20 text-yellow-300 px-4 py-2 rounded-lg font-semibold border border-yellow-500/40">
-                          ★ {team.totalPoints} pts
+                        <span className="bg-yellow-500/20 text-yellow-300 px-3 py-2 rounded-lg font-semibold border border-yellow-500/40 text-sm">
+                          ⭐ {team.totalPoints} pts
+                        </span>
+                      )}
+                      {team.totalPenalty !== undefined && (
+                        <span className="bg-red-500/20 text-red-300 px-3 py-2 rounded-lg font-semibold border border-red-500/40 text-sm">
+                          ⏱️ {team.totalPenalty} penalty
                         </span>
                       )}
                     </div>
