@@ -95,14 +95,15 @@ export default function AdminMainPage() {
     };
   }, [fetchUnsoldTeams]);
 
+  // Show all unsold teams in dropdown, including the current round's team
   const filteredTeams = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    if (!f) return teams;
-    return teams.filter((t) =>
+    const base = f ? teams.filter((t) =>
       (t.name || "").toLowerCase().includes(f) ||
       String(t.rank).includes(f) ||
       (t.batch || "").toLowerCase().includes(f)
-    );
+    ) : teams;
+    return base;
   }, [teams, filter]);
 
   const roundOngoing = useMemo(() => {
@@ -401,11 +402,15 @@ export default function AdminMainPage() {
               }`}
             >
               <option value="">-- Choose a team --</option>
-              {filteredTeams.map((t) => (
-                <option key={t.teamId} value={t.teamId}>
-                  {(t.name ? `${t.name}` : `Team #${t.rank}`)} • Batch {t.batch || "?"} • {t.memberCount || 0} members
-                </option>
-              ))}
+              {filteredTeams.map((t) => {
+                const isCurrent = t.teamId === (auctionState?.currentRound || "");
+                const label = (t.name ? `${t.name}` : `Team #${t.rank}`) + ` • Batch ${t.batch || "?"} • ${t.memberCount || 0} members`;
+                return (
+                  <option key={t.teamId} value={t.teamId} disabled={isCurrent && (roundOngoing || roundPrestart)}>
+                    {isCurrent ? `🔴 ${label} (Current Round)` : label}
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
