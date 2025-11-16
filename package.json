@@ -11,6 +11,7 @@
     "format:check": "prettier --check .",
     "test": "jest",
     "seed-test-data": "powershell -NoProfile -Command \"$env:RUN_SEED_SCRIPT='true'; npx ts-node -r tsconfig-paths/register --project tsconfig.script.json src/scripts/seed-test-data.ts\"",
+    "import-excel": "powershell -NoProfile -Command \"$env:RUN_IMPORT_SCRIPT='true'; npx ts-node -r tsconfig-paths/register --project tsconfig.script.json src/scripts/import-excel-teams.ts\"",
     "test:watch": "jest --watch",
     "init-data": "npx tsx src/scripts/init-data.ts",
     "reset-auction": "npx tsx src/scripts/reset-auction.ts",
@@ -31,14 +32,15 @@
     "react-dom": "19.2.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.16",
     "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^29.5.3",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^20",
+    "@types/node": "^20.19.25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.38.0",
