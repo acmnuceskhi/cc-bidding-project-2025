@@ -966,15 +966,15 @@ export default function HouseDashboard() {
                           key={`${b.houseId}-${idx}`}
                           className={`flex items-center justify-between px-5 py-3 rounded-xl border text-sm sm:text-base transition-all
                             ${isWinner ? 'bg-[#FFD700]/25 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.4)] font-bold text-[#FFD700]' : ''}
-                            ${!isWinner && isOwn ? 'bg-green-600/20 border-green-500 text-green-200 font-semibold shadow-[0_0_12px_rgba(34,197,94,0.4)]' : ''}
+                            ${!isWinner && isOwn ? 'bg-white/10 border-white/40 text-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.3)]' : ''}
                             ${!isWinner && !isOwn ? 'bg-white/5 border-white/10 text-white' : ''}`}
                         >
                           <div className="flex items-center gap-3">
                             <span className="opacity-60">{idx + 1}.</span>
                             <span>{b.houseName}</span>
                             {isWinner && <span className="text-[#FFD700] text-xs sm:text-sm bg-[#FFD700]/10 px-2 py-1 rounded-md border border-[#FFD700]/40">Winner</span>}
-                            {isOwn && !isWinner && <span className="text-green-300 text-xs sm:text-sm bg-green-600/20 px-2 py-1 rounded-md border border-green-500/40">Your Bid</span>}
-                            {isOwn && isWinner && <span className="text-green-300 text-xs sm:text-sm bg-green-600/30 px-2 py-1 rounded-md border border-green-500/60">You Won 🎉</span>}
+                            {isOwn && !isWinner && <span className="text-white text-xs sm:text-sm bg-white/20 px-2 py-1 rounded-md border border-white/40">Your Bid</span>}
+                            {isOwn && isWinner && <span className="text-white text-xs sm:text-sm bg-white/30 px-2 py-1 rounded-md border border-white/60">You Won 🎉</span>}
                           </div>
                           <span className={`${isWinner ? 'font-bold' : ''}`}>${b.amount}</span>
                         </div>
