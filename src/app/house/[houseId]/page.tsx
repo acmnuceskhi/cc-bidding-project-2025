@@ -61,6 +61,7 @@ export default function HouseDashboard() {
   const [phase, setPhase] = useState<Phase>("A");
   const [allBids, setAllBids] = useState<Array<{ houseId: string; houseName: string; amount: number }>>([]);
   const [housesMap, setHousesMap] = useState<Record<string, string>>({});
+  const [maxBidAmountConfig, setMaxBidAmountConfig] = useState<number | null>(null);
   // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
@@ -406,6 +407,22 @@ export default function HouseDashboard() {
     return () => {};
   }, [houseId, socket]);
   // Removed fetchData, auctionState, and activeRound from dependencies to prevent refresh loops
+
+  // Fetch global config once (maxBidAmount)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetchWithAuth("/api/config", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          const v = data?.maxBidAmount;
+          setMaxBidAmountConfig(v === null || v === undefined ? null : Number(v));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
 
   // Phase computation loop (1s) using auctionState timestamps
   useEffect(() => {
@@ -815,14 +832,19 @@ export default function HouseDashboard() {
                           type="number"
                           id="bidAmount"
                           min="1"
-                          max={house.remainingBudget}
+                          max={
+                            maxBidAmountConfig == null
+                              ? house.remainingBudget
+                              : Math.min(house.remainingBudget, maxBidAmountConfig)
+                          }
                           value={bidAmount || ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             setBidAmount(val === "" ? 0 : parseInt(val, 10));
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= house.remainingBudget) {
+                            const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
+                            if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= effectiveMax) {
                               e.preventDefault(); // Prevent form submission or other default behavior
                               console.log('[INPUT] Enter key pressed, calling placeBid');
                               placeBid();
@@ -838,16 +860,26 @@ export default function HouseDashboard() {
                             placeBid();
                           }}
                           disabled={
-                            loading ||
-                            isPlacingBid ||
-                            bidAmount <= 0 ||
-                            bidAmount > house.remainingBudget
+                            (() => {
+                              const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
+                              return (
+                                loading ||
+                                isPlacingBid ||
+                                bidAmount <= 0 ||
+                                bidAmount > effectiveMax
+                              );
+                            })()
                           }
                           className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
-                            loading ||
-                            isPlacingBid ||
-                            bidAmount <= 0 ||
-                            bidAmount > house.remainingBudget
+                            (() => {
+                              const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
+                              return (
+                                loading ||
+                                isPlacingBid ||
+                                bidAmount <= 0 ||
+                                bidAmount > effectiveMax
+                              );
+                            })()
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                               : "bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
                           }`}
@@ -859,6 +891,13 @@ export default function HouseDashboard() {
                         <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
                           <p className="text-red-300 font-bold text-base sm:text-lg">
                             ⚠️ Bid amount exceeds your remaining treasury!
+                          </p>
+                        </div>
+                      )}
+                      {maxBidAmountConfig != null && bidAmount > maxBidAmountConfig && (
+                        <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                          <p className="text-red-300 font-bold text-base sm:text-lg">
+                            ⚠️ Bid exceeds configured maximum (${maxBidAmountConfig}).
                           </p>
                         </div>
                       )}

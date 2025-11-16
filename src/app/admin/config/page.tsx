@@ -5,6 +5,7 @@ import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface AuctionConfig {
   maxTeamsPerBatch: number;
+  maxBidAmount?: number | null;
   roundDurationSeconds: number;
   countdownWarningSeconds: number;
   autoStartNextRound: boolean;
@@ -21,6 +22,7 @@ export default function ConfigPage() {
 
   // Form state - use strings for inputs to avoid parsing issues while typing
   const [maxTeamsPerBatch, setMaxTeamsPerBatch] = useState("1");
+  const [maxBidAmount, setMaxBidAmount] = useState<string>("");
   const [roundDurationSeconds, setRoundDurationSeconds] = useState("120");
   const [countdownWarningSeconds, setCountdownWarningSeconds] = useState("30");
   const [autoStartNextRound, setAutoStartNextRound] = useState(false);
@@ -69,6 +71,11 @@ export default function ConfigPage() {
       
       // Update form state - convert to strings
       setMaxTeamsPerBatch(String(data.maxTeamsPerBatch));
+      setMaxBidAmount(
+        data.maxBidAmount === null || data.maxBidAmount === undefined
+          ? ""
+          : String(data.maxBidAmount)
+      );
       setRoundDurationSeconds(String(data.roundDurationSeconds));
       setCountdownWarningSeconds(String(data.countdownWarningSeconds));
       setAutoStartNextRound(data.autoStartNextRound);
@@ -94,6 +101,8 @@ export default function ConfigPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           maxTeamsPerBatch: parseInt(maxTeamsPerBatch),
+          maxBidAmount:
+            maxBidAmount.trim() === "" ? null : parseInt(maxBidAmount, 10),
           roundDurationSeconds: parseInt(roundDurationSeconds),
           countdownWarningSeconds: parseInt(countdownWarningSeconds),
           autoStartNextRound,
@@ -112,6 +121,11 @@ export default function ConfigPage() {
         setConfig(newConfig);
         // Update form with saved values
         setMaxTeamsPerBatch(String(newConfig.maxTeamsPerBatch));
+        setMaxBidAmount(
+          newConfig.maxBidAmount === null || newConfig.maxBidAmount === undefined
+            ? ""
+            : String(newConfig.maxBidAmount)
+        );
         setRoundDurationSeconds(String(newConfig.roundDurationSeconds));
         setCountdownWarningSeconds(String(newConfig.countdownWarningSeconds));
         setAutoStartNextRound(newConfig.autoStartNextRound);
@@ -224,6 +238,27 @@ export default function ConfigPage() {
             </p>
             <p className="text-sm text-yellow-400 mt-2 font-semibold">
               ⚠️ Recommended: 1 (ensures each house gets exactly 1 team from each of the 4 batches = 4 teams total)
+            </p>
+          </div>
+
+          {/* Max Bid Amount */}
+          <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
+            <label className="block text-xl font-bold text-[#FFD700] mb-3">
+              💰 Max Bid Amount (per bid)
+            </label>
+            <p className="text-gray-300 mb-4">
+              Caps any single bid amount. Leave blank for unlimited.
+            </p>
+            <input
+              type="number"
+              min="1"
+              value={maxBidAmount}
+              onChange={(e) => setMaxBidAmount(e.target.value)}
+              placeholder="Blank = unlimited"
+              className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
+            />
+            <p className="text-sm text-gray-400 mt-2">
+              {maxBidAmount ? `Bids over $${maxBidAmount} will be rejected.` : "No limit applied."}
             </p>
           </div>
 

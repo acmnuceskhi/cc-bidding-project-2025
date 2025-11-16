@@ -98,6 +98,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Enforce per-bid maximum if configured
+    if (
+      cfg.maxBidAmount !== null &&
+      cfg.maxBidAmount !== undefined &&
+      amount > cfg.maxBidAmount
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "MAX_BID_EXCEEDED",
+          message: `Bid exceeds configured maximum of ${cfg.maxBidAmount}`,
+        },
+        { status: 409 }
+      );
+    }
+
     // Get house ID from user payload
     // console.log("JWT Payload:", payload);
     const houseId = payload.houseId;

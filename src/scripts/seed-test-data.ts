@@ -45,29 +45,44 @@ export async function initializeData() {
       );
     }
 
-    console.log("⚠️  WARNING: This will DELETE existing data for sample batches!");
-    console.log("Excel imported teams (batches 2023 & 2024) will be preserved.");
+    console.log(
+      "⚠️  WARNING: This will DELETE existing data for sample batches!"
+    );
+    console.log(
+      "Excel imported teams (batches 2023 & 2024) will be preserved."
+    );
     console.log("Press Ctrl+C within 3 seconds to cancel...");
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Remove previous data for SAMPLE batches only (preserve Excel imports for 2023 & 2024)
     const sampleBatchYears = ["2025", "2022"];
-    
+
     // Delete teams from sample batches only
-    const teamsToDelete = await db.collection("teams").find({ 
-      batch: { $in: sampleBatchYears } 
-    }).toArray();
-    const teamIdsToDelete = teamsToDelete.map(t => t._id);
-    
+    const teamsToDelete = await db
+      .collection("teams")
+      .find({
+        batch: { $in: sampleBatchYears },
+      })
+      .toArray();
+    const teamIdsToDelete = teamsToDelete.map((t) => t._id);
+
     if (teamIdsToDelete.length > 0) {
-      await db.collection("teams").deleteMany({ _id: { $in: teamIdsToDelete } });
-      await db.collection("participants").deleteMany({ teamId: { $in: teamIdsToDelete } });
-      await db.collection("rounds").deleteMany({ teamId: { $in: teamIdsToDelete } });
-      console.log(`✅ Cleared ${teamIdsToDelete.length} sample teams and their participants/rounds.`);
+      await db
+        .collection("teams")
+        .deleteMany({ _id: { $in: teamIdsToDelete } });
+      await db
+        .collection("participants")
+        .deleteMany({ teamId: { $in: teamIdsToDelete } });
+      await db
+        .collection("rounds")
+        .deleteMany({ teamId: { $in: teamIdsToDelete } });
+      console.log(
+        `✅ Cleared ${teamIdsToDelete.length} sample teams and their participants/rounds.`
+      );
     } else {
       console.log("✅ No previous sample teams to clear.");
     }
-    
+
     // Clear config, houses, bids, and users (these need to be reset)
     await db.collection("config").deleteMany({});
     await db.collection("houses").deleteMany({});
@@ -78,6 +93,7 @@ export async function initializeData() {
     // Initialize global auction configuration
     await Config.update({
       maxTeamsPerBatch: 3,
+      maxBidAmount: null,
       roundDurationSeconds: 60,
       countdownWarningSeconds: 10,
       autoStartNextRound: false,
@@ -107,29 +123,120 @@ export async function initializeData() {
 
     // Sample team data generation helpers
     const firstNames = [
-      "Ahmed", "Ali", "Hassan", "Muhammad", "Omar", "Zain", "Bilal", "Usman", "Abdullah", "Ibrahim",
-      "Fatima", "Ayesha", "Zainab", "Maryam", "Sarah", "Hira", "Amna", "Laiba", "Mahnoor", "Alisha",
-      "Hamza", "Arslan", "Talha", "Umer", "Faisal", "Kamran", "Junaid", "Saad", "Waleed", "Shahzad",
-      "Aiza", "Nimra", "Sana", "Rabia", "Khadija", "Hafsa", "Bushra", "Maria", "Nida", "Zara"
+      "Ahmed",
+      "Ali",
+      "Hassan",
+      "Muhammad",
+      "Omar",
+      "Zain",
+      "Bilal",
+      "Usman",
+      "Abdullah",
+      "Ibrahim",
+      "Fatima",
+      "Ayesha",
+      "Zainab",
+      "Maryam",
+      "Sarah",
+      "Hira",
+      "Amna",
+      "Laiba",
+      "Mahnoor",
+      "Alisha",
+      "Hamza",
+      "Arslan",
+      "Talha",
+      "Umer",
+      "Faisal",
+      "Kamran",
+      "Junaid",
+      "Saad",
+      "Waleed",
+      "Shahzad",
+      "Aiza",
+      "Nimra",
+      "Sana",
+      "Rabia",
+      "Khadija",
+      "Hafsa",
+      "Bushra",
+      "Maria",
+      "Nida",
+      "Zara",
     ];
 
     const lastNames = [
-      "Khan", "Ahmed", "Ali", "Hassan", "Hussain", "Abbas", "Raza", "Shah", "Malik", "Siddiqui",
-      "Mehdi", "Zaidi", "Naqvi", "Jafri", "Bukhari", "Rizvi", "Qureshi", "Ansari", "Baig", "Mirza",
-      "Haider", "Akbar", "Aziz", "Iqbal", "Rashid", "Tariq", "Rafiq", "Shafi", "Nadeem", "Jamil"
+      "Khan",
+      "Ahmed",
+      "Ali",
+      "Hassan",
+      "Hussain",
+      "Abbas",
+      "Raza",
+      "Shah",
+      "Malik",
+      "Siddiqui",
+      "Mehdi",
+      "Zaidi",
+      "Naqvi",
+      "Jafri",
+      "Bukhari",
+      "Rizvi",
+      "Qureshi",
+      "Ansari",
+      "Baig",
+      "Mirza",
+      "Haider",
+      "Akbar",
+      "Aziz",
+      "Iqbal",
+      "Rashid",
+      "Tariq",
+      "Rafiq",
+      "Shafi",
+      "Nadeem",
+      "Jamil",
     ];
 
     const teamPrefixes = [
-      "Team", "Squad", "Crew", "Group", "Alliance", "Unit", "Brigade", "Force", "Legion", "Troop"
+      "Team",
+      "Squad",
+      "Crew",
+      "Group",
+      "Alliance",
+      "Unit",
+      "Brigade",
+      "Force",
+      "Legion",
+      "Troop",
     ];
 
     const teamSuffixes = [
-      "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Omega", "Prime", "Nexus", "Apex",
-      "Phoenix", "Thunder", "Storm", "Lightning", "Blaze", "Frost", "Shadow", "Light", "Dawn", "Dusk"
+      "Alpha",
+      "Beta",
+      "Gamma",
+      "Delta",
+      "Epsilon",
+      "Zeta",
+      "Omega",
+      "Prime",
+      "Nexus",
+      "Apex",
+      "Phoenix",
+      "Thunder",
+      "Storm",
+      "Lightning",
+      "Blaze",
+      "Frost",
+      "Shadow",
+      "Light",
+      "Dawn",
+      "Dusk",
     ];
 
     const generateName = () => {
-      const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+      const firstName =
+        firstNames[Math.floor(Math.random() * firstNames.length)];
       const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
       return `${firstName} ${lastName}`;
     };
@@ -137,8 +244,10 @@ export async function initializeData() {
     const generateTeamName = (usedNames: Set<string>) => {
       let teamName: string;
       do {
-        const prefix = teamPrefixes[Math.floor(Math.random() * teamPrefixes.length)];
-        const suffix = teamSuffixes[Math.floor(Math.random() * teamSuffixes.length)];
+        const prefix =
+          teamPrefixes[Math.floor(Math.random() * teamPrefixes.length)];
+        const suffix =
+          teamSuffixes[Math.floor(Math.random() * teamSuffixes.length)];
         teamName = `${prefix} ${suffix}`;
       } while (usedNames.has(teamName));
       usedNames.add(teamName);
@@ -149,19 +258,23 @@ export async function initializeData() {
     // Real qualified teams for 2023 and 2024 will be imported via import-excel script
     const teamIds: ObjectId[] = [];
     const usedTeamNames = new Set<string>();
-    
+
     // Batches: 12 Freshmen (2025) + 12 Seniors (2022) = 24 teams total
     const sampleBatches = [
       { year: "2025", count: 12 }, // Freshmen
       { year: "2022", count: 12 }, // Seniors
     ];
-    
-    console.log("Creating 24 sample teams: 12 freshmen (2025) + 12 seniors (2022)");
-    console.log("(Real qualified teams for 2023 and 2024 should be imported via Excel)");
-    
+
+    console.log(
+      "Creating 24 sample teams: 12 freshmen (2025) + 12 seniors (2022)"
+    );
+    console.log(
+      "(Real qualified teams for 2023 and 2024 should be imported via Excel)"
+    );
+
     for (const { year, count } of sampleBatches) {
       console.log(`  Generating ${count} teams for batch ${year}...`);
-      
+
       for (let i = 0; i < count; i++) {
         const teamName = generateTeamName(usedTeamNames);
         const successfulAttempts = Math.floor(Math.random() * 8) + 3; // 3-10 solved (similar to Excel data)
@@ -191,10 +304,10 @@ export async function initializeData() {
     let participantIndex = 0;
     let currentBatchIndex = 0;
     let teamsInCurrentBatch = 0;
-    
+
     for (let teamIdx = 0; teamIdx < teamIds.length; teamIdx++) {
       const teamId = teamIds[teamIdx];
-      
+
       // Determine which batch this team belongs to
       if (teamsInCurrentBatch >= sampleBatches[currentBatchIndex].count) {
         currentBatchIndex++;
@@ -202,10 +315,10 @@ export async function initializeData() {
       }
       const batch = sampleBatches[currentBatchIndex].year;
       teamsInCurrentBatch++;
-      
+
       const twoDigitYear = batch.substring(2);
       const membersPerTeam = 3;
-      
+
       for (let memberIdx = 0; memberIdx < membersPerTeam; memberIdx++) {
         let rollNumber: string;
         let attempts = 0;
@@ -239,22 +352,26 @@ export async function initializeData() {
     // Recalculate team ranks based on performance (batch-wise)
     // Recalculate team ranks based on performance (batch-wise)
     console.log("\n" + "=".repeat(60));
-    console.log("🔄 Recalculating team ranks for sample batches (2025 & 2022)...");
-    
+    console.log(
+      "🔄 Recalculating team ranks for sample batches (2025 & 2022)..."
+    );
+
     // Only rank sample batches (reuse the constant from earlier)
     const allTeams = await Teams.getAll();
-    const sampleTeams = allTeams.filter(team => sampleBatchYears.includes(team.batch || ""));
-    
+    const sampleTeams = allTeams.filter((team) =>
+      sampleBatchYears.includes(team.batch || "")
+    );
+
     // Group teams by batch
     const teamsByBatch: { [batch: string]: typeof sampleTeams } = {};
-    sampleTeams.forEach(team => {
+    sampleTeams.forEach((team) => {
       const batch = team.batch || "unknown";
       if (!teamsByBatch[batch]) {
         teamsByBatch[batch] = [];
       }
       teamsByBatch[batch].push(team);
     });
-    
+
     // Rank teams within each batch
     for (const batch in teamsByBatch) {
       const batchTeams = teamsByBatch[batch];
@@ -270,7 +387,7 @@ export async function initializeData() {
         // Tertiary: highest total points
         return (b.totalPoints || 0) - (a.totalPoints || 0);
       });
-      
+
       // Assign ranks within batch
       for (let idx = 0; idx < batchTeams.length; idx++) {
         const team = batchTeams[idx];
@@ -328,7 +445,7 @@ export async function initializeData() {
       console.log(`   Password: captain123\n`);
     });
     console.log("=".repeat(60) + "\n");
-    
+
     return { success: true };
   } catch (err) {
     console.error("❌ Error initializing test data:", err);

@@ -11,6 +11,8 @@ export interface AuctionConfig {
 
   // Team and batch constraints
   maxTeamsPerBatch: number; // Maximum number of teams from a single batch that a house can win
+  // Per-bid hard cap; if null/undefined => unlimited
+  maxBidAmount?: number | null;
 
   // Round timing settings
   roundDurationSeconds: number; // Duration of each bidding round in seconds
@@ -38,6 +40,7 @@ const DEFAULT_CONFIG: AuctionConfig = {
 
   // Team and batch constraints
   maxTeamsPerBatch: 1, // Each house can win only 1 team per batch (22k, 23k, 24k, 25k)
+  maxBidAmount: null,
 
   // Round timing settings
   roundDurationSeconds: 120, // 2 minutes per round
@@ -82,7 +85,11 @@ export const Config = {
         const d = new Date(v);
         return isNaN(d.getTime()) ? null : d;
       }
-      if (v && typeof v === "object" && typeof (v as any).toDate === "function") {
+      if (
+        v &&
+        typeof v === "object" &&
+        typeof (v as any).toDate === "function"
+      ) {
         try {
           const d = (v as any).toDate();
           return d instanceof Date ? d : null;
@@ -97,8 +104,10 @@ export const Config = {
       ...(config as AuctionConfig),
       auctionStartTime: normalizeDate((config as any).auctionStartTime) ?? null,
       auctionEndTime: normalizeDate((config as any).auctionEndTime) ?? null,
-      currentRoundStartTime: normalizeDate((config as any).currentRoundStartTime) ?? null,
-      currentRoundEndTime: normalizeDate((config as any).currentRoundEndTime) ?? null,
+      currentRoundStartTime:
+        normalizeDate((config as any).currentRoundStartTime) ?? null,
+      currentRoundEndTime:
+        normalizeDate((config as any).currentRoundEndTime) ?? null,
     };
 
     return normalized;
@@ -130,7 +139,9 @@ export const Config = {
     };
 
     const normalized: Partial<AuctionConfig> = { ...updateFields };
-    if (Object.prototype.hasOwnProperty.call(updateFields, "auctionStartTime")) {
+    if (
+      Object.prototype.hasOwnProperty.call(updateFields, "auctionStartTime")
+    ) {
       (normalized as any).auctionStartTime = normalizeDate(
         (updateFields as any).auctionStartTime
       );
@@ -151,10 +162,7 @@ export const Config = {
       );
     }
     if (
-      Object.prototype.hasOwnProperty.call(
-        updateFields,
-        "currentRoundEndTime"
-      )
+      Object.prototype.hasOwnProperty.call(updateFields, "currentRoundEndTime")
     ) {
       (normalized as any).currentRoundEndTime = normalizeDate(
         (updateFields as any).currentRoundEndTime
@@ -187,14 +195,29 @@ export const Config = {
   /**
    * Get only the five authoritative auction state fields.
    */
-  async getAuctionState(): Promise<Pick<AuctionConfig,
-    | "currentRound"
-    | "auctionStartTime"
-    | "auctionEndTime"
-    | "currentRoundStartTime"
-    | "currentRoundEndTime"
-  >> {
-    const { currentRound, auctionStartTime, auctionEndTime, currentRoundStartTime, currentRoundEndTime } = await this.get();
-    return { currentRound, auctionStartTime, auctionEndTime, currentRoundStartTime, currentRoundEndTime };
+  async getAuctionState(): Promise<
+    Pick<
+      AuctionConfig,
+      | "currentRound"
+      | "auctionStartTime"
+      | "auctionEndTime"
+      | "currentRoundStartTime"
+      | "currentRoundEndTime"
+    >
+  > {
+    const {
+      currentRound,
+      auctionStartTime,
+      auctionEndTime,
+      currentRoundStartTime,
+      currentRoundEndTime,
+    } = await this.get();
+    return {
+      currentRound,
+      auctionStartTime,
+      auctionEndTime,
+      currentRoundStartTime,
+      currentRoundEndTime,
+    };
   },
 };

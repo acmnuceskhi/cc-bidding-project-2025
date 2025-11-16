@@ -10,10 +10,18 @@ export async function GET() {
     // Ensure all date fields are serialized as ISO strings or null for reliable client parsing
     const safe = {
       ...cfg,
-      auctionStartTime: cfg.auctionStartTime ? cfg.auctionStartTime.toISOString() : null,
-      auctionEndTime: cfg.auctionEndTime ? cfg.auctionEndTime.toISOString() : null,
-      currentRoundStartTime: cfg.currentRoundStartTime ? cfg.currentRoundStartTime.toISOString() : null,
-      currentRoundEndTime: cfg.currentRoundEndTime ? cfg.currentRoundEndTime.toISOString() : null,
+      auctionStartTime: cfg.auctionStartTime
+        ? cfg.auctionStartTime.toISOString()
+        : null,
+      auctionEndTime: cfg.auctionEndTime
+        ? cfg.auctionEndTime.toISOString()
+        : null,
+      currentRoundStartTime: cfg.currentRoundStartTime
+        ? cfg.currentRoundStartTime.toISOString()
+        : null,
+      currentRoundEndTime: cfg.currentRoundEndTime
+        ? cfg.currentRoundEndTime.toISOString()
+        : null,
     };
     return NextResponse.json(safe);
   } catch (error) {
@@ -48,6 +56,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const {
       maxTeamsPerBatch,
+      maxBidAmount,
       roundDurationSeconds,
       countdownWarningSeconds,
       autoStartNextRound,
@@ -91,6 +100,26 @@ export async function PUT(request: NextRequest) {
       update.roundDurationSeconds = roundDurationSeconds;
     }
 
+    // Validate maxBidAmount (null = unlimited)
+    if (maxBidAmount !== undefined) {
+      const isNull = maxBidAmount === null;
+      const isValidNumber =
+        typeof maxBidAmount === "number" &&
+        Number.isFinite(maxBidAmount) &&
+        maxBidAmount >= 1 &&
+        maxBidAmount <= 1_000_000_000; // practical upper bound
+      if (!isNull && !isValidNumber) {
+        return NextResponse.json(
+          {
+            error:
+              "maxBidAmount must be null or a number between 1 and 1000000000",
+          },
+          { status: 400 }
+        );
+      }
+      update.maxBidAmount = maxBidAmount;
+    }
+
     if (countdownWarningSeconds !== undefined) {
       if (
         typeof countdownWarningSeconds !== "number" ||
@@ -98,7 +127,9 @@ export async function PUT(request: NextRequest) {
         countdownWarningSeconds > 60
       ) {
         return NextResponse.json(
-          { error: "countdownWarningSeconds must be a number between 5 and 60" },
+          {
+            error: "countdownWarningSeconds must be a number between 5 and 60",
+          },
           { status: 400 }
         );
       }
@@ -123,7 +154,8 @@ export async function PUT(request: NextRequest) {
       ) {
         return NextResponse.json(
           {
-            error: "delayBetweenRoundsSeconds must be a number between 0 and 60",
+            error:
+              "delayBetweenRoundsSeconds must be a number between 0 and 60",
           },
           { status: 400 }
         );
@@ -143,12 +175,19 @@ export async function PUT(request: NextRequest) {
     }
 
     const isValidDateInput = (v: unknown) =>
-      v === null || v === undefined || v instanceof Date || typeof v === "string" || typeof v === "number";
+      v === null ||
+      v === undefined ||
+      v instanceof Date ||
+      typeof v === "string" ||
+      typeof v === "number";
 
     if (auctionStartTime !== undefined) {
       if (!isValidDateInput(auctionStartTime)) {
         return NextResponse.json(
-          { error: "auctionStartTime must be a Date, ISO string, number, null or undefined" },
+          {
+            error:
+              "auctionStartTime must be a Date, ISO string, number, null or undefined",
+          },
           { status: 400 }
         );
       }
@@ -157,7 +196,10 @@ export async function PUT(request: NextRequest) {
     if (auctionEndTime !== undefined) {
       if (!isValidDateInput(auctionEndTime)) {
         return NextResponse.json(
-          { error: "auctionEndTime must be a Date, ISO string, number, null or undefined" },
+          {
+            error:
+              "auctionEndTime must be a Date, ISO string, number, null or undefined",
+          },
           { status: 400 }
         );
       }
@@ -166,7 +208,10 @@ export async function PUT(request: NextRequest) {
     if (currentRoundStartTime !== undefined) {
       if (!isValidDateInput(currentRoundStartTime)) {
         return NextResponse.json(
-          { error: "currentRoundStartTime must be a Date, ISO string, number, null or undefined" },
+          {
+            error:
+              "currentRoundStartTime must be a Date, ISO string, number, null or undefined",
+          },
           { status: 400 }
         );
       }
@@ -175,7 +220,10 @@ export async function PUT(request: NextRequest) {
     if (currentRoundEndTime !== undefined) {
       if (!isValidDateInput(currentRoundEndTime)) {
         return NextResponse.json(
-          { error: "currentRoundEndTime must be a Date, ISO string, number, null or undefined" },
+          {
+            error:
+              "currentRoundEndTime must be a Date, ISO string, number, null or undefined",
+          },
           { status: 400 }
         );
       }
@@ -200,8 +248,10 @@ export async function PUT(request: NextRequest) {
       currentRound: updatedConfig.currentRound || "",
       auctionStartTime: updatedConfig.auctionStartTime?.toISOString() || null,
       auctionEndTime: updatedConfig.auctionEndTime?.toISOString() || null,
-      currentRoundStartTime: updatedConfig.currentRoundStartTime?.toISOString() || null,
-      currentRoundEndTime: updatedConfig.currentRoundEndTime?.toISOString() || null,
+      currentRoundStartTime:
+        updatedConfig.currentRoundStartTime?.toISOString() || null,
+      currentRoundEndTime:
+        updatedConfig.currentRoundEndTime?.toISOString() || null,
       serverTime: Date.now(),
     });
 
