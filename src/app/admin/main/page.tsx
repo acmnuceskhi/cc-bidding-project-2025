@@ -27,7 +27,8 @@ export default function AdminMainPage() {
   const [filter, setFilter] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [duration, setDuration] = useState<number>(45);
-  const [startNow5, setStartNow5] = useState<boolean>(true);
+  const [useDelay, setUseDelay] = useState<boolean>(true); // whether to start after a short delay
+  const [delaySeconds, setDelaySeconds] = useState<number>(5); // adjustable delay seconds
   const [startTime, setStartTime] = useState<string>(""); // datetime-local value
   const [bids, setBids] = useState<Array<{ houseId: string; houseName?: string; amount: number }>>([]);
   const [now, setNow] = useState<number>(Date.now());
@@ -220,11 +221,10 @@ export default function AdminMainPage() {
   async function startRound() {
     try {
       if (!selectedTeamId) return;
-      const useStartIn5 = startNow5;
-
       let startIso: string;
-      if (useStartIn5) {
-        startIso = new Date(Date.now() + 5000).toISOString();
+      if (useDelay) {
+        const secs = Math.max(1, Math.floor(delaySeconds));
+        startIso = new Date(Date.now() + secs * 1000).toISOString();
       } else {
         if (!startTime) return;
         const d = new Date(startTime);
@@ -410,22 +410,38 @@ export default function AdminMainPage() {
             />
           </div>
           <div>
-            <label className="inline-flex items-center gap-2 text-gray-200">
-              <input
-                type="checkbox"
-                checked={startNow5}
-                onChange={(e) => setStartNow5(e.target.checked)}
-                disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
-              />
-              <span>Start in 5 seconds</span>
-            </label>
+            <div className="space-y-2">
+              <label className="inline-flex items-center gap-2 text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={useDelay}
+                  onChange={(e) => setUseDelay(e.target.checked)}
+                  disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
+                />
+                <span>Start after delay</span>
+              </label>
+              {useDelay && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">Delay (seconds, min 1)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={delaySeconds}
+                    onChange={(e) => setDelaySeconds(Number(e.target.value) || 1)}
+                    onBlur={() => { if (delaySeconds < 1) setDelaySeconds(1); }}
+                    disabled={roundEnded && bids.length > 0 && !currentTeamAssigned}
+                    className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
+                  />
+                </div>
+              )}
+            </div>
           </div>
           <div>
-            <label className={`block text-sm font-semibold mb-1 ${startNow5 ? "text-gray-500" : "text-gray-200"}`}>Start time</label>
+            <label className={`block text-sm font-semibold mb-1 ${useDelay ? "text-gray-500" : "text-gray-200"}`}>Start time</label>
             <input
               type="datetime-local"
               value={startTime}
-              disabled={startNow5 || (roundEnded && bids.length > 0 && !currentTeamAssigned)}
+              disabled={useDelay || (roundEnded && bids.length > 0 && !currentTeamAssigned)}
               onChange={(e) => setStartTime(e.target.value)}
               className="w-full bg-gray-900/70 border-2 border-[#FFD700]/30 rounded-lg px-3 py-2 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
             />
