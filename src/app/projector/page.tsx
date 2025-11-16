@@ -18,6 +18,9 @@ interface WinnerData {
   houseName: string;
   amount: number;
   allBids?: Array<{ houseId: string; houseName: string; amount: number }>;
+  teamName?: string | null;
+  teamRank?: number;
+  teamBatch?: string | null;
 }
 
 interface House {
@@ -356,12 +359,12 @@ export default function ProjectorDisplay() {
         const teamIdToFetch = auctionState?.currentRound || null;
         let winnerHouseName = "";
         let winnerAmount = 0;
+        let teamData: { houseId?: string | null; name?: string | null; rank?: number; batch?: string | null } | null = null;
 
         if (teamIdToFetch) {
           try {
             // Fetch all teams to find the current team's validation status
             const teamsRes = await fetch(`/api/teams`, { cache: "no-store" });
-            let teamData: { houseId?: string | null } | null = null;
             if (teamsRes.ok) {
               const allTeams = await teamsRes.json();
               teamData = allTeams.find((t: { teamId: string }) => t.teamId === teamIdToFetch) || null;
@@ -387,12 +390,12 @@ export default function ProjectorDisplay() {
             if (teamData?.houseId) {
               // Team has been validated - show the actual winner
               const winningHouse = housesData.find(h => 
-                h._id?.toString() === teamData.houseId || h.houseId === teamData.houseId
+                h._id?.toString() === teamData?.houseId || h.houseId === teamData?.houseId
               );
               winnerHouseName = winningHouse?.name || "Unknown";
               // Find the winning bid amount
               const winningBid = allBids.find(b => 
-                b.houseId === teamData.houseId || b.houseId === winningHouse?.houseId
+                b.houseId === teamData?.houseId || b.houseId === winningHouse?.houseId
               );
               winnerAmount = winningBid?.amount || 0;
             } else {
@@ -412,6 +415,9 @@ export default function ProjectorDisplay() {
           houseName: winnerHouseName || "No Winner",
           amount: winnerAmount,
           allBids,
+          teamName: teamData?.name || null,
+          teamRank: teamData?.rank,
+          teamBatch: teamData?.batch || null,
         };
 
         setWinnerData(derivedWinner);
@@ -592,6 +598,15 @@ export default function ProjectorDisplay() {
         <div className="absolute inset-0 bg-black/80"></div>
         <div className="relative z-10 text-center max-w-5xl mx-auto p-8">
           <h1 className="text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700]">🏆 Round Result</h1>
+          
+          {/* Team Info */}
+          <div className="text-2xl text-white/80 mb-4">
+            {winnerData.teamName && <span className="font-semibold">{winnerData.teamName}</span>}
+            {!winnerData.teamName && winnerData.teamRank && <span>Team #{winnerData.teamRank}</span>}
+            {winnerData.teamBatch && <span className="ml-3">• Batch {winnerData.teamBatch}</span>}
+          </div>
+          
+          {/* Winner Info */}
           <div className="text-4xl text-white mb-6">Winner: {winnerData.houseName} {winnerData.amount > 0 ? `( $${winnerData.amount} )` : "(No Winner)"}</div>
 
           {winnerData.allBids && winnerData.allBids.length > 0 && (
