@@ -665,13 +665,13 @@ export default function ProjectorDisplay() {
   if (phase === "C_B_LIVE_PRESTART") {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
-        <div className="text-4xl font-bold mb-2">Next Round Incoming</div>
+        <div className="text-4xl font-bold mb-2">Starting In</div>
         <div className="text-6xl font-extrabold drop-shadow-[0_0_25px_#FFD700] text-[#FFD700]">
           {Math.max(0, Math.floor(timeLeft / 1000))}s
         </div>
-        <div className="text-2xl mt-4">
+        <div className="text-4xl mt-4">
           {team?.teamId ? (
-            team?.name ? <span className="font-semibold">{team.name}</span> : <span className="font-semibold">Team #{team?.rank ?? "?"}</span>
+            team?.name ? <span className="font-extrabold text-5xl drop-shadow-[0_0_30px_#FFFFFF] text-white uppercase tracking-wider">{team.name}</span> : <span className="font-extrabold text-5xl drop-shadow-[0_0_30px_#FFFFFF] text-white uppercase tracking-wider">Team #{team?.rank ?? "?"}</span>
           ) : (
             <span className="italic text-gray-400">Loading team…</span>
           )}
