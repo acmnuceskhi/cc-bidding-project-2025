@@ -177,7 +177,12 @@ export default function AdminMainPage() {
             const tMs = ts && startMs ? Math.max(0, new Date(ts).getTime() - startMs) : undefined;
             return { houseId: b.houseId, houseName: housesMap[b.houseId] || undefined, amount: b.amount, timestamp: ts, timeTakenMs: tMs };
           })
-          .sort((a, b) => b.amount - a.amount);
+          .sort((a, b) => {
+            // Sort by amount descending, then by time taken ascending (earliest first)
+            if (b.amount !== a.amount) return b.amount - a.amount;
+            if (a.timeTakenMs !== undefined && b.timeTakenMs !== undefined) return a.timeTakenMs - b.timeTakenMs;
+            return 0;
+          });
         if (mounted) setBids(list);
       } catch (e) {
         console.error("Failed to load bids", e);
@@ -205,7 +210,12 @@ export default function AdminMainPage() {
             const tMs = ts && startMs ? Math.max(0, new Date(ts).getTime() - startMs) : undefined;
             return { ...b, houseName: b.houseName || housesMap[b.houseId] || undefined, timestamp: ts, timeTakenMs: tMs };
           })
-          .sort((a, b) => b.amount - a.amount);
+          .sort((a, b) => {
+            // Sort by amount descending, then by time taken ascending (earliest first)
+            if (b.amount !== a.amount) return b.amount - a.amount;
+            if (a.timeTakenMs !== undefined && b.timeTakenMs !== undefined) return a.timeTakenMs - b.timeTakenMs;
+            return 0;
+          });
         setBids(list);
       }
     };

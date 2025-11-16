@@ -452,7 +452,12 @@ export default function ProjectorDisplay() {
                   timestamp: ts,
                   timeTakenMs: tMs,
                 };
-              }).sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
+              }).sort((a: { amount: number; timeTakenMs?: number }, b: { amount: number; timeTakenMs?: number }) => {
+                // Sort by amount descending, then by time taken ascending (earliest first)
+                if (b.amount !== a.amount) return b.amount - a.amount;
+                if (a.timeTakenMs !== undefined && b.timeTakenMs !== undefined) return a.timeTakenMs - b.timeTakenMs;
+                return 0;
+              });
             }
 
             // Determine winner: if validated, use assigned house; otherwise use highest bid

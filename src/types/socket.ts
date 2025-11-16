@@ -66,7 +66,15 @@ export interface ServerToClientEvents {
   "budget-update": (data: { houseId: string; remainingBudget: number }) => void;
   "bids-update": (
     data:
-      | { teamId: string; bids: Array<{ houseId: string; houseName?: string; amount: number; timestamp?: string }> } // admin payload
+      | {
+          teamId: string;
+          bids: Array<{
+            houseId: string;
+            houseName?: string;
+            amount: number;
+            timestamp?: string;
+          }>;
+        } // admin payload
       | { teamId: string; houseId: string; amount: number; timestamp?: string } // house payload
   ) => void;
 }
@@ -85,4 +93,3 @@ export interface AuctionState {
   currentRoundEndTime: string | null; // ISO string or null
   serverTime: number; // ms epoch
 }
-
