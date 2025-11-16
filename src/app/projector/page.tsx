@@ -21,6 +21,11 @@ interface WinnerData {
   teamName?: string | null;
   teamRank?: number;
   teamBatch?: string | null;
+  teamSuccessfulAttempts?: number;
+  teamTotalPoints?: number;
+  teamMemberCount?: number;
+  teamMembers?: Array<{ name: string; participantId?: string; picture?: string | null }>;
+  teamTotalPenalty?: number;
 }
 
 interface House {
@@ -359,7 +364,7 @@ export default function ProjectorDisplay() {
         const teamIdToFetch = auctionState?.currentRound || null;
         let winnerHouseName = "";
         let winnerAmount = 0;
-        let teamData: { houseId?: string | null; name?: string | null; rank?: number; batch?: string | null } | null = null;
+        let teamData: { houseId?: string | null; name?: string | null; rank?: number; batch?: string | null; successfulAttempts?: number; totalPoints?: number; memberCount?: number; members?: Array<{ name: string; participantId?: string; picture?: string | null }>; totalPenalty?: number } | null = null;
 
         if (teamIdToFetch) {
           try {
@@ -418,6 +423,11 @@ export default function ProjectorDisplay() {
           teamName: teamData?.name || null,
           teamRank: teamData?.rank,
           teamBatch: teamData?.batch || null,
+          teamSuccessfulAttempts: teamData?.successfulAttempts,
+          teamTotalPoints: teamData?.totalPoints,
+          teamMemberCount: teamData?.memberCount,
+          teamMembers: teamData?.members || [],
+          teamTotalPenalty: teamData?.totalPenalty,
         };
 
         setWinnerData(derivedWinner);
@@ -600,10 +610,31 @@ export default function ProjectorDisplay() {
           <h1 className="text-7xl font-bold mb-8 text-[#FFD700] drop-shadow-[0_0_40px_#FFD700]">🏆 Round Result</h1>
           
           {/* Team Info */}
-          <div className="text-2xl text-white/80 mb-4">
-            {winnerData.teamName && <span className="font-semibold">{winnerData.teamName}</span>}
-            {!winnerData.teamName && winnerData.teamRank && <span>Team #{winnerData.teamRank}</span>}
-            {winnerData.teamBatch && <span className="ml-3">• Batch {winnerData.teamBatch}</span>}
+          <div className="mb-6">
+            <div className="text-3xl text-white/90 font-semibold mb-2">
+              {winnerData.teamName && <span>{winnerData.teamName}</span>}
+              {!winnerData.teamName && winnerData.teamRank && <span>Team #{winnerData.teamRank}</span>}
+            </div>
+            
+            {/* Team Members */}
+            {winnerData.teamMembers && winnerData.teamMembers.length > 0 && (
+              <div className="text-xl text-white/80 mb-3">
+                {winnerData.teamMembers.map((member, idx) => (
+                  <span key={member.participantId || idx}>
+                    {member.name}
+                    {idx < winnerData.teamMembers!.length - 1 && <span className="mx-2">•</span>}
+                  </span>
+                ))}
+              </div>
+            )}
+            
+            <div className="flex justify-center gap-6 text-xl text-white/70">
+              {winnerData.teamBatch && <span>📚 Batch {winnerData.teamBatch}</span>}
+              {typeof winnerData.teamMemberCount === 'number' && <span>👥 {winnerData.teamMemberCount} members</span>}
+              {typeof winnerData.teamTotalPoints === 'number' && <span>⭐ {winnerData.teamTotalPoints} points</span>}
+              {typeof winnerData.teamSuccessfulAttempts === 'number' && <span>✅ {winnerData.teamSuccessfulAttempts} solved</span>}
+              {typeof winnerData.teamTotalPenalty === 'number' && <span>⏱️ {winnerData.teamTotalPenalty} penalty</span>}
+            </div>
           </div>
           
           {/* Winner Info */}
