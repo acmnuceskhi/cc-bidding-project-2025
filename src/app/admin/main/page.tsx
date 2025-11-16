@@ -33,6 +33,8 @@ export default function AdminMainPage() {
   const [now, setNow] = useState<number>(Date.now());
   const [validating, setValidating] = useState<boolean>(false);
   const [currentTeamAssigned, setCurrentTeamAssigned] = useState<string | null>(null);
+  const [currentTeamName, setCurrentTeamName] = useState<string | null>(null);
+  const [housesMap, setHousesMap] = useState<Record<string,string>>({});
 
   // Keep a 1s tick for countdowns
   useEffect(() => {
@@ -73,6 +75,16 @@ export default function AdminMainPage() {
     (async () => {
       try {
         await fetchUnsoldTeams();
+        // Fetch houses for name mapping
+        try {
+          const housesRes = await fetchWithAuth("/api/houses", { cache: "no-store" });
+            if (housesRes.ok) {
+              const houses: Array<{ houseId: string; name: string }> = await housesRes.json();
+              const map: Record<string,string> = {};
+              houses.forEach(h => { map[h.houseId] = h.name; });
+              if (mounted) setHousesMap(map);
+            }
+        } catch {}
       } finally {
         if (mounted) setLoading(false);
       }
@@ -115,9 +127,15 @@ export default function AdminMainPage() {
         const res = await fetchWithAuth(`/api/teams/${teamId}`, { cache: "no-store" });
         if (!res.ok) { setCurrentTeamAssigned(null); return; }
         const data = await res.json();
-        if (!cancelled) setCurrentTeamAssigned(data?.houseId || null);
+        if (!cancelled) {
+          setCurrentTeamAssigned(data?.houseId || null);
+          setCurrentTeamName(data?.name || null);
+        }
       } catch {
-        if (!cancelled) setCurrentTeamAssigned(null);
+        if (!cancelled) {
+          setCurrentTeamAssigned(null);
+          setCurrentTeamName(null);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -152,7 +170,7 @@ export default function AdminMainPage() {
           return;
         }
         const list = data
-          .map((b) => ({ houseId: b.houseId, houseName: b.houseName, amount: b.amount }))
+          .map((b) => ({ houseId: b.houseId, houseName: b.houseName || housesMap[b.houseId] || undefined, amount: b.amount }))
           .sort((a, b) => b.amount - a.amount);
         if (mounted) setBids(list);
       } catch (e) {
@@ -163,7 +181,7 @@ export default function AdminMainPage() {
     return () => {
       mounted = false;
     };
-  }, [auctionState, auctionState?.currentRound, roundOngoing, roundEnded]);
+  }, [auctionState, auctionState?.currentRound, roundOngoing, roundEnded, housesMap]);
 
   // Live bids via socket (admins receive all latest bids for current team)
   useEffect(() => {
@@ -175,6 +193,7 @@ export default function AdminMainPage() {
       if ("bids" in data && data.teamId === teamId) {
         const list = (data.bids as Array<{ houseId: string; houseName?: string; amount: number }>)
           .slice()
+          .map(b => ({ ...b, houseName: b.houseName || housesMap[b.houseId] || undefined }))
           .sort((a, b) => b.amount - a.amount);
         setBids(list);
       }
@@ -183,7 +202,7 @@ export default function AdminMainPage() {
     return () => {
       socket.off("bids-update", handler);
     };
-  }, [socket, auctionState]);
+  }, [socket, auctionState, housesMap]);
 
   // Refresh team list when rounds end (team gets assigned to a house)
   useEffect(() => {
@@ -431,7 +450,7 @@ export default function AdminMainPage() {
       {roundPrestart && (
         <div className="bg-black/60 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_20px_rgba(255,215,0,0.25)]">
           <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-2">⏳ Upcoming Start</h2>
-          <div className="text-gray-200">Team ID: <span className="font-mono">{auctionState?.currentRound}</span></div>
+          <div className="text-gray-200">Team: <span className="font-semibold">{currentTeamName || `Team ${auctionState?.currentRound?.slice(0,6) || "?"}`}</span>{auctionState?.currentRound ? <span className="font-mono text-xs opacity-50 ml-2">{auctionState.currentRound}</span> : null}</div>
           <div className="text-4xl font-bold text-[#FFD700] mt-2">
             {(() => {
               const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
@@ -448,7 +467,7 @@ export default function AdminMainPage() {
         {roundOngoing ? (
           <div>
             <div className="flex items-center justify-between">
-              <div className="text-gray-200">Team ID: <span className="font-mono">{auctionState?.currentRound}</span></div>
+              <div className="text-gray-200">Team: <span className="font-semibold">{currentTeamName || `Team ${auctionState?.currentRound?.slice(0,6) || "?"}`}</span>{auctionState?.currentRound ? <span className="font-mono text-xs opacity-50 ml-2">{auctionState.currentRound}</span> : null}</div>
               <div className="text-4xl font-bold text-[#FFD700]">{remainingSeconds}s</div>
             </div>
             <div className="mt-4">
@@ -465,12 +484,19 @@ export default function AdminMainPage() {
                 <div className="text-gray-400">No bids yet.</div>
               ) : (
                 <div className="space-y-2">
-                  {bids.map((b, idx) => (
-                    <div key={`${b.houseId}-${idx}`} className="flex items-center justify-between bg-black/40 border border-white/10 rounded-lg px-4 py-2">
-                      <div className="text-white">{idx + 1}. {b.houseName || b.houseId}</div>
-                      <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} font-bold`}>${b.amount}</div>
-                    </div>
-                  ))}
+                  {bids.map((b, idx) => {
+                    const displayName = b.houseName || housesMap[b.houseId] || `House ${b.houseId.slice(0,6)}`;
+                    return (
+                      <div key={`${b.houseId}-${idx}`} className="flex items-center justify-between bg-black/40 border border-white/10 rounded-lg px-4 py-2">
+                        <div className="text-white flex items-center gap-2">
+                          <span>{idx + 1}.</span>
+                          <span>{displayName}</span>
+                          <span className="font-mono text-xs opacity-40">{b.houseId.slice(0,8)}</span>
+                        </div>
+                        <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} font-bold`}>${b.amount}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -484,17 +510,24 @@ export default function AdminMainPage() {
       {roundEnded && (
         <div className="bg-black/60 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_20px_rgba(255,215,0,0.25)]">
           <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] mb-4">🏁 Results</h2>
-          <div className="text-gray-200 mb-3">Team ID: <span className="font-mono">{auctionState?.currentRound}</span></div>
+          <div className="text-gray-200 mb-3">Team: <span className="font-semibold">{currentTeamName || `Team ${auctionState?.currentRound?.slice(0,6) || "?"}`}</span>{auctionState?.currentRound ? <span className="font-mono text-xs opacity-50 ml-2">{auctionState.currentRound}</span> : null}</div>
           {bids.length === 0 ? (
             <div className="text-gray-400">No bids were placed. Result considered cancelled.</div>
           ) : (
             <div className="space-y-2">
-              {bids.map((b, idx) => (
-                <div key={`${b.houseId}-res-${idx}`} className={`flex items-center justify-between bg-black/40 border rounded-lg px-4 py-2 ${idx === 0 ? "border-[#FFD700]" : "border-white/10"}`}>
-                  <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"}`}>{idx + 1}. {b.houseName || b.houseId}</div>
-                  <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} font-bold`}>${b.amount}</div>
-                </div>
-              ))}
+              {bids.map((b, idx) => {
+                const displayName = b.houseName || housesMap[b.houseId] || `House ${b.houseId.slice(0,6)}`;
+                return (
+                  <div key={`${b.houseId}-res-${idx}`} className={`flex items-center justify-between bg-black/40 border rounded-lg px-4 py-2 ${idx === 0 ? "border-[#FFD700]" : "border-white/10"}`}>
+                    <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} flex items-center gap-2`}>
+                      <span>{idx + 1}.</span>
+                      <span>{displayName}</span>
+                      <span className="font-mono text-xs opacity-40">{b.houseId.slice(0,8)}</span>
+                    </div>
+                    <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} font-bold`}>${b.amount}</div>
+                  </div>
+                );
+              })}
             </div>
           )}
           {bids.length > 0 && !currentTeamAssigned && (
