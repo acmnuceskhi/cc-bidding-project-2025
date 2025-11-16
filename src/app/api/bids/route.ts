@@ -82,7 +82,12 @@ export async function POST(request: NextRequest) {
       );
     }
     const now = new Date();
-    if (!cfg.currentRoundStartTime || !cfg.currentRoundEndTime || now < cfg.currentRoundStartTime || now > cfg.currentRoundEndTime) {
+    if (
+      !cfg.currentRoundStartTime ||
+      !cfg.currentRoundEndTime ||
+      now < cfg.currentRoundStartTime ||
+      now > cfg.currentRoundEndTime
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -160,9 +165,7 @@ export async function POST(request: NextRequest) {
     // 👥 Get all teams already assigned to this house and get max teams per batch from config
     const [houseTeams, config] = await Promise.all([
       Teams.getAll().then((allTeams) =>
-        allTeams.filter(
-          (t) => t.houseId && t.houseId.toString() === houseId
-        )
+        allTeams.filter((t) => t.houseId && t.houseId.toString() === houseId)
       ),
       Config.get(),
     ]);
@@ -170,7 +173,9 @@ export async function POST(request: NextRequest) {
     // 🏷️ In second pass, minimum roster check removed (team-based bidding)
 
     // Count how many existing teams are in the same batch
-    const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
+    const sameBatchCount = houseTeams.filter(
+      (t) => t.batch === teamBatch
+    ).length;
 
     // ❌ Enforce the maxTeamsPerBatch limit for actual bids
     if (sameBatchCount >= config.maxTeamsPerBatch) {
@@ -192,7 +197,10 @@ export async function POST(request: NextRequest) {
     await client
       .db()
       .collection("bids")
-      .deleteMany({ roundId: new ObjectId(rawTeamId), houseId: new ObjectId(houseId) });
+      .deleteMany({
+        roundId: new ObjectId(rawTeamId),
+        houseId: new ObjectId(houseId),
+      });
 
     // Insert or upsert the new bid (no budget deduction here)
     // teamId doubles as roundId in the round-less design
@@ -213,14 +221,27 @@ export async function POST(request: NextRequest) {
         // Admin sees all latest bids for current team
         const latestBids = await Bids.getByTeam(rawTeamId);
         const allHouses = await Houses.getAll();
-        const houseNameById = new Map(allHouses.map((h) => [h._id?.toString(), h.name]));
+        const houseNameById = new Map(
+          allHouses.map((h) => [h._id?.toString(), h.name])
+        );
         const adminBids = latestBids
-          .map((b) => ({ houseId: b.houseId.toString(), houseName: houseNameById.get(b.houseId.toString()) || "Unknown", amount: b.amount }))
+          .map((b) => ({
+            houseId: b.houseId.toString(),
+            houseName: houseNameById.get(b.houseId.toString()) || "Unknown",
+            amount: b.amount,
+          }))
           .sort((a, b) => b.amount - a.amount);
-        io.to("admins").emit("bids-update", { teamId: rawTeamId, bids: adminBids });
+        io.to("admins").emit("bids-update", {
+          teamId: rawTeamId,
+          bids: adminBids,
+        });
 
         // House sees only its own latest bid
-        io.to(`house:${houseId}`).emit("bids-update", { teamId: rawTeamId, houseId, amount });
+        io.to(`house:${houseId}`).emit("bids-update", {
+          teamId: rawTeamId,
+          houseId,
+          amount,
+        });
       }
     } catch {
       // Non-fatal; API success should not depend on socket delivery
@@ -249,7 +270,18 @@ export async function POST(request: NextRequest) {
 // GET /api/bids - Get bids (with optional filters)
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
+    const { searchParams } = new URL(request.url);
+    const teamId = searchParams.get("teamId");
+    const houseId = searchParams.get("houseId");
+    const roundId = searchParams.get("roundId");
+
+    // Public access: Allow fetching bids by teamId/roundId (for projector/public display)
+    if (roundId || teamId) {
+      const bids = await Bids.getByTeam(roundId || teamId!);
+      return NextResponse.json(bids);
+    }
+
+    // Authenticated access required for house-specific or all-bids queries
     const authResult = await verifyAuth(request);
     if (!authResult) {
       return NextResponse.json(
@@ -259,18 +291,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { payload } = authResult;
-    const { searchParams } = new URL(request.url);
-    const teamId = searchParams.get("teamId");
-    const houseId = searchParams.get("houseId");
-    const roundId = searchParams.get("roundId");
-
     let bids;
-    if (roundId) {
-      // Back-compat: treat roundId as teamId
-      bids = await Bids.getByTeam(roundId);
-    } else if (teamId) {
-      bids = await Bids.getByTeam(teamId);
-    } else if (houseId) {
+
+    if (houseId) {
       // Check if user can access this house's bids
       if (payload.role !== "admin" && payload.houseId !== houseId) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });

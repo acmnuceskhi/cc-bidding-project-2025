@@ -354,8 +354,20 @@ export default function ProjectorDisplay() {
       if (phaseNow === "C_C_LIVE_ENDED") {
         let allBids: Array<{ houseId: string; houseName: string; amount: number }> = [];
         const teamIdToFetch = auctionState?.currentRound || null;
+        let winnerHouseName = "";
+        let winnerAmount = 0;
+
         if (teamIdToFetch) {
           try {
+            // Fetch all teams to find the current team's validation status
+            const teamsRes = await fetch(`/api/teams`, { cache: "no-store" });
+            let teamData: { houseId?: string | null } | null = null;
+            if (teamsRes.ok) {
+              const allTeams = await teamsRes.json();
+              teamData = allTeams.find((t: { teamId: string }) => t.teamId === teamIdToFetch) || null;
+            }
+
+            // Fetch all bids for display
             const bidsRes = await fetch(`/api/bids?teamId=${teamIdToFetch}`, { cache: "no-store" });
             if (bidsRes.ok) {
               const bidsData = await bidsRes.json();
@@ -370,17 +382,30 @@ export default function ProjectorDisplay() {
                 };
               }).sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
             }
-          } catch (err) {
-            console.error("Error fetching round bids:", err);
-          }
-        }
 
-        let winnerHouseName = "";
-        let winnerAmount = 0;
-        if (allBids.length > 0) {
-          const topBid = allBids[0];
-          winnerHouseName = topBid.houseName;
-          winnerAmount = topBid.amount;
+            // Determine winner: if validated, use assigned house; otherwise use highest bid
+            if (teamData?.houseId) {
+              // Team has been validated - show the actual winner
+              const winningHouse = housesData.find(h => 
+                h._id?.toString() === teamData.houseId || h.houseId === teamData.houseId
+              );
+              winnerHouseName = winningHouse?.name || "Unknown";
+              // Find the winning bid amount
+              const winningBid = allBids.find(b => 
+                b.houseId === teamData.houseId || b.houseId === winningHouse?.houseId
+              );
+              winnerAmount = winningBid?.amount || 0;
+            } else {
+              // Not validated yet - show highest bid
+              if (allBids.length > 0) {
+                const topBid = allBids[0];
+                winnerHouseName = topBid.houseName;
+                winnerAmount = topBid.amount;
+              }
+            }
+          } catch (err) {
+            console.error("Error fetching round data:", err);
+          }
         }
 
         const derivedWinner: WinnerData = {
