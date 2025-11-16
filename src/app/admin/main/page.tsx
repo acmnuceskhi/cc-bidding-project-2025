@@ -30,7 +30,7 @@ export default function AdminMainPage() {
   const [useDelay, setUseDelay] = useState<boolean>(true); // whether to start after a short delay
   const [delaySeconds, setDelaySeconds] = useState<number>(5); // adjustable delay seconds
   const [startTime, setStartTime] = useState<string>(""); // datetime-local value
-  const [bids, setBids] = useState<Array<{ houseId: string; houseName?: string; amount: number }>>([]);
+  const [bids, setBids] = useState<Array<{ houseId: string; houseName?: string; amount: number; timestamp?: string; timeTakenMs?: number }>>([]);
   const [now, setNow] = useState<number>(Date.now());
   const [validating, setValidating] = useState<boolean>(false);
   const [currentTeamAssigned, setCurrentTeamAssigned] = useState<string | null>(null);
@@ -165,13 +165,18 @@ export default function AdminMainPage() {
           return;
         }
         const res = await fetchWithAuth(`/api/bids?teamId=${teamId}`, { cache: "no-store" });
-        const data: Array<{ houseId: string; houseName?: string; amount: number }> = await res.json();
+        const data: Array<{ houseId: string; amount: number; timestamp?: string }> = await res.json();
         if (!Array.isArray(data)) {
           if (mounted) setBids([]);
           return;
         }
+        const startMs = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
         const list = data
-          .map((b) => ({ houseId: b.houseId, houseName: b.houseName || housesMap[b.houseId] || undefined, amount: b.amount }))
+          .map((b) => {
+            const ts = b.timestamp ? new Date(b.timestamp).toISOString() : undefined;
+            const tMs = ts && startMs ? Math.max(0, new Date(ts).getTime() - startMs) : undefined;
+            return { houseId: b.houseId, houseName: housesMap[b.houseId] || undefined, amount: b.amount, timestamp: ts, timeTakenMs: tMs };
+          })
           .sort((a, b) => b.amount - a.amount);
         if (mounted) setBids(list);
       } catch (e) {
@@ -192,9 +197,14 @@ export default function AdminMainPage() {
       if (!teamId) return;
       if (!data || typeof data !== "object") return;
       if ("bids" in data && data.teamId === teamId) {
-        const list = (data.bids as Array<{ houseId: string; houseName?: string; amount: number }>)
+        const startMs = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+        const list = (data.bids as Array<{ houseId: string; houseName?: string; amount: number; timestamp?: string }>)
           .slice()
-          .map(b => ({ ...b, houseName: b.houseName || housesMap[b.houseId] || undefined }))
+          .map(b => {
+            const ts = b.timestamp ? new Date(b.timestamp).toISOString() : undefined;
+            const tMs = ts && startMs ? Math.max(0, new Date(ts).getTime() - startMs) : undefined;
+            return { ...b, houseName: b.houseName || housesMap[b.houseId] || undefined, timestamp: ts, timeTakenMs: tMs };
+          })
           .sort((a, b) => b.amount - a.amount);
         setBids(list);
       }
@@ -504,10 +514,13 @@ export default function AdminMainPage() {
                     const displayName = b.houseName || housesMap[b.houseId] || `House ${b.houseId.slice(0,6)}`;
                     return (
                       <div key={`${b.houseId}-${idx}`} className="flex items-center justify-between bg-black/40 border border-white/10 rounded-lg px-4 py-2">
-                        <div className="text-white flex items-center gap-2">
+                        <div className="text-white flex items-center gap-3">
                           <span>{idx + 1}.</span>
                           <span>{displayName}</span>
                           <span className="font-mono text-xs opacity-40">{b.houseId.slice(0,8)}</span>
+                          {typeof b.timeTakenMs === 'number' && (
+                            <span className="text-xs text-gray-300">⏱️ {Math.floor(b.timeTakenMs / 1000)}s</span>
+                          )}
                         </div>
                         <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} font-bold`}>${b.amount}</div>
                       </div>
@@ -535,10 +548,13 @@ export default function AdminMainPage() {
                 const displayName = b.houseName || housesMap[b.houseId] || `House ${b.houseId.slice(0,6)}`;
                 return (
                   <div key={`${b.houseId}-res-${idx}`} className={`flex items-center justify-between bg-black/40 border rounded-lg px-4 py-2 ${idx === 0 ? "border-[#FFD700]" : "border-white/10"}`}>
-                    <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} flex items-center gap-2`}>
+                    <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} flex items-center gap-3`}>
                       <span>{idx + 1}.</span>
                       <span>{displayName}</span>
                       <span className="font-mono text-xs opacity-40">{b.houseId.slice(0,8)}</span>
+                      {typeof b.timeTakenMs === 'number' && (
+                        <span className="text-xs text-gray-300">⏱️ {Math.floor(b.timeTakenMs / 1000)}s</span>
+                      )}
                     </div>
                     <div className={`${idx === 0 ? "text-[#FFD700]" : "text-white"} font-bold`}>${b.amount}</div>
                   </div>

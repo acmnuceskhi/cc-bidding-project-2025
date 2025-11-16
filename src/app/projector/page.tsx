@@ -20,7 +20,7 @@ interface Team {
 interface WinnerData {
   houseName: string;
   amount: number;
-  allBids?: Array<{ houseId: string; houseName: string; amount: number }>;
+  allBids?: Array<{ houseId: string; houseName: string; amount: number; timestamp?: string; timeTakenMs?: number }>;
   teamName?: string | null;
   teamRank?: number;
   teamBatch?: string | null;
@@ -438,14 +438,19 @@ export default function ProjectorDisplay() {
             const bidsRes = await fetch(`/api/bids?teamId=${teamIdToFetch}`, { cache: "no-store" });
             if (bidsRes.ok) {
               const bidsData = await bidsRes.json();
-              allBids = bidsData.map((bid: { houseId: string; amount: number }) => {
+              const startMs = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+              allBids = bidsData.map((bid: { houseId: string; amount: number; timestamp?: string }) => {
                 const house = housesData.find(h => 
                   h.houseId === bid.houseId || h._id?.toString() === bid.houseId
                 );
+                const ts = bid?.timestamp ? new Date(bid.timestamp).toISOString() : undefined;
+                const tMs = ts && startMs ? Math.max(0, new Date(ts).getTime() - startMs) : undefined;
                 return {
                   houseId: bid.houseId,
                   houseName: house?.name || "Unknown",
                   amount: bid.amount,
+                  timestamp: ts,
+                  timeTakenMs: tMs,
                 };
               }).sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
             }
@@ -730,7 +735,15 @@ export default function ProjectorDisplay() {
               <div className="space-y-3">
                 {winnerData.allBids.map((bid, index) => (
                   <div key={index} className={`flex justify-between items-center p-4 rounded-xl ${bid.amount === winnerData.amount && bid.houseName === winnerData.houseName ? "bg-[#FFD700]/30 border-2 border-[#FFD700]" : "bg-black/50 border border-white/20"}`}>
-                    <span className={`font-bold ${bid.amount === winnerData.amount && bid.houseName === winnerData.houseName ? "text-[#FFD700]" : "text-white"}`}>{bid.houseName}</span>
+                    <div className="flex flex-col text-left">
+                      <span className={`font-bold ${bid.amount === winnerData.amount && bid.houseName === winnerData.houseName ? "text-[#FFD700]" : "text-white"}`}>{bid.houseName}</span>
+                      {bid.timeTakenMs !== undefined && (
+                        <span className="text-sm text-gray-300">⏱️ {Math.floor(bid.timeTakenMs / 1000)}s</span>
+                      )}
+                      {bid.timeTakenMs === undefined && bid.timestamp && (
+                        <span className="text-sm text-gray-300">🕒 {new Date(bid.timestamp).toLocaleTimeString()}</span>
+                      )}
+                    </div>
                     <span className={`font-bold ${bid.amount === winnerData.amount && bid.houseName === winnerData.houseName ? "text-[#FFD700]" : "text-white"}`}>${bid.amount}</span>
                   </div>
                 ))}

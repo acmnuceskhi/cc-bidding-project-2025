@@ -245,6 +245,7 @@ export async function POST(request: NextRequest) {
             houseId: b.houseId.toString(),
             houseName: houseNameById.get(b.houseId.toString()) || "Unknown",
             amount: b.amount,
+            timestamp: b.timestamp ? new Date(b.timestamp).toISOString() : new Date().toISOString(),
           }))
           .sort((a, b) => b.amount - a.amount);
         io.to("admins").emit("bids-update", {
@@ -257,6 +258,7 @@ export async function POST(request: NextRequest) {
           teamId: rawTeamId,
           houseId,
           amount,
+          timestamp: new Date().toISOString(),
         });
       }
     } catch {

@@ -52,6 +52,7 @@ export default function HouseDashboard() {
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [currentBid, setCurrentBid] = useState<number | null>(null);
+  const [currentBidTimestamp, setCurrentBidTimestamp] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [isPlacingBid, setIsPlacingBid] = useState(false); // Prevent concurrent bid submissions
@@ -172,8 +173,10 @@ export default function HouseDashboard() {
               if (Array.isArray(bidsData)) {
                 const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
                 setCurrentBid(myBid ? myBid.amount : null);
+                setCurrentBidTimestamp(myBid && myBid.timestamp ? new Date(myBid.timestamp).toISOString() : null);
               } else {
                 setCurrentBid(null);
+                setCurrentBidTimestamp(null);
               }
             } catch (error) {
               console.error("Failed to fetch current bid:", error);
@@ -392,6 +395,9 @@ export default function HouseDashboard() {
         if (!data || typeof data !== "object") return;
         if ("houseId" in data && data.teamId === teamId && data.houseId === houseId) {
           setCurrentBid(data.amount);
+          if ("timestamp" in data && data.timestamp) {
+            setCurrentBidTimestamp(new Date((data as any).timestamp).toISOString());
+          }
         }
       };
       socket.on("bids-update", bidsUpdateHandler);
@@ -824,6 +830,18 @@ export default function HouseDashboard() {
                           <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
                             ${currentBid}
                           </div>
+                          {currentBidTimestamp && auctionState?.currentRoundStartTime && (
+                            <div className="text-xs text-gray-300 mt-1">
+                              ⏱️ {(() => {
+                                try {
+                                  const s = new Date(auctionState.currentRoundStartTime!).getTime();
+                                  const t = new Date(currentBidTimestamp).getTime();
+                                  const diff = Math.max(0, Math.floor((t - s) / 1000));
+                                  return `${diff}s after start`;
+                                } catch { return ""; }
+                              })()}
+                            </div>
+                          )}
                         </div>
                       )}
 
