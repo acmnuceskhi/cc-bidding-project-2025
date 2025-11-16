@@ -60,6 +60,7 @@ export default function HouseDashboard() {
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [phase, setPhase] = useState<Phase>("A");
   const [allBids, setAllBids] = useState<Array<{ houseId: string; houseName: string; amount: number }>>([]);
+  const [housesMap, setHousesMap] = useState<Record<string, string>>({});
   // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
@@ -89,6 +90,12 @@ export default function HouseDashboard() {
         const selectedHouse = allHouses.find(
           (h: HouseApiResponse) => h.houseId === houseId
         );
+        // Build houses map for later bid name resolution
+        try {
+          const map: Record<string,string> = {};
+          allHouses.forEach((h: HouseApiResponse) => { map[h.houseId] = h.name; });
+          setHousesMap(map);
+        } catch {}
         if (!selectedHouse) {
           console.warn("No house found with ID:", houseId);
           setHouse(null);
@@ -280,16 +287,52 @@ export default function HouseDashboard() {
           return;
         }
         try {
+          // Ensure houses map populated (in case initial fetchData not run recently)
+          if (!housesMap || Object.keys(housesMap).length === 0) {
+            try {
+              const housesResponse = await fetchWithAuth("/api/houses", { cache: "no-store" });
+              const hh = await housesResponse.json();
+              const map: Record<string,string> = {};
+              hh.forEach((h: HouseApiResponse) => { map[h.houseId] = h.name; });
+              setHousesMap(map);
+            } catch {}
+          }
           const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
           const bidsData = await bidsRes.json();
           if (Array.isArray(bidsData)) {
             setAllBids(
               bidsData
-                .map((b: any) => ({ houseId: b.houseId, houseName: b.houseName, amount: b.amount }))
+                .map((b: any) => ({
+                  houseId: b.houseId,
+                  houseName: housesMap[b.houseId] || b.houseName || `House ${String(b.houseId).slice(-4)}`,
+                  amount: b.amount,
+                }))
                 .sort((a: any, b: any) => b.amount - a.amount)
             );
           } else {
             setAllBids([]);
+          }
+          // Fetch team info for enriched results summary
+          try {
+            const teamRes = await fetchWithAuth(`/api/teams/${roundId}`, { cache: "no-store" });
+            if (teamRes.ok) {
+              const t = await teamRes.json();
+              setCurrentTeam({
+                teamId: t.teamId,
+                name: t.name || null,
+                rank: t.rank,
+                batch: t.batch,
+                memberCount: t.memberCount,
+                successfulAttempts: t.successfulAttempts,
+                totalPoints: t.totalPoints,
+                timeTaken: undefined,
+                members: t.members || [],
+              });
+            } else {
+              setCurrentTeam(null);
+            }
+          } catch {
+            setCurrentTeam(null);
           }
         } catch {
           setAllBids([]);
@@ -876,9 +919,27 @@ export default function HouseDashboard() {
               </div>
             </div>
           ) : phase === "CC" ? (
-            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
-              <div className="text-center mb-6">
-                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">🏁 Round Results</h2>
+            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_35px_rgba(255,215,0,0.4)] backdrop-blur-md">
+              <div className="text-center mb-8">
+                <h2 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_25px_#FFD700] mb-4">🏆 Round Result</h2>
+                {currentTeam && (
+                  <div className="mb-6">
+                    <div className="text-2xl sm:text-3xl font-semibold text-white mb-2">{currentTeam.name || `Team #${currentTeam.rank}`}</div>
+                    <div className="flex flex-wrap justify-center gap-4 text-sm sm:text-base text-white/80">
+                      {currentTeam.batch && <span>📚 Batch {currentTeam.batch}</span>}
+                      <span>👥 {currentTeam.memberCount} member{currentTeam.memberCount !== 1 ? 's' : ''}</span>
+                      {typeof currentTeam.totalPoints === 'number' && <span>⭐ {currentTeam.totalPoints} pts</span>}
+                      {typeof currentTeam.successfulAttempts === 'number' && <span>✅ {currentTeam.successfulAttempts} solved</span>}
+                    </div>
+                    {currentTeam.members && currentTeam.members.length > 0 && (
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        {currentTeam.members.map(m => (
+                          <span key={m.participantId} className="px-3 py-1 rounded-md bg-white/10 text-white text-sm">{m.name}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {allBids.length === 0 ? (
                   <p className="text-gray-300 mt-2">No bids placed. No winner.</p>
                 ) : (
@@ -886,21 +947,40 @@ export default function HouseDashboard() {
                     const winner = allBids[0];
                     const youWon = winner && winner.houseId === house.houseId;
                     return (
-                      <p className={`mt-2 font-bold ${youWon ? "text-green-400" : "text-gray-300"}`}>
-                        {youWon ? "🎉 You won this round!" : `Winner: ${winner.houseName} with $${winner.amount}`}
+                      <p className={`mt-2 font-bold text-xl ${youWon ? "text-green-400" : "text-[#FFD700]"}`}>
+                        Winner: {winner.houseName} {winner.amount > 0 ? `( $${winner.amount} )` : '(No Winner)'} {youWon && '🎉'}
                       </p>
                     );
                   })()
                 )}
               </div>
               {allBids.length > 0 && (
-                <div className="max-w-2xl mx-auto">
-                  {allBids.map((b, idx) => (
-                    <div key={`${b.houseId}-${idx}`} className={`flex items-center justify-between px-4 py-3 rounded-lg mb-2 border ${b.houseId === house.houseId ? "border-green-500/60 bg-green-500/10" : "border-white/10 bg-white/5"}`}>
-                      <div className="text-white font-semibold">{idx + 1}. {b.houseName}</div>
-                      <div className={`text-lg font-bold ${idx === 0 ? "text-[#FFD700]" : "text-white"}`}>${b.amount}</div>
-                    </div>
-                  ))}
+                <div className="max-w-3xl mx-auto">
+                  <h3 className="text-lg sm:text-xl font-semibold text-white mb-3">All Bids</h3>
+                  <div className="space-y-2">
+                    {allBids.map((b, idx) => {
+                      const isWinner = idx === 0;
+                      const isOwn = b.houseId === house.houseId;
+                      return (
+                        <div
+                          key={`${b.houseId}-${idx}`}
+                          className={`flex items-center justify-between px-5 py-3 rounded-xl border text-sm sm:text-base transition-all
+                            ${isWinner ? 'bg-[#FFD700]/25 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.4)] font-bold text-[#FFD700]' : ''}
+                            ${!isWinner && isOwn ? 'bg-green-600/20 border-green-500 text-green-200 font-semibold shadow-[0_0_12px_rgba(34,197,94,0.4)]' : ''}
+                            ${!isWinner && !isOwn ? 'bg-white/5 border-white/10 text-white' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="opacity-60">{idx + 1}.</span>
+                            <span>{b.houseName}</span>
+                            {isWinner && <span className="text-[#FFD700] text-xs sm:text-sm bg-[#FFD700]/10 px-2 py-1 rounded-md border border-[#FFD700]/40">Winner</span>}
+                            {isOwn && !isWinner && <span className="text-green-300 text-xs sm:text-sm bg-green-600/20 px-2 py-1 rounded-md border border-green-500/40">Your Bid</span>}
+                            {isOwn && isWinner && <span className="text-green-300 text-xs sm:text-sm bg-green-600/30 px-2 py-1 rounded-md border border-green-500/60">You Won 🎉</span>}
+                          </div>
+                          <span className={`${isWinner ? 'font-bold' : ''}`}>${b.amount}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
