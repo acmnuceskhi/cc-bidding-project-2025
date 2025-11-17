@@ -15,6 +15,7 @@ export function useSocket() {
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null);
   const [allTeams, setAllTeams] = useState<Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null; houseId?: string | null }>>([]);
   const [myTeams, setMyTeams] = useState<Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }>>([]);
+  const [serverConfig, setServerConfig] = useState<any | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [socketObj, setSocketObj] = useState<Socket<
     ServerToClientEvents,
@@ -119,6 +120,10 @@ export function useSocket() {
       }
     };
 
+    const handleConfigUpdate = (data: any) => {
+      setServerConfig(data || null);
+    };
+
     // Attach per-instance listeners
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
@@ -126,6 +131,7 @@ export function useSocket() {
     socket.on("auction-state", handleAuctionState);
     socket.on("teams-update", handleTeamsUpdate);
     socket.on("house-teams-update", handleHouseTeamsUpdate);
+    socket.on("config-update", handleConfigUpdate);
 
     // If already connected (because another hook created it), request state immediately
     if (socket.connected) {
@@ -139,6 +145,7 @@ export function useSocket() {
       socket.off("auction-state", handleAuctionState);
       socket.off("teams-update", handleTeamsUpdate);
       socket.off("house-teams-update", handleHouseTeamsUpdate);
+      socket.off("config-update", handleConfigUpdate);
       setSocketObj(null);
     };
   }, []);
@@ -184,5 +191,6 @@ export function useSocket() {
     },
     allTeams,
     myTeams,
+    serverConfig,
   };
 }

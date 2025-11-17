@@ -79,6 +79,20 @@ export interface ServerToClientEvents {
   ) => void;
   "teams-update": (data: { teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null; houseId?: string | null }> }) => void;
   "house-teams-update": (data: { houseId: string; teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }> }) => void;
+  "config-update": (data: {
+    maxTeamsPerBatch: number;
+    batchLimits?: Record<string, number> | null;
+    maxBidAmount?: number | null;
+    roundDurationSeconds: number;
+    countdownWarningSeconds: number;
+    autoStartNextRound: boolean;
+    delayBetweenRoundsSeconds: number;
+    currentRound?: string;
+    auctionStartTime?: string | null;
+    auctionEndTime?: string | null;
+    currentRoundStartTime?: string | null;
+    currentRoundEndTime?: string | null;
+  }) => void;
 }
 
 export interface ClientToServerEvents {

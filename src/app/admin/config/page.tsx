@@ -5,6 +5,7 @@ import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface AuctionConfig {
   maxTeamsPerBatch: number;
+  batchLimits?: Record<string, number> | null;
   maxBidAmount?: number | null;
   roundDurationSeconds: number;
   countdownWarningSeconds: number;
@@ -22,6 +23,12 @@ export default function ConfigPage() {
 
   // Form state - use strings for inputs to avoid parsing issues while typing
   const [maxTeamsPerBatch, setMaxTeamsPerBatch] = useState("1");
+  const [batchLimits, setBatchLimits] = useState<Record<string, string>>({
+    "2022": "1",
+    "2023": "1",
+    "2024": "1",
+    "2025": "1",
+  });
   const [maxBidAmount, setMaxBidAmount] = useState<string>("");
   const [roundDurationSeconds, setRoundDurationSeconds] = useState("120");
   const [countdownWarningSeconds, setCountdownWarningSeconds] = useState("30");
@@ -71,6 +78,14 @@ export default function ConfigPage() {
       
       // Update form state - convert to strings
       setMaxTeamsPerBatch(String(data.maxTeamsPerBatch));
+      // Populate per-batch limits (if present) or fall back to legacy scalar
+      const incomingBatchLimits: Record<string, number> | undefined = data.batchLimits || undefined;
+      setBatchLimits({
+        "2022": String(incomingBatchLimits?.["2022"] ?? data.maxTeamsPerBatch ?? 1),
+        "2023": String(incomingBatchLimits?.["2023"] ?? data.maxTeamsPerBatch ?? 1),
+        "2024": String(incomingBatchLimits?.["2024"] ?? data.maxTeamsPerBatch ?? 1),
+        "2025": String(incomingBatchLimits?.["2025"] ?? data.maxTeamsPerBatch ?? 1),
+      });
       setMaxBidAmount(
         data.maxBidAmount === null || data.maxBidAmount === undefined
           ? ""
@@ -101,6 +116,12 @@ export default function ConfigPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           maxTeamsPerBatch: parseInt(maxTeamsPerBatch),
+          batchLimits: {
+            "2022": parseInt(batchLimits["2022"] ?? String(parseInt(maxTeamsPerBatch) || 1), 10),
+            "2023": parseInt(batchLimits["2023"] ?? String(parseInt(maxTeamsPerBatch) || 1), 10),
+            "2024": parseInt(batchLimits["2024"] ?? String(parseInt(maxTeamsPerBatch) || 1), 10),
+            "2025": parseInt(batchLimits["2025"] ?? String(parseInt(maxTeamsPerBatch) || 1), 10),
+          },
           maxBidAmount:
             maxBidAmount.trim() === "" ? null : parseInt(maxBidAmount, 10),
           roundDurationSeconds: parseInt(roundDurationSeconds),
@@ -132,6 +153,14 @@ export default function ConfigPage() {
         setDelayBetweenRoundsSeconds(String(newConfig.delayBetweenRoundsSeconds));
         setAuctionStartTimeLocal(isoToLocalInput(newConfig.auctionStartTime));
         setAuctionEndTimeLocal(isoToLocalInput(newConfig.auctionEndTime));
+        // Update batchLimits after save
+        const savedBatchLimits: Record<string, number> | undefined = newConfig.batchLimits || undefined;
+        setBatchLimits({
+          "2022": String(savedBatchLimits?.["2022"] ?? newConfig.maxTeamsPerBatch ?? 1),
+          "2023": String(savedBatchLimits?.["2023"] ?? newConfig.maxTeamsPerBatch ?? 1),
+          "2024": String(savedBatchLimits?.["2024"] ?? newConfig.maxTeamsPerBatch ?? 1),
+          "2025": String(savedBatchLimits?.["2025"] ?? newConfig.maxTeamsPerBatch ?? 1),
+        });
         setTimeout(() => setMessage(""), 3000);
       } else {
         setMessage(`❌ Error: ${data.error || "Failed to save"}`);
@@ -238,6 +267,34 @@ export default function ConfigPage() {
             </p>
             <p className="text-sm text-yellow-400 mt-2 font-semibold">
               ⚠️ Recommended: 1 (ensures each house gets exactly 1 team from each of the 4 batches = 4 teams total)
+            </p>
+          </div>
+
+          {/* Per-Batch Limits */}
+          <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
+            <label className="block text-xl font-bold text-[#FFD700] mb-3">
+              🗂️ Per-Batch Limits
+            </label>
+            <p className="text-gray-300 mb-4">
+              Set the max wins a house can have for each batch separately. Values override the legacy global "Max Teams Per Batch" when present.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Object.keys(batchLimits).map((year) => (
+                <div key={year}>
+                  <label className="block text-sm text-gray-300 mb-2">Batch {year}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={batchLimits[year]}
+                    onChange={(e) => setBatchLimits((s) => ({ ...s, [year]: e.target.value }))}
+                    className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-3 py-2 text-lg focus:outline-none focus:border-[#FFD700]"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-400 mt-3">
+              Leave a batch value as 0 to disable wins for that batch.
             </p>
           </div>
 

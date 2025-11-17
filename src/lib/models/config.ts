@@ -10,7 +10,10 @@ export interface AuctionConfig {
   _id?: string; // Fixed ID "auction-config" for singleton pattern
 
   // Team and batch constraints
-  maxTeamsPerBatch: number; // Maximum number of teams from a single batch that a house can win
+  // Legacy default when no per-batch limits are configured
+  maxTeamsPerBatch: number; // Maximum number of teams from a single batch that a house can win (fallback)
+  // Per-batch explicit limits (e.g. { "2022": 1, "2023": 2 })
+  batchLimits?: Record<string, number>;
   // Per-bid hard cap; if null/undefined => unlimited
   maxBidAmount?: number | null;
 
@@ -39,7 +42,13 @@ const DEFAULT_CONFIG: AuctionConfig = {
   _id: CONFIG_ID,
 
   // Team and batch constraints
-  maxTeamsPerBatch: 1, // Each house can win only 1 team per batch (22k, 23k, 24k, 25k)
+  maxTeamsPerBatch: 1, // Fallback default
+  batchLimits: {
+    "2022": 1,
+    "2023": 3,
+    "2024": 3,
+    "2025": 4,
+  },
   maxBidAmount: null,
 
   // Round timing settings
@@ -187,8 +196,13 @@ export const Config = {
    * Get the maximum teams per batch limit.
    * Convenience method for the most commonly accessed setting.
    */
-  async getMaxTeamsPerBatch(): Promise<number> {
+  async getMaxTeamsPerBatch(batch?: string): Promise<number> {
     const config = await this.get();
+    // If a specific batch is requested, prefer explicit batchLimits
+    if (batch && config.batchLimits && typeof config.batchLimits[batch] === "number") {
+      return config.batchLimits[batch];
+    }
+    // Fallback to legacy scalar
     return config.maxTeamsPerBatch;
   },
 

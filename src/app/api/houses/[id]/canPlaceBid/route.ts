@@ -58,8 +58,8 @@ export async function GET(
       );
     }
 
-    // Get the configurable batch limit
-    const maxTeamsPerBatch = await Config.getMaxTeamsPerBatch();
+    // Get the configurable batch limit for this team's batch
+    const maxTeamsPerBatch = await Config.getMaxTeamsPerBatch(team.batch);
 
     // Count teams from the same batch already assigned to this house
     const allTeams = await Teams.getAll();

@@ -72,6 +72,7 @@ export async function PUT(request: NextRequest) {
     const update: any = {};
 
     // Validate and add fields
+    // Support legacy scalar `maxTeamsPerBatch` (fallback) and new `batchLimits` object
     if (maxTeamsPerBatch !== undefined) {
       if (
         typeof maxTeamsPerBatch !== "number" ||
@@ -84,6 +85,25 @@ export async function PUT(request: NextRequest) {
         );
       }
       update.maxTeamsPerBatch = maxTeamsPerBatch;
+    }
+
+    if ((body as any).batchLimits !== undefined) {
+      const batchLimits = (body as any).batchLimits;
+      if (typeof batchLimits !== "object" || Array.isArray(batchLimits) || batchLimits === null) {
+        return NextResponse.json({ error: "batchLimits must be an object mapping batch->number" }, { status: 400 });
+      }
+      const allowedBatches = ["2022", "2023", "2024", "2025"];
+      const validated: Record<string, number> = {};
+      for (const [k, v] of Object.entries(batchLimits)) {
+        if (!allowedBatches.includes(k)) {
+          return NextResponse.json({ error: `Invalid batch key: ${k}` }, { status: 400 });
+        }
+        if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 10) {
+          return NextResponse.json({ error: `Batch limit for ${k} must be a number between 0 and 10` }, { status: 400 });
+        }
+        validated[k] = v;
+      }
+      update.batchLimits = validated;
     }
 
     if (roundDurationSeconds !== undefined) {
@@ -243,7 +263,7 @@ export async function PUT(request: NextRequest) {
     // Get updated auction state for broadcast
     const updatedConfig = await Config.getAuctionState();
 
-    // Broadcast updated state to all clients via sockets
+    // Broadcast updated state to all clients via sockets (auction-state) and full config (config-update)
     emitSocketEvent("auction-state", {
       currentRound: updatedConfig.currentRound || "",
       auctionStartTime: updatedConfig.auctionStartTime?.toISOString() || null,
@@ -254,6 +274,21 @@ export async function PUT(request: NextRequest) {
         updatedConfig.currentRoundEndTime?.toISOString() || null,
       serverTime: Date.now(),
     });
+
+    // Also broadcast the full config object to clients so they can react to per-batch limits
+    try {
+      const cfgFull = await Config.get();
+      const safe = {
+        ...cfgFull,
+        auctionStartTime: cfgFull.auctionStartTime ? cfgFull.auctionStartTime.toISOString() : null,
+        auctionEndTime: cfgFull.auctionEndTime ? cfgFull.auctionEndTime.toISOString() : null,
+        currentRoundStartTime: cfgFull.currentRoundStartTime ? cfgFull.currentRoundStartTime.toISOString() : null,
+        currentRoundEndTime: cfgFull.currentRoundEndTime ? cfgFull.currentRoundEndTime.toISOString() : null,
+      };
+      emitSocketEvent("config-update", safe);
+    } catch (e) {
+      // non-fatal
+    }
 
     return NextResponse.json({
       success: true,
