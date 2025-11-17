@@ -22,17 +22,7 @@ const HousePanel: React.FC<HousePanelProps> = ({ house, onBid, disabled }) => {
     <div className="border rounded-lg p-4 shadow-md bg-white">
       <h3 className="text-xl font-bold mb-2">{house.name}</h3>
       <div className="mb-4">
-        <p className="text-gray-600">
-          Budget: ${house.remainingBudget} / ${house.totalBudget}
-        </p>
-        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-          <div
-            className="bg-blue-600 h-2 rounded-full"
-            style={{
-              width: `${(house.remainingBudget / house.totalBudget) * 100}%`,
-            }}
-          ></div>
-        </div>
+        <p className="text-gray-600">Budget: ${house.remainingBudget}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-2">

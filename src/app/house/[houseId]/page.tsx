@@ -62,7 +62,6 @@ export default function HouseDashboard() {
   const [phase, setPhase] = useState<Phase>("A");
   const [allBids, setAllBids] = useState<Array<{ houseId: string; houseName: string; amount: number }>>([]);
   const [housesMap, setHousesMap] = useState<Record<string, string>>({});
-  const [maxBidAmountConfig, setMaxBidAmountConfig] = useState<number | null>(null);
   // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
@@ -461,8 +460,6 @@ export default function HouseDashboard() {
 
   // serverConfig (from socket) exposes admin-updated config including:
   // - batchLimits
-  // - maxTeamsPerBatch
-  // - maxBidAmount
   // - minBidAmount
   // We'll derive client-side constraints from `serverConfig` below.
 
@@ -657,7 +654,7 @@ export default function HouseDashboard() {
 
   const timeLeftValue = Math.max(0, timeLeft);
   const isTimeRunningOut = timeLeftValue < 10000;
-  const budgetPercentage = (house.remainingBudget / house.totalBudget) * 100;
+  // Do not expose totalBudget in UI; only show remainingBudget
 
   // Derived bidding constraints from serverConfig and live state
   const currentHighest = allBids.length > 0 ? Math.max(...allBids.map((b) => b.amount)) : 0;
@@ -755,30 +752,15 @@ export default function HouseDashboard() {
                     <span className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
                       ${house.remainingBudget}
                     </span>
-                    <span className="text-lg sm:text-xl text-gray-400">
-                      / ${house.totalBudget}
-                    </span>
                   </div>
                 </div>
                 <div className="text-center sm:text-right">
                   <div className="text-2xl sm:text-3xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
-                    {budgetPercentage.toFixed(0)}%
+                    Remaining
                   </div>
-                  <div className="text-sm text-gray-400">Remaining</div>
                 </div>
               </div>
-              <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all shadow-[0_0_10px_currentColor] ${
-                    budgetPercentage > 50
-                      ? "bg-green-500"
-                      : budgetPercentage > 25
-                        ? "bg-yellow-500"
-                        : "bg-red-500"
-                  }`}
-                  style={{ width: `${budgetPercentage}%` }}
-                ></div>
-              </div>
+              {/* Remaining budget shown above; progress bar removed to avoid exposing totalBudget */}
               {/* Owned Teams (socket live) */}
               <div className="mt-6">
                 <h3 className="text-lg font-semibold text-white mb-2">🎖️ Owned Teams</h3>
@@ -1060,13 +1042,7 @@ export default function HouseDashboard() {
                           </p>
                         </div>
                       )}
-                      {maxBidAmountConfig != null && bidAmount > maxBidAmountConfig && (
-                        <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
-                          <p className="text-red-300 font-bold text-base sm:text-lg">
-                            ⚠️ Bid exceeds configured maximum (${maxBidAmountConfig}).
-                          </p>
-                        </div>
-                      )}
+                      
                       {/* Live Bids Leaderboard */}
                       <div className="mt-6">
                         <h3 className="text-lg sm:text-xl font-semibold text-white mb-3">Live Bids</h3>

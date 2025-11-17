@@ -205,8 +205,8 @@ export const Config = {
     if (batch && config.batchLimits && typeof config.batchLimits[batch] === "number") {
       return config.batchLimits[batch];
     }
-    // Fallback to legacy scalar
-    return config.maxTeamsPerBatch;
+    // Fallback: if no per-batch limit present, default to 1
+    return 1;
   },
 
   /**

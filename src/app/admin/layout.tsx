@@ -24,24 +24,22 @@ export default function AdminLayout({
   useEffect(() => {
     if (mounted) {
       setIsAuthenticated(true);
-
+      
       if (pathname === "/admin") {
-        router.push("/admin/overview");
+        router.push("/admin/main");
       }
     }
   }, [mounted, pathname, router]);
 
   const tabs = [
     { name: "Main", path: "/admin/main", icon: "🚀" },
-    { name: "Overview", path: "/admin/overview", icon: "📊" },
     { name: "Houses", path: "/admin/houses", icon: "🏯" },
     { name: "Teams", path: "/admin/teams", icon: "🥋" },
-    { name: "Rounds", path: "/admin/rounds", icon: "⏱️" },
     { name: "Config", path: "/admin/config", icon: "⚙️" },
   ];
 
   const isActiveTab = (path: string) => {
-    if (pathname === "/admin" && path === "/admin/overview") return true;
+    if (pathname === "/admin" && path === "/admin/main") return true;
     return pathname === path;
   };
 

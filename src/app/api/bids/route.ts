@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
 
     // Compute per-batch limit (batch-specific overrides legacy scalar)
     const perBatchLimit =
-      (config.batchLimits && config.batchLimits[teamBatch]) ?? config.maxTeamsPerBatch ?? 1;
+      (config.batchLimits && config.batchLimits[teamBatch]) ?? 1;
 
     // How many more teams from this batch the house may win
     const teamsLeftToBuy = Math.max(0, perBatchLimit - sameBatchCount);

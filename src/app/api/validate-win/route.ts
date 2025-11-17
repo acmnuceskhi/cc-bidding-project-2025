@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
             currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
           });
         }
-      } catch {}
+      } catch { }
 
       return NextResponse.json({
         success: true,

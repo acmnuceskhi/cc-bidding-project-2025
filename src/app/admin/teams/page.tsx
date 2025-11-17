@@ -42,6 +42,7 @@ interface Team {
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<TeamWithDetails[]>([]);
+  const [houses, setHouses] = useState<House[]>([]);
   const [sortBy, setSortBy] = useState<
     "price-asc" | "price-desc" | "rank"
   >("rank");
@@ -145,6 +146,7 @@ export default function TeamsPage() {
       );
 
       setTeams(teamsWithDetails);
+      setHouses(houses);
     } catch (error) {
       console.error("Failed to fetch teams data:", error);
     }
@@ -153,6 +155,68 @@ export default function TeamsPage() {
   useEffect(() => {
     fetchTeamsData();
   }, []);
+
+  // Manual assign form state
+  const [selectedHouseId, setSelectedHouseId] = useState<string | undefined>(undefined);
+  const [assignAmount, setAssignAmount] = useState<number | undefined>(undefined);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [houseLimits, setHouseLimits] = useState<any | null>(null);
+  const [isLoadingLimits, setIsLoadingLimits] = useState(false);
+
+  const handleAssign = async (teamId: string) => {
+    if (!selectedHouseId || assignAmount === undefined || assignAmount === null) {
+      alert("Please choose a house and enter an amount");
+      return;
+    }
+    // Fetch limits for this team+house and validate client-side before submitting
+    try {
+      setIsLoadingLimits(true);
+      const q = new URLSearchParams({ houseId: selectedHouseId, teamId });
+      const res = await fetchWithAuth(`/api/admin/assign-team/limits?${q.toString()}`, { method: "GET" });
+      const limits = await res.json();
+      setHouseLimits(limits);
+      if (!res.ok) {
+        alert(`Unable to fetch limits: ${limits.error || limits.message}`);
+        setIsLoadingLimits(false);
+        return;
+      }
+      const { minBid, computedMax } = limits as any;
+      if (assignAmount < minBid) {
+        alert(`Amount is below minimum allowed: ${minBid}`);
+        setIsLoadingLimits(false);
+        return;
+      }
+      if (assignAmount > computedMax) {
+        alert(`Amount exceeds safe maximum: ${computedMax}`);
+        setIsLoadingLimits(false);
+        return;
+      }
+    } catch (err) {
+      console.error("Error fetching limits:", err);
+    } finally {
+      setIsLoadingLimits(false);
+    }
+    setIsAssigning(true);
+    try {
+      const res = await fetchWithAuth("/api/admin/assign-team", {
+        method: "POST",
+        body: JSON.stringify({ teamId, houseId: selectedHouseId, amount: Number(assignAmount) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Failed to assign team: ${data.error || data.message || 'unknown error'}`);
+      } else {
+        // Refresh teams list (socket events should also update clients)
+        await fetchTeamsData();
+        alert(`Team assigned successfully to house`);
+      }
+    } catch (err) {
+      console.error("Assign error:", err);
+      alert("Failed to assign team. See console for details.");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   // --- Sorting + Filtering logic ---
   const getSortedTeams = () => {
@@ -232,6 +296,74 @@ export default function TeamsPage() {
         </h1>
         <p className="text-gray-300">Complete roster of qualified teams</p>
       </div>
+
+      {/* Manual Assign Controls */}
+      <div className="bg-black/40 rounded-xl p-4 border-2 border-[#FFD700]/30 mb-6">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-sm text-gray-300 mb-1">Select House</label>
+            <select
+              value={selectedHouseId}
+              onChange={(e) => setSelectedHouseId(e.target.value || undefined)}
+              className="w-full bg-gray-800/90 text-white border-2 border-[#FFD700]/30 rounded-lg px-3 py-2"
+            >
+              <option value="">-- Select House --</option>
+              {houses.map((h) => (
+                <option key={h.houseId} value={h.houseId}>{h.name} (Remaining: ${h.remainingBudget})</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-40">
+            <label className="block text-sm text-gray-300 mb-1">Amount</label>
+            <input
+              type="number"
+              min={0}
+              value={assignAmount ?? ""}
+              onChange={(e) => setAssignAmount(e.target.value === "" ? undefined : Number(e.target.value))}
+              className="w-full bg-gray-800/90 text-white border-2 border-[#FFD700]/30 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <div className="text-sm text-gray-400">Choose an available team below then click <span className="font-semibold text-[#FFD700]">Assign</span>.</div>
+          </div>
+        </div>
+      </div>
+      {/* Limits helper */}
+      {selectedHouseId && (
+        <div className="mb-6 bg-black/30 rounded-xl p-4 border border-[#FFD700]/20">
+          <h4 className="text-sm text-gray-300 mb-2 font-semibold">Assignment guidance for selected house</h4>
+          {isLoadingLimits ? (
+            <div className="text-gray-400">Checking limits...</div>
+          ) : houseLimits ? (
+            // If API returned per-batch mapping
+            houseLimits.batches ? (
+              <div className="text-sm text-gray-300">
+                {Object.entries(houseLimits.batches).map(([batch, info]: any) => (
+                  <div key={batch} className="flex justify-between items-center py-1">
+                    <div>Batch {batch}</div>
+                    <div className="text-right">
+                      <div>Slots left: <span className="font-semibold">{info.teamsLeftToBuy}</span></div>
+                      <div>Min bid: <span className="font-semibold">${info.minBid}</span></div>
+                      <div>Safe max: <span className="font-semibold">${info.computedMax}</span></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-300">
+                <div>Batch: <span className="font-semibold">{houseLimits.batch || 'N/A'}</span></div>
+                <div>Slots left: <span className="font-semibold">{houseLimits.teamsLeftToBuy}</span></div>
+                <div>Min bid: <span className="font-semibold">${houseLimits.minBid}</span></div>
+                <div>Safe max: <span className="font-semibold">${houseLimits.computedMax}</span></div>
+              </div>
+            )
+          ) : (
+            <div className="text-sm text-gray-400">Select a house to see assignment guidance.</div>
+          )}
+        </div>
+      )}
 
       {/* Filters and sorting */}
       <div className="bg-black/40 rounded-xl p-6 border-2 border-[#FFD700]/50 shadow-[0_0_25px_rgba(255,215,0,0.3)] backdrop-blur-md">
@@ -339,6 +471,15 @@ export default function TeamsPage() {
                       <span className="inline-block bg-blue-600/90 text-white px-4 py-2 rounded-full font-bold shadow-[0_0_20px_rgba(59,130,246,0.5)]">
                         ✨ Available
                       </span>
+                      <div className="mt-4">
+                        <button
+                          onClick={() => handleAssign(team.teamId)}
+                          disabled={!selectedHouseId || assignAmount === undefined || isAssigning}
+                          className="mt-2 w-full bg-[#FFD700] hover:bg-[#FFCF3A] text-black px-4 py-2 rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isAssigning ? "Assigning..." : "Assign to Selected House"}
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div>

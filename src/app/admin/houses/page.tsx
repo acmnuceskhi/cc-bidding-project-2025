@@ -38,10 +38,7 @@ export default function HousesPage() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [hasActiveRound, setHasActiveRound] = useState(false);
   const [editingHouse, setEditingHouse] = useState<string | null>(null);
-  const [budgetInput, setBudgetInput] = useState<{
-    totalBudget?: string;
-    adjustBy?: string;
-  }>({});
+    const [budgetInput, setBudgetInput] = useState<{ remainingBudget?: string }>({});
   const [editMode, setEditMode] = useState<"total" | "adjust">("total");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,24 +53,14 @@ export default function HousesPage() {
     };
     return houseMap[houseName] || "/arena-background.jpg";
   };
-
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsInitialLoad(true);
-        // Fetch houses
         const housesResponse = await fetchWithAuth("/api/houses", {
           method: "GET",
         });
         const housesData: House[] = await housesResponse.json();
-        setHouses(housesData);
-
-        // Check for active rounds
-        const statusResponse = await fetchWithAuth("/api/status", {
-          method: "GET",
-        });
-        const statusData = await statusResponse.json();
-        setHasActiveRound(statusData.roundStatus === "active");
+        setHouses(housesData || []);
 
         // Fetch teams
         const teamsResponse = await fetchWithAuth("/api/teams", {
@@ -118,18 +105,9 @@ export default function HousesPage() {
             const houseKey =
               typeof t.houseId === "object" ? t.houseId : t.houseId;
             if (!houseKey) return;
-
-            if (!grouped[houseKey]) grouped[houseKey] = [];
-
-            const teamId =
-              typeof t.teamId === "object"
-                ? t.teamId
-                : t.teamId;
             grouped[houseKey].push({
               ...t,
-              purchasePrice: teamId
-                ? teamPriceMap[teamId] || 0
-                : 0,
+              purchasePrice: t.teamId ? teamPriceMap[t.teamId] || 0 : 0,
             });
           }
         });
@@ -150,18 +128,28 @@ export default function HousesPage() {
     setError(null);
 
     try {
-      const body: { totalBudget?: number; adjustRemainingBy?: number } = {};
+      const body: Record<string, any> = {};
+
+      // Find current house state
+      const current = houses.find((h) => h.houseId === houseId);
+      if (!current) {
+        throw new Error("House not found");
+      }
 
       if (editMode === "total") {
-        const total = parseFloat(budgetInput.totalBudget || "0");
-        if (isNaN(total) || total < 0) {
-          setError("Please enter a valid positive number for total budget");
+        const newTotal = parseFloat(budgetInput.totalBudget || "");
+        if (isNaN(newTotal) || newTotal < 0) {
+          setError("Please enter a valid non-negative number for total budget");
           setLoading(false);
           return;
         }
-        body.totalBudget = total;
+        // Preserve spent amount: spent = oldTotal - oldRemaining
+        const spent = (current.totalBudget ?? 0) - (current.remainingBudget ?? 0);
+        const newRemaining = newTotal - spent;
+        const adjust = newRemaining - (current.remainingBudget ?? 0);
+        body.adjustRemainingBy = adjust;
       } else {
-        const adjust = parseFloat(budgetInput.adjustBy || "0");
+        const adjust = parseFloat(budgetInput.adjustBy || "");
         if (isNaN(adjust)) {
           setError("Please enter a valid number for adjustment");
           setLoading(false);

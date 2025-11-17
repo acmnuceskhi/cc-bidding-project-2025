@@ -29,7 +29,7 @@ export default function LoginPage() {
         sessionStorage.setItem("role", data.role);
         if (data.houseId) sessionStorage.setItem("houseId", data.houseId);
 
-        if (data.role === "admin") router.push("/admin/overview");
+        if (data.role === "admin") router.push("/admin/main");
         else if (data.role === "house_captain")
           router.push(`/house/${data.houseId}`);
         else router.push("/");
