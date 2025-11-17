@@ -205,7 +205,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isNew: boolean = previousAmount === null;
+    const isNew: boolean = previousAmount === null || previousAmount === undefined;
+
+    // Enforce beating the current highest bid across all houses for this team
+    try {
+      const client = await clientPromise;
+      const existingOwn = await client
+        .db()
+        .collection("bids")
+        .findOne({
+          roundId: new ObjectId(rawTeamId),
+          houseId: new ObjectId(houseId),
+        });
+      // Find current highest bid amount for this team across all houses
+      const highest = await client
+        .db()
+        .collection("bids")
+        .find({ roundId: new ObjectId(rawTeamId) })
+        .sort({ amount: -1, timestamp: 1 })
+        .limit(1)
+        .toArray();
+      const highestAmount = highest && highest.length > 0 ? highest[0].amount : 0;
+
+      if (amount <= highestAmount) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "BID_NOT_HIGHEST",
+            message: `New bid must be higher than the current highest bid of ${highestAmount}`,
+          },
+          { status: 409 }
+        );
+      }
+    } catch (err) {
+      // If checking existing bid fails, be safe and reject
+      return NextResponse.json(
+        {
+          success: false,
+          error: "VALIDATION_FAILED",
+          message: "Failed to validate existing bid. Please try again.",
+        },
+        { status: 500 }
+      );
+    }
 
     // Always delete any pre-existing bid from this house for this team
     // Then insert a fresh bid document (ensures clean state and fresh timestamp)
@@ -251,6 +293,13 @@ export async function POST(request: NextRequest) {
           }))
           .sort((a, b) => b.amount - a.amount);
         io.to("admins").emit("bids-update", {
+          teamId: rawTeamId,
+          bids: adminBids,
+        });
+
+        // Broadcast enriched bids to all clients (e.g., projector)
+        // Safe for houses: their listener ignores non-house payload shapes
+        io.emit("bids-update", {
           teamId: rawTeamId,
           bids: adminBids,
         });

@@ -166,7 +166,7 @@ export default function HouseDashboard() {
               }
             }
 
-            // Fetch current bid for this house in this round
+            // Fetch current bid for this house in this round + all bids (leaderboard)
             try {
               const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
               const bidsData = await bidsRes.json();
@@ -174,13 +174,26 @@ export default function HouseDashboard() {
                 const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
                 setCurrentBid(myBid ? myBid.amount : null);
                 setCurrentBidTimestamp(myBid && myBid.timestamp ? new Date(myBid.timestamp).toISOString() : null);
+                // Populate all bids mapping for live leaderboard
+                try {
+                  const mapped = bidsData
+                    .map((b: any) => ({
+                      houseId: b.houseId,
+                      houseName: housesMap[b.houseId] || b.houseName || `House ${String(b.houseId).slice(-4)}`,
+                      amount: b.amount,
+                    }))
+                    .sort((a: any, b: any) => b.amount - a.amount);
+                  setAllBids(mapped);
+                } catch {}
               } else {
                 setCurrentBid(null);
                 setCurrentBidTimestamp(null);
+                setAllBids([]);
               }
             } catch (error) {
               console.error("Failed to fetch current bid:", error);
               setCurrentBid(null);
+              setAllBids([]);
             }
           } else {
             setCurrentTeam(null);
@@ -193,6 +206,7 @@ export default function HouseDashboard() {
           setCanBid(false);
           setCanBidMessage("");
           setBidAmount(0);
+          setAllBids([]);
         }
 
       } catch (error) {
@@ -261,19 +275,33 @@ export default function HouseDashboard() {
                 setCanBid(true);
               }
 
-              // Fetch current bid for this house for current team
+              // Fetch current bid for this house for current team + all bids for leaderboard
               try {
                 const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
                 const bidsData = await bidsRes.json();
                 if (Array.isArray(bidsData)) {
                   const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
                   setCurrentBid(myBid ? myBid.amount : null);
+                  // Map all bids for live leaderboard
+                  try {
+                    setAllBids(
+                      bidsData
+                        .map((b: any) => ({
+                          houseId: b.houseId,
+                          houseName: housesMap[b.houseId] || b.houseName || `House ${String(b.houseId).slice(-4)}`,
+                          amount: b.amount,
+                        }))
+                        .sort((a: any, b: any) => b.amount - a.amount)
+                    );
+                  } catch {}
                 } else {
                   setCurrentBid(null);
+                  setAllBids([]);
                 }
               } catch (error) {
                 console.error("Failed to fetch current bid:", error);
                 setCurrentBid(null);
+                setAllBids([]);
               }
             } else {
               setCanBid(false);
@@ -388,12 +416,25 @@ export default function HouseDashboard() {
       };
       socket.on("budget-update", budgetUpdateHandler);
 
-      // Bids updates: for house, payload is { teamId, houseId, amount }
+      // Bids updates: enriched payload for everyone OR house-scoped payload
       const bidsUpdateHandler = (data: Parameters<ServerToClientEvents["bids-update"]>[0]) => {
         const teamId = auctionState?.currentRound || "";
         if (!teamId) return;
         if (!data || typeof data !== "object") return;
-        if ("houseId" in data && data.teamId === teamId && data.houseId === houseId) {
+        if ("bids" in data && Array.isArray((data as any).bids) && data.teamId === teamId) {
+          try {
+            const mapped = (data as any).bids
+              .map((b: any) => ({
+                houseId: b.houseId,
+                houseName: b.houseName || housesMap[b.houseId] || `House ${String(b.houseId).slice(-4)}`,
+                amount: b.amount,
+              }))
+              .sort((a: any, b: any) => b.amount - a.amount);
+            setAllBids(mapped);
+            const mine = mapped.find((b: any) => b.houseId === houseId);
+            if (mine) setCurrentBid(mine.amount);
+          } catch {}
+        } else if ("houseId" in data && data.teamId === teamId && data.houseId === houseId) {
           setCurrentBid(data.amount);
           if ("timestamp" in data && data.timestamp) {
             setCurrentBidTimestamp(new Date((data as any).timestamp).toISOString());
@@ -493,6 +534,13 @@ export default function HouseDashboard() {
         hasHouse: !!house, 
         bidAmount 
       });
+      return;
+    }
+
+    // Enforce beating the global highest bid on the client for UX
+    const currentHighest = allBids.length > 0 ? Math.max(...allBids.map((b) => b.amount)) : 0;
+    if (bidAmount <= currentHighest) {
+      toast.show(`Bid must be higher than the current highest bid ($${currentHighest}).`, { type: 'error', duration: 3000 });
       return;
     }
     
@@ -849,7 +897,7 @@ export default function HouseDashboard() {
                         <input
                           type="number"
                           id="bidAmount"
-                          min="1"
+                          min={(allBids && allBids.length > 0) ? (Math.max(...allBids.map(b => b.amount)) + 1) : 1}
                           max={
                             maxBidAmountConfig == null
                               ? house.remainingBudget
@@ -862,7 +910,9 @@ export default function HouseDashboard() {
                           }}
                           onKeyDown={(e) => {
                             const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
-                            if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= effectiveMax) {
+                            const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                            const isHigherThanHighest = bidAmount > currentHighest;
+                            if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= effectiveMax && isHigherThanHighest) {
                               e.preventDefault(); // Prevent form submission or other default behavior
                               console.log('[INPUT] Enter key pressed, calling placeBid');
                               placeBid();
@@ -880,22 +930,26 @@ export default function HouseDashboard() {
                           disabled={
                             (() => {
                               const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
+                              const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
                               return (
                                 loading ||
                                 isPlacingBid ||
                                 bidAmount <= 0 ||
-                                bidAmount > effectiveMax
+                                bidAmount > effectiveMax ||
+                                bidAmount <= currentHighest
                               );
                             })()
                           }
                           className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
                             (() => {
                               const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
+                              const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
                               return (
                                 loading ||
                                 isPlacingBid ||
                                 bidAmount <= 0 ||
-                                bidAmount > effectiveMax
+                                bidAmount > effectiveMax ||
+                                bidAmount <= currentHighest
                               );
                             })()
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
@@ -905,6 +959,16 @@ export default function HouseDashboard() {
                           {loading ? "⏳ Placing..." : "✅ Place Bid"}
                         </button>
                       </div>
+                      {(() => {
+                        const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                        return bidAmount > 0 && bidAmount <= currentHighest ? (
+                          <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                            <p className="text-yellow-300 font-bold text-base sm:text-lg">
+                              ⚠️ Your bid must exceed the current highest bid (${currentHighest}).
+                            </p>
+                          </div>
+                        ) : null;
+                      })()}
                       {bidAmount > house.remainingBudget && (
                         <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
                           <p className="text-red-300 font-bold text-base sm:text-lg">
@@ -919,6 +983,38 @@ export default function HouseDashboard() {
                           </p>
                         </div>
                       )}
+                      {/* Live Bids Leaderboard */}
+                      <div className="mt-6">
+                        <h3 className="text-lg sm:text-xl font-semibold text-white mb-3">Live Bids</h3>
+                        {allBids.length === 0 ? (
+                          <div className="text-gray-300 text-sm">No bids yet. Be the first!</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {allBids.map((b, idx) => {
+                              const isWinner = idx === 0;
+                              const isOwn = b.houseId === house.houseId;
+                              return (
+                                <div
+                                  key={`${b.houseId}-${idx}`}
+                                  className={`flex items-center justify-between px-5 py-3 rounded-xl border text-sm sm:text-base transition-all
+                                    ${isWinner ? 'bg-[#FFD700]/25 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.4)] font-bold text-[#FFD700]' : ''}
+                                    ${!isWinner && isOwn ? 'bg-white/10 border-white/40 text-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.3)]' : ''}
+                                    ${!isWinner && !isOwn ? 'bg-white/5 border-white/10 text-white' : ''}`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="opacity-60">{idx + 1}.</span>
+                                    <span>{b.houseName}</span>
+                                    {isWinner && <span className="text-[#FFD700] text-xs sm:text-sm bg-[#FFD700]/10 px-2 py-1 rounded-md border border-[#FFD700]/40">Top</span>}
+                                    {isOwn && !isWinner && <span className="text-white text-xs sm:text-sm bg-white/20 px-2 py-1 rounded-md border border-white/40">Your Bid</span>}
+                                    {isOwn && isWinner && <span className="text-white text-xs sm:text-sm bg-white/30 px-2 py-1 rounded-md border border-white/60">You Lead 🎯</span>}
+                                  </div>
+                                  <span className={`${isWinner ? 'font-bold' : ''}`}>${b.amount}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">

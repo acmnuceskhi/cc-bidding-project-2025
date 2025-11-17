@@ -649,14 +649,42 @@ export default function ProjectorDisplay() {
       fetchData().catch(() => {});
     };
 
+    // Real-time enriched bids (now broadcast to all clients)
+    const bidsUpdateHandler = (data: any) => {
+      const teamId = auctionState?.currentRound || "";
+      if (!teamId || !data || typeof data !== "object") return;
+      if ("bids" in data && data.teamId === teamId) {
+        try {
+          const startMs = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+          const list = (data.bids as Array<{ houseId: string; houseName?: string; amount: number; timestamp?: string }>)
+            .slice()
+            .map((b) => {
+              const ts = b.timestamp ? new Date(b.timestamp).toISOString() : undefined;
+              const tMs = ts && startMs ? Math.max(0, new Date(ts).getTime() - startMs) : undefined;
+              return { ...b, houseName: b.houseName || "", timestamp: ts, timeTakenMs: tMs } as any;
+            })
+            .sort((a, b) => {
+              if (b.amount !== a.amount) return b.amount - a.amount;
+              if (a.timeTakenMs !== undefined && b.timeTakenMs !== undefined) return a.timeTakenMs - b.timeTakenMs;
+              return 0;
+            });
+          setCurrentBids(list);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
     socket.on("bid-notification", handleBidNotification);
     socket.on("auction-state", handleAuctionState);
     socket.on("round-ended", handleRoundEnded);
+    socket.on("bids-update", bidsUpdateHandler);
 
     return () => {
       socket.off("bid-notification", handleBidNotification);
       socket.off("auction-state", handleAuctionState);
       socket.off("round-ended", handleRoundEnded);
+      socket.off("bids-update", bidsUpdateHandler);
     };
   }, [socket, auctionState?.currentRound, fetchData]);
 
