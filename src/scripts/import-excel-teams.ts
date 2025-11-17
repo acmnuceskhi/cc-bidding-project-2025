@@ -221,16 +221,15 @@ export async function importTeamsFromExcel(excelFilePath: string) {
 
             const rollNumber = extractRollNumber(member.email);
 
-            // If duplicate roll number, generate a unique one (for teams with same person as multiple members)
-            let finalRollNumber = rollNumber;
+            // Skip duplicate roll numbers (same person entered multiple times)
             if (usedRollNumbers.has(rollNumber)) {
-              finalRollNumber = `${rollNumber}-${memberCount + 1}`;
-              console.log(`    ⚠️  Duplicate roll number detected, using: ${finalRollNumber}`);
+              console.log(`    ⚠️  Skipping duplicate member: ${member.name} (${rollNumber})`);
+              continue;
             }
 
             await Participants.create({
               name: member.name,
-              rollNumber: finalRollNumber,
+              rollNumber: rollNumber,
               picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.name)}`,
               teamId,
             });
