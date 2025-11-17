@@ -67,14 +67,14 @@ export interface ServerToClientEvents {
   "bids-update": (
     data:
       | {
-          teamId: string;
-          bids: Array<{
-            houseId: string;
-            houseName?: string;
-            amount: number;
-            timestamp?: string;
-          }>;
-        } // admin payload
+        teamId: string;
+        bids: Array<{
+          houseId: string;
+          houseName?: string;
+          amount: number;
+          timestamp?: string;
+        }>;
+      } // admin payload
       | { teamId: string; houseId: string; amount: number; timestamp?: string } // house payload
   ) => void;
   "teams-update": (data: { teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null; houseId?: string | null }> }) => void;

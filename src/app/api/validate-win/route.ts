@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
             currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
           });
         }
-      } catch {}
+      } catch { }
 
       return NextResponse.json({ success: true, cancelled: true });
     }
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
             currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
           });
         }
-      } catch {}
+      } catch { }
 
       return NextResponse.json({
         success: true,
@@ -266,9 +266,9 @@ export async function POST(request: NextRequest) {
           for (const [hId, teams] of Object.entries(byHouse)) {
             io.to(`house:${hId}`).emit("house-teams-update", { houseId: hId, teams });
           }
-        } catch {}
+        } catch { }
       }
-    } catch {}
+    } catch { }
 
     return NextResponse.json({
       success: true,
