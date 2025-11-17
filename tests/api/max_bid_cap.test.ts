@@ -1,7 +1,7 @@
 import { generateToken } from "@/lib/auth";
 
 describe("Max Bid Cap - API", () => {
-  it("rejects amounts exceeding configured maxBidAmount", async () => {
+  it("rejects amounts exceeding computed safe maximum (no configured cap)", async () => {
     const { Houses } = await import("@/lib/models/houses");
     const { Users } = await import("@/lib/models/users");
     const { Teams } = await import("@/lib/models/teams");
@@ -35,8 +35,10 @@ describe("Max Bid Cap - API", () => {
     const teamId = team.insertedId.toString();
 
     const now = Date.now();
+    // Configure a min bid and current round; there is no configured hard cap
     await Config.update({
-      maxBidAmount: 100,
+      minBidAmount: 10,
+      maxTeamsPerBatch: 3,
       currentRound: teamId,
       currentRoundStartTime: new Date(now - 5_000),
       currentRoundEndTime: new Date(now + 60_000),
@@ -59,11 +61,14 @@ describe("Max Bid Cap - API", () => {
       return res.json();
     }
 
+    // With house budget set low, computed max should be enforced
+    // Place a bid well above safe maximum — expect rejection
     const tooHigh = await placeBid(150);
     expect(tooHigh.success).toBe(false);
-    expect(tooHigh.error).toBe("MAX_BID_EXCEEDED");
+    expect(tooHigh.error).toBe("COMPUTED_MAX_EXCEEDED");
 
-    const atLimit = await placeBid(100);
-    expect(atLimit.success).toBe(true);
+    // Place a bid within safe computed max — expect success
+    const within = await placeBid(50);
+    expect(within.success).toBe(true);
   });
 });

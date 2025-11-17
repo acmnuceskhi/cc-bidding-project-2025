@@ -52,37 +52,11 @@ export function useSocket() {
       setIsConnected(true);
       setIsReconnecting(false);
       // Request an authoritative snapshot for THIS hook instance
-      socket.emit("request-state", async (snapshot: AuctionState) => {
+      socket.emit("request-state", (snapshot: AuctionState) => {
         if (process.env.NODE_ENV === "development") {
           console.log("request-state ack:", snapshot);
         }
-        const isEmpty =
-          (!snapshot.currentRound || snapshot.currentRound === "") &&
-          !snapshot.auctionStartTime &&
-          !snapshot.auctionEndTime &&
-          !snapshot.currentRoundStartTime &&
-          !snapshot.currentRoundEndTime;
-        if (isEmpty) {
-          try {
-            const res = await fetch("/api/config", { cache: "no-store" });
-            if (res.ok) {
-              const cfg = await res.json();
-              setAuctionState({
-                currentRound: cfg.currentRound || "",
-                auctionStartTime: cfg.auctionStartTime || null,
-                auctionEndTime: cfg.auctionEndTime || null,
-                currentRoundStartTime: cfg.currentRoundStartTime || null,
-                currentRoundEndTime: cfg.currentRoundEndTime || null,
-                serverTime: Date.now(),
-              });
-              return;
-            }
-          } catch (e) {
-            if (process.env.NODE_ENV === "development") {
-              console.warn("/api/config fallback failed", e);
-            }
-          }
-        }
+        // Always trust the server-provided snapshot; do not fall back to REST endpoints here.
         setAuctionState(snapshot);
       });
     };

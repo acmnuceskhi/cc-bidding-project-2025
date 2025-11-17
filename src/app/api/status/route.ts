@@ -83,7 +83,7 @@ export async function GET() {
     const startMs = cfg.currentRoundStartTime ? new Date(cfg.currentRoundStartTime).getTime() : null;
     const endMs = cfg.currentRoundEndTime ? new Date(cfg.currentRoundEndTime).getTime() : null;
     const isActuallyActive = !!(activeTeamId && startMs && endMs && now >= startMs && now < endMs);
-    
+
     let team: { teamId: string; rank: number; batch: string | null; memberCount: number; successfulAttempts?: number; totalPoints?: number } | null = null;
     let bidsPlaced: Array<{ houseId: string; amount: number }> = [];
     let timerRemaining = 0;

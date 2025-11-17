@@ -93,7 +93,6 @@ export async function initializeData() {
     // Initialize global auction configuration
     await Config.update({
       maxTeamsPerBatch: 3,
-      maxBidAmount: null,
       roundDurationSeconds: 60,
       countdownWarningSeconds: 10,
       autoStartNextRound: false,

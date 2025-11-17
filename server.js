@@ -180,6 +180,26 @@ app.prepare().then(() => {
       });
     }
 
+    // Send the full configuration snapshot to the connecting client so
+    // the client can compute bidding constraints from authoritative values
+    try {
+      const client = await getMongoClient();
+      const cfgCol = client.db().collection("config");
+      const cfg = await cfgCol.findOne({ _id: "auction-config" });
+      if (cfg) {
+        const safe = {
+          ...cfg,
+          auctionStartTime: cfg.auctionStartTime ? (new Date(cfg.auctionStartTime)).toISOString() : null,
+          auctionEndTime: cfg.auctionEndTime ? (new Date(cfg.auctionEndTime)).toISOString() : null,
+          currentRoundStartTime: cfg.currentRoundStartTime ? (new Date(cfg.currentRoundStartTime)).toISOString() : null,
+          currentRoundEndTime: cfg.currentRoundEndTime ? (new Date(cfg.currentRoundEndTime)).toISOString() : null,
+        };
+        socket.emit("config-update", safe);
+      }
+    } catch (e) {
+      if (dev) console.warn("Failed to send initial config-update to client", e);
+    }
+
     // Send initial teams state snapshot based on role
     try {
       const payload = socket.data?.user;

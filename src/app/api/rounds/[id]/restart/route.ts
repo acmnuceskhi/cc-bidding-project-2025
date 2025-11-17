@@ -175,9 +175,9 @@ export async function POST(
             { $unset: { houseId: "" } },
             { session }
           );
-        
+
         console.log(`[RESTART] Team unassignment - matched: ${teamUpdateResult.matchedCount}, modified: ${teamUpdateResult.modifiedCount}`);
-        
+
         // Unassign all participants in the team
         const participantsUpdateResult = await db
           .collection("participants")
@@ -186,7 +186,7 @@ export async function POST(
             { $unset: { houseId: "" } },
             { session }
           );
-        
+
         console.log(`[RESTART] Participants unassignment - matched: ${participantsUpdateResult.matchedCount}, modified: ${participantsUpdateResult.modifiedCount}`);
 
         // Reset the round's state so it's ready for restart (clear skipped flag for fresh start)
@@ -209,7 +209,7 @@ export async function POST(
           },
           { session }
         );
-        
+
         console.log(`[RESTART] Round update - matched: ${roundUpdateResult.matchedCount}, modified: ${roundUpdateResult.modifiedCount}`);
       });
     } finally {
@@ -226,14 +226,14 @@ export async function POST(
     }
 
     const updatedRound = await Rounds.getById(id);
-    
+
     console.log(`[RESTART] After transaction - round status: ${updatedRound?.status}, winningBid: ${updatedRound?.winningBid || 'none'}`);
 
     // Clear config if this round was the active one and emit socket event
     try {
       const { Config } = await import("@/lib/models/config");
       const cfg = await Config.get();
-      
+
       // If the restarted round was the current round, clear it from config
       if (cfg.currentRound === round.teamId.toString()) {
         await Config.update({
@@ -241,7 +241,7 @@ export async function POST(
           currentRoundStartTime: null,
           currentRoundEndTime: null,
         });
-        
+
         // Broadcast updated auction state to all clients
         const { getSocketInstance } = await import("@/lib/socket-instance");
         const io = getSocketInstance();

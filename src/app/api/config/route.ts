@@ -57,7 +57,6 @@ export async function PUT(request: NextRequest) {
     const {
       maxTeamsPerBatch,
       minBidAmount,
-      maxBidAmount,
       roundDurationSeconds,
       countdownWarningSeconds,
       autoStartNextRound,
@@ -121,25 +120,8 @@ export async function PUT(request: NextRequest) {
       update.roundDurationSeconds = roundDurationSeconds;
     }
 
-    // Validate maxBidAmount (null = unlimited)
-    if (maxBidAmount !== undefined) {
-      const isNull = maxBidAmount === null;
-      const isValidNumber =
-        typeof maxBidAmount === "number" &&
-        Number.isFinite(maxBidAmount) &&
-        maxBidAmount >= 1 &&
-        maxBidAmount <= 1_000_000_000; // practical upper bound
-      if (!isNull && !isValidNumber) {
-        return NextResponse.json(
-          {
-            error:
-              "maxBidAmount must be null or a number between 1 and 1000000000",
-          },
-          { status: 400 }
-        );
-      }
-      update.maxBidAmount = maxBidAmount;
-    }
+    // Note: server-side configured per-bid hard cap has been removed.
+    // Max bid is computed from the house budget and batch/team limits only.
 
     // Validate minBidAmount (null allowed)
     if (minBidAmount !== undefined) {

@@ -656,22 +656,26 @@ export default function HouseDashboard() {
   const isTimeRunningOut = timeLeftValue < 10000;
   // Do not expose totalBudget in UI; only show remainingBudget
 
-  // Derived bidding constraints from serverConfig and live state
+  // Derived bidding constraints — use frontend constants per user request
+  const MIN_BID = 500;
+  const TOTAL_TEAMS_PER_HOUSE = 11;
+
   const currentHighest = allBids.length > 0 ? Math.max(...allBids.map((b) => b.amount)) : 0;
-  const minBidFromServer = serverConfig?.minBidAmount == null ? 1 : Number(serverConfig.minBidAmount);
-  const perBatchLimitForCurrentTeam = currentTeam
-    ? (serverConfig?.batchLimits?.[currentTeam.batch] ?? serverConfig?.maxTeamsPerBatch ?? 1)
-    : 1;
-  const ownedInBatch = currentTeam ? myTeams.filter((t) => t.batch === currentTeam.batch).length : 0;
-  const teamsLeftToBuy = Math.max(0, perBatchLimitForCurrentTeam - ownedInBatch);
+
+  // Compute teams-left using a fixed total allowed per house
+  const totalAllowed = TOTAL_TEAMS_PER_HOUSE;
+  const houseOwnedCount = myTeams.length;
+  const teamsLeftToBuy = Math.max(0, totalAllowed - houseOwnedCount);
+
   let computedMax = house.remainingBudget;
   if (teamsLeftToBuy > 1) {
-    computedMax = house.remainingBudget - (teamsLeftToBuy - 1) * minBidFromServer;
+    computedMax = house.remainingBudget - (teamsLeftToBuy - 1) * MIN_BID;
   }
   computedMax = Math.max(0, computedMax);
-  const cfgMax = serverConfig?.maxBidAmount == null ? null : Number(serverConfig?.maxBidAmount);
-  const effectiveMax = cfgMax == null ? Math.min(house.remainingBudget, computedMax) : Math.min(house.remainingBudget, computedMax, cfgMax);
-  const effectiveMin = Math.max(minBidFromServer, currentHighest + 1);
+
+  // Effective bounds used by the UI
+  const effectiveMax = Math.min(house.remainingBudget, computedMax);
+  const effectiveMin = Math.max(MIN_BID, currentHighest + 1);
 
   return (
     <div
@@ -987,7 +991,7 @@ export default function HouseDashboard() {
                                 bidAmount <= 0 ||
                                 bidAmount > effectiveMax ||
                                 bidAmount <= currentHighestLocal ||
-                                bidAmount < minBidFromServer
+                                bidAmount < MIN_BID
                               );
                             })()
                           }
@@ -1000,7 +1004,7 @@ export default function HouseDashboard() {
                                 bidAmount <= 0 ||
                                 bidAmount > effectiveMax ||
                                 bidAmount <= currentHighestLocal ||
-                                bidAmount < minBidFromServer
+                                bidAmount < MIN_BID
                               );
                             })()
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
@@ -1021,17 +1025,17 @@ export default function HouseDashboard() {
                         ) : null;
                       })()}
                       {/* Client-side checks and explainers based on serverConfig */}
-                      {bidAmount > 0 && bidAmount < minBidFromServer && (
+                      {bidAmount > 0 && bidAmount < MIN_BID && (
                         <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
                           <p className="text-yellow-300 font-bold text-base sm:text-lg">
-                            ⚠️ Bid below minimum (${minBidFromServer}). Increase bid to at least ${minBidFromServer}.
+                            ⚠️ Bid below minimum (${MIN_BID}). Increase bid to at least ${MIN_BID}.
                           </p>
                         </div>
                       )}
                       {bidAmount > 0 && bidAmount > effectiveMax && (
                         <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
                           <p className="text-red-300 font-bold text-base sm:text-lg">
-                            ⚠️ Bid exceeds your safe maximum (${effectiveMax}). This ensures you can still acquire the remaining {teamsLeftToBuy} team(s) from batch {currentTeam?.batch} at a minimum of ${minBidFromServer} each.
+                            ⚠️ Bid exceeds your safe maximum (${effectiveMax}). This ensures you can still acquire the remaining {teamsLeftToBuy} team(s) across all batches at a minimum of ${MIN_BID} each.
                           </p>
                         </div>
                       )}

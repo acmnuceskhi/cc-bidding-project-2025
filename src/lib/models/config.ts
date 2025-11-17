@@ -15,7 +15,6 @@ export interface AuctionConfig {
   // Per-batch explicit limits (e.g. { "2022": 1, "2023": 2 })
   batchLimits?: Record<string, number>;
   // Per-bid hard cap; if null/undefined => unlimited
-  maxBidAmount?: number | null;
   // Per-bid minimum cap; if null/undefined => 1
   minBidAmount?: number | null;
 
@@ -51,7 +50,6 @@ const DEFAULT_CONFIG: AuctionConfig = {
     "2024": 3,
     "2025": 4,
   },
-  maxBidAmount: null,
   minBidAmount: 1,
 
   // Round timing settings

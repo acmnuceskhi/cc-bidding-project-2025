@@ -82,7 +82,6 @@ export interface ServerToClientEvents {
   "config-update": (data: {
     maxTeamsPerBatch: number;
     batchLimits?: Record<string, number> | null;
-    maxBidAmount?: number | null;
     roundDurationSeconds: number;
     countdownWarningSeconds: number;
     autoStartNextRound: boolean;
