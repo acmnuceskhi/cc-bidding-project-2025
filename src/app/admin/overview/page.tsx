@@ -34,7 +34,7 @@ export default function OverviewPage() {
   const [isStartingRound, setIsStartingRound] = useState<boolean>(false);
   const [currentBids, setCurrentBids] = useState<any[]>([]);
   // Socket subscription + auction state
-  const { socket, auctionState } = useSocket();
+  const { socket, auctionState, allTeams } = useSocket();
 
   // Check if winner modal was already shown for this round (persists across navigation)
   const isWinnerShown = (roundId: string) => {
@@ -133,6 +133,7 @@ export default function OverviewPage() {
             const enriched = bidsData.map((bid: any) => {
               const house = housesData.find((h: any) => h.houseId === bid.houseId);
               return { ...bid, houseName: house?.name || "Unknown House" };
+                    <TeamsLivePanel />
             });
             setCurrentBids(enriched);
           } else {
@@ -277,6 +278,43 @@ export default function OverviewPage() {
       setIsStartingRound(false);
     }
   };
+
+  // Derived live teams list (socket) sorted by rank
+  const liveTeams = (allTeams || []).slice().sort((a: any, b: any) => a.rank - b.rank);
+
+  // Simple component section to show teams live
+  const TeamsLivePanel = () => (
+    <div className="mt-8 bg-black/70 border border-white/10 rounded-xl p-4">
+      <h3 className="text-lg font-semibold text-white mb-3">Live Teams State</h3>
+      {liveTeams.length === 0 ? (
+        <div className="text-gray-400 text-sm">No teams loaded.</div>
+      ) : (
+        <div className="max-h-80 overflow-auto space-y-1 pr-1">
+          {liveTeams.map((t: any) => (
+            <div
+              key={t.teamId}
+              className="flex items-center justify-between text-sm bg-white/5 rounded-lg px-3 py-2 border border-white/10"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-xs font-bold bg-white/20 rounded px-2 py-0.5">#{t.rank}</span>
+                <span className="truncate font-medium text-white">{t.name || `Team ${t.rank}`}</span>
+                {t.batch && (
+                  <span className="text-[10px] uppercase tracking-wide bg-white/10 px-2 py-0.5 rounded border border-white/20 text-gray-300">{t.batch}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {t.houseId ? (
+                  <span className="text-xs bg-green-600/30 text-green-300 px-2 py-0.5 rounded border border-green-600/40">Owned</span>
+                ) : (
+                  <span className="text-xs bg-yellow-600/30 text-yellow-300 px-2 py-0.5 rounded border border-yellow-600/40">Unowned</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   const handleEndCurrentRound = async () => {
     if (!activeRound?._id) return;

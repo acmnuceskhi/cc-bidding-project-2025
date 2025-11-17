@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
       currentRoundEndTime: null,
     });
 
-    // Emit budget update to the winning house and admins, and broadcast cleared auction state
+    // Emit budget update to the winning house and admins, broadcast cleared auction state, and push updated team assignments
     try {
       const io = getSocketInstance();
       if (io) {
@@ -237,6 +237,36 @@ export async function POST(request: NextRequest) {
             cfg.currentRoundStartTime?.toISOString() || null,
           currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
         });
+
+        // Broadcast teams assignment snapshot (admins)
+        try {
+          const allTeams = await Teams.getAll();
+          const adminPayload = allTeams.map((t) => ({
+            teamId: (t._id as ObjectId).toString(),
+            name: t.name || null,
+            rank: t.rank,
+            batch: t.batch || null,
+            houseId: t.houseId ? (t.houseId as ObjectId).toString() : null,
+          }));
+          io.to("admins").emit("teams-update", { teams: adminPayload });
+          // Per-house updates
+          const byHouse: Record<string, Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }>> = {};
+          for (const t of allTeams) {
+            if (t.houseId) {
+              const hId = (t.houseId as ObjectId).toString();
+              if (!byHouse[hId]) byHouse[hId] = [];
+              byHouse[hId].push({
+                teamId: (t._id as ObjectId).toString(),
+                name: t.name || null,
+                rank: t.rank,
+                batch: t.batch || null,
+              });
+            }
+          }
+          for (const [hId, teams] of Object.entries(byHouse)) {
+            io.to(`house:${hId}`).emit("house-teams-update", { houseId: hId, teams });
+          }
+        } catch {}
       }
     } catch {}
 

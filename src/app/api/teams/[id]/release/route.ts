@@ -163,7 +163,7 @@ export async function POST(
       // Release the lock after successful transaction
       await locksColl.deleteOne({ _id: lockKey });
 
-      // ✅ Emit socket events for real-time updates
+      // ✅ Emit socket events for real-time updates (budget + teams state)
       const io = getSocketInstance();
       if (io && refundedHouseId) {
         const updatedHouse = await Houses.getById(refundedHouseId);
@@ -184,6 +184,41 @@ export async function POST(
             spent: updatedHouse.totalBudget - updatedHouse.remainingBudget,
           });
         }
+
+        // Emit updated teams assignment snapshot (admins + affected houses)
+        try {
+          const allTeams = await Teams.getAll();
+          const adminPayload = allTeams.map((t) => ({
+            teamId: (t._id as ObjectId).toString(),
+            name: t.name || null,
+            rank: t.rank,
+            batch: t.batch || null,
+            houseId: t.houseId ? (t.houseId as ObjectId).toString() : null,
+          }));
+          io.to("admins").emit("teams-update", { teams: adminPayload });
+
+          const byHouse: Record<string, Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }>> = {};
+            for (const t of allTeams) {
+              if (t.houseId) {
+                const hId = (t.houseId as ObjectId).toString();
+                if (!byHouse[hId]) byHouse[hId] = [];
+                byHouse[hId].push({
+                  teamId: (t._id as ObjectId).toString(),
+                  name: t.name || null,
+                  rank: t.rank,
+                  batch: t.batch || null,
+                });
+              }
+            }
+            // Emit to each house room
+            for (const [hId, teams] of Object.entries(byHouse)) {
+              io.to(`house:${hId}`).emit("house-teams-update", { houseId: hId, teams });
+            }
+            // Emit empty list to refunded house if it lost the team and now may have fewer teams
+            if (!byHouse[refundedHouseId]) {
+              io.to(`house:${refundedHouseId}`).emit("house-teams-update", { houseId: refundedHouseId, teams: [] });
+            }
+        } catch {}
       }
 
       return NextResponse.json({

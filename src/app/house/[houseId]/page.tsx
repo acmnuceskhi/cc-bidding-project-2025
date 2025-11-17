@@ -66,7 +66,7 @@ export default function HouseDashboard() {
   // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
-  const { socket, auctionState } = useSocket();
+  const { socket, auctionState, myTeams } = useSocket();
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -766,6 +766,62 @@ export default function HouseDashboard() {
                   }`}
                   style={{ width: `${budgetPercentage}%` }}
                 ></div>
+              </div>
+              {/* Owned Teams (socket live) */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-white mb-2">🎖️ Owned Teams</h3>
+                {myTeams.length === 0 ? (
+                  <div className="text-gray-400 text-sm">No teams recruited yet.</div>
+                ) : (
+                  <div>
+                    {(() => {
+                      // Group by batch, keep non-empty batches first
+                      const items = myTeams.slice();
+                      items.sort((a, b) => {
+                        const aBatch = a.batch || "";
+                        const bBatch = b.batch || "";
+                        if (aBatch !== bBatch) {
+                          if (!aBatch) return 1;
+                          if (!bBatch) return -1;
+                          return String(aBatch).localeCompare(String(bBatch), undefined, { numeric: true });
+                        }
+                        return a.rank - b.rank;
+                      });
+
+                      const groups: Record<string, typeof items> = {};
+                      for (const t of items) {
+                        const key = t.batch || "__UNBATCHED__";
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(t);
+                      }
+
+                      return Object.entries(groups).map(([batchKey, teams]) => {
+                        const label = batchKey === "__UNBATCHED__" ? "Unbatched" : batchKey;
+                        return (
+                          <div key={batchKey} className="mb-4">
+                            <div className="text-sm text-gray-300 font-semibold mb-2">{label}</div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {teams.map((t) => (
+                                <div
+                                  key={t.teamId}
+                                  className="bg-black/50 border border-[#FFD700]/30 rounded-lg px-3 py-2 flex items-center justify-between text-sm text-gray-200"
+                                >
+                                  <span className="font-semibold text-[#FFD700]">#{t.rank}</span>
+                                  <span className="truncate flex-1 ml-2">{t.name || `Team ${t.rank}`}</span>
+                                  {t.batch && (
+                                    <span className="text-xs bg-[#FFD700]/10 border border-[#FFD700]/30 rounded px-2 py-0.5 ml-2 text-[#FFD700]">
+                                      {t.batch}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { Users, User } from "./models/users";
 
 // Change session timeout duration here (in minutes)
-export const SESSION_TIMEOUT_MINUTES = 30;
+export const SESSION_TIMEOUT_MINUTES = 60 * 6;
 
 // const JWT_SECRET = process.env.JWT_SECRET;
 // if (!JWT_SECRET) {

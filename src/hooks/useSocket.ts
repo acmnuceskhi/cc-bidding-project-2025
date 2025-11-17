@@ -13,6 +13,8 @@ export function useSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [currentState, setCurrentState] = useState<AppState | null>(null);
   const [auctionState, setAuctionState] = useState<AuctionState | null>(null);
+  const [allTeams, setAllTeams] = useState<Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null; houseId?: string | null }>>([]);
+  const [myTeams, setMyTeams] = useState<Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }>>([]);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [socketObj, setSocketObj] = useState<Socket<
     ServerToClientEvents,
@@ -105,11 +107,25 @@ export function useSocket() {
       setAuctionState(data);
     };
 
+    const handleTeamsUpdate = (data: { teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null; houseId?: string | null }> }) => {
+      if (Array.isArray(data?.teams)) {
+        setAllTeams(data.teams);
+      }
+    };
+
+    const handleHouseTeamsUpdate = (data: { houseId: string; teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }> }) => {
+      if (Array.isArray(data?.teams)) {
+        setMyTeams(data.teams);
+      }
+    };
+
     // Attach per-instance listeners
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("state-update", handleStateUpdate);
     socket.on("auction-state", handleAuctionState);
+    socket.on("teams-update", handleTeamsUpdate);
+    socket.on("house-teams-update", handleHouseTeamsUpdate);
 
     // If already connected (because another hook created it), request state immediately
     if (socket.connected) {
@@ -121,6 +137,8 @@ export function useSocket() {
       socket.off("disconnect", handleDisconnect);
       socket.off("state-update", handleStateUpdate);
       socket.off("auction-state", handleAuctionState);
+      socket.off("teams-update", handleTeamsUpdate);
+      socket.off("house-teams-update", handleHouseTeamsUpdate);
       setSocketObj(null);
     };
   }, []);
@@ -164,5 +182,7 @@ export function useSocket() {
         });
       }
     },
+    allTeams,
+    myTeams,
   };
 }

@@ -77,6 +77,8 @@ export interface ServerToClientEvents {
         } // admin payload
       | { teamId: string; houseId: string; amount: number; timestamp?: string } // house payload
   ) => void;
+  "teams-update": (data: { teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null; houseId?: string | null }> }) => void;
+  "house-teams-update": (data: { houseId: string; teams: Array<{ teamId: string; name?: string | null; rank: number; batch?: string | null }> }) => void;
 }
 
 export interface ClientToServerEvents {

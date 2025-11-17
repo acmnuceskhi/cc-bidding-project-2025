@@ -180,6 +180,35 @@ app.prepare().then(() => {
       });
     }
 
+    // Send initial teams state snapshot based on role
+    try {
+      const payload = socket.data?.user;
+      const client = await getMongoClient();
+      const teamsCol = client.db().collection("teams");
+      const rawTeams = await teamsCol.find({}).toArray();
+      const mapped = rawTeams.map((t) => ({
+        teamId: t._id?.toString(),
+        name: t.name || null,
+        rank: t.rank,
+        batch: t.batch || null,
+        houseId: t.houseId ? t.houseId.toString() : null,
+      }));
+      if (payload?.role === "admin") {
+        socket.emit("teams-update", { teams: mapped });
+      }
+      if (payload?.role === "house_captain" && payload.houseId) {
+        const mine = mapped.filter((t) => t.houseId === payload.houseId).map((t) => ({
+          teamId: t.teamId,
+          name: t.name,
+          rank: t.rank,
+          batch: t.batch,
+        }));
+        socket.emit("house-teams-update", { houseId: payload.houseId, teams: mine });
+      }
+    } catch (e) {
+      if (dev) console.warn("Initial teams snapshot failed", e);
+    }
+
     // Allow clients to request the latest auction-state snapshot on demand
     socket.on("request-state", async (ack) => {
       try {
