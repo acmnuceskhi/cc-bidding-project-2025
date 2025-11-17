@@ -16,6 +16,8 @@ export interface AuctionConfig {
   batchLimits?: Record<string, number>;
   // Per-bid hard cap; if null/undefined => unlimited
   maxBidAmount?: number | null;
+  // Per-bid minimum cap; if null/undefined => 1
+  minBidAmount?: number | null;
 
   // Round timing settings
   roundDurationSeconds: number; // Duration of each bidding round in seconds
@@ -50,6 +52,7 @@ const DEFAULT_CONFIG: AuctionConfig = {
     "2025": 4,
   },
   maxBidAmount: null,
+  minBidAmount: 1,
 
   // Round timing settings
   roundDurationSeconds: 120, // 2 minutes per round

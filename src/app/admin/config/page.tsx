@@ -7,6 +7,7 @@ interface AuctionConfig {
   maxTeamsPerBatch: number;
   batchLimits?: Record<string, number> | null;
   maxBidAmount?: number | null;
+  minBidAmount?: number | null;
   roundDurationSeconds: number;
   countdownWarningSeconds: number;
   autoStartNextRound: boolean;
@@ -30,6 +31,7 @@ export default function ConfigPage() {
     "2025": "1",
   });
   const [maxBidAmount, setMaxBidAmount] = useState<string>("");
+  const [minBidAmount, setMinBidAmount] = useState<string>("1");
   const [roundDurationSeconds, setRoundDurationSeconds] = useState("120");
   const [countdownWarningSeconds, setCountdownWarningSeconds] = useState("30");
   const [autoStartNextRound, setAutoStartNextRound] = useState(false);
@@ -91,6 +93,11 @@ export default function ConfigPage() {
           ? ""
           : String(data.maxBidAmount)
       );
+      setMinBidAmount(
+        data.minBidAmount === null || data.minBidAmount === undefined
+          ? "1"
+          : String(data.minBidAmount)
+      );
       setRoundDurationSeconds(String(data.roundDurationSeconds));
       setCountdownWarningSeconds(String(data.countdownWarningSeconds));
       setAutoStartNextRound(data.autoStartNextRound);
@@ -124,6 +131,8 @@ export default function ConfigPage() {
           },
           maxBidAmount:
             maxBidAmount.trim() === "" ? null : parseInt(maxBidAmount, 10),
+          minBidAmount:
+            minBidAmount.trim() === "" ? null : parseInt(minBidAmount, 10),
           roundDurationSeconds: parseInt(roundDurationSeconds),
           countdownWarningSeconds: parseInt(countdownWarningSeconds),
           autoStartNextRound,
@@ -146,6 +155,11 @@ export default function ConfigPage() {
           newConfig.maxBidAmount === null || newConfig.maxBidAmount === undefined
             ? ""
             : String(newConfig.maxBidAmount)
+        );
+        setMinBidAmount(
+          newConfig.minBidAmount === null || newConfig.minBidAmount === undefined
+            ? "1"
+            : String(newConfig.minBidAmount)
         );
         setRoundDurationSeconds(String(newConfig.roundDurationSeconds));
         setCountdownWarningSeconds(String(newConfig.countdownWarningSeconds));
@@ -316,6 +330,27 @@ export default function ConfigPage() {
             />
             <p className="text-sm text-gray-400 mt-2">
               {maxBidAmount ? `Bids over $${maxBidAmount} will be rejected.` : "No limit applied."}
+            </p>
+          </div>
+
+          {/* Min Bid Amount */}
+          <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
+            <label className="block text-xl font-bold text-[#FFD700] mb-3">
+              🟢 Min Bid Amount (per bid)
+            </label>
+            <p className="text-gray-300 mb-4">
+              Minimum allowed bid. This value is used by the server and clients
+              to enforce a floor and to compute the maximum affordable bid.
+            </p>
+            <input
+              type="number"
+              min="0"
+              value={minBidAmount}
+              onChange={(e) => setMinBidAmount(e.target.value)}
+              className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
+            />
+            <p className="text-sm text-gray-400 mt-2">
+              Set to 0 to allow free/zero bids (not typical). Default: 1
             </p>
           </div>
 

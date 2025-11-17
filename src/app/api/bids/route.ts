@@ -98,21 +98,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Enforce per-bid maximum if configured
-    if (
-      cfg.maxBidAmount !== null &&
-      cfg.maxBidAmount !== undefined &&
-      amount > cfg.maxBidAmount
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "MAX_BID_EXCEEDED",
-          message: `Bid exceeds configured maximum of ${cfg.maxBidAmount}`,
-        },
-        { status: 409 }
-      );
-    }
+    // Note: per-bid `maxBidAmount` is no longer enforced as a standalone
+    // static cap here. We compute a conservative per-house `computedMax`
+    // (below) that incorporates `minBidAmount`, remaining budget, and
+    // per-batch limits — that value will be used to validate bid amounts.
 
     // Get house ID from user payload
     // console.log("JWT Payload:", payload);
@@ -189,19 +178,70 @@ export async function POST(request: NextRequest) {
     // 🏷️ In second pass, minimum roster check removed (team-based bidding)
 
     // Count how many existing teams are in the same batch
-    const sameBatchCount = houseTeams.filter(
-      (t) => t.batch === teamBatch
-    ).length;
+    const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
 
-    // ❌ Enforce the maxTeamsPerBatch limit for actual bids
-    if (sameBatchCount >= config.maxTeamsPerBatch) {
+    // Compute per-batch limit (batch-specific overrides legacy scalar)
+    const perBatchLimit =
+      (config.batchLimits && config.batchLimits[teamBatch]) ?? config.maxTeamsPerBatch ?? 1;
+
+    // How many more teams from this batch the house may win
+    const teamsLeftToBuy = Math.max(0, perBatchLimit - sameBatchCount);
+
+    // If no slots left in this batch, reject
+    if (teamsLeftToBuy <= 0) {
       return NextResponse.json(
         {
           success: false,
           error: "BATCH_LIMIT_REACHED",
-          message: `House '${house.name}' already has ${config.maxTeamsPerBatch} teams from batch '${teamBatch}'.`,
+          message: `House '${house.name}' already has the maximum (${perBatchLimit}) teams from batch '${teamBatch}'.`,
         },
         { status: 403 }
+      );
+    }
+
+    // Minimum allowed bid (server-configurable). Default to 1 when not set.
+    const minBid = config.minBidAmount == null ? 1 : Number(config.minBidAmount);
+
+    if (amount < minBid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "MIN_BID_NOT_MET",
+          message: `Bid must be at least ${minBid}`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Compute a conservative per-house maximum to ensure the house can still afford
+    // the remaining required purchases from this batch. If only 1 slot remains,
+    // the house may spend their entire remaining budget on this purchase.
+    let computedMax = house.remainingBudget;
+    if (teamsLeftToBuy > 1) {
+      computedMax = house.remainingBudget - (teamsLeftToBuy - 1) * minBid;
+    }
+    computedMax = Math.max(0, computedMax);
+
+    // If computedMax is below the minimum allowed bid, there is no affordable bid
+    if (computedMax < minBid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "COMPUTED_MAX_TOO_LOW",
+          message: `Insufficient funds to safely acquire remaining ${teamsLeftToBuy} team(s) from batch '${teamBatch}'.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    if (amount > computedMax) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "COMPUTED_MAX_EXCEEDED",
+          message: `Bid of ${amount} exceeds your computed safe maximum of ${computedMax}. Reduce bid to at most ${computedMax}.`,
+        },
+        { status: 409 }
       );
     }
 

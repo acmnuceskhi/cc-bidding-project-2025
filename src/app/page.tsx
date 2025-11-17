@@ -922,7 +922,7 @@ export default function ProjectorDisplay() {
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70008_1px,transparent_1px),linear-gradient(to_bottom,#FFD70008_1px,transparent_1px)] bg-size-[4rem_4rem] opacity-20"></div>
 
-      <div className="relative z-10 min-h-screen flex flex-col p-4">
+      <div className="relative z-10 min-h-screen flex flex-col p-4 px-[10vw]">
         {/* Timer at top */}
         <div className="text-center py-4 mb-2">
           {auctionState?.currentRoundEndTime ? (

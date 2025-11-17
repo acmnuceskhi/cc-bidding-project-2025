@@ -56,7 +56,7 @@ export default function HouseDashboard() {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [isPlacingBid, setIsPlacingBid] = useState(false); // Prevent concurrent bid submissions
-  const [canBid, setCanBid] = useState<boolean>(true);
+  const [canBid, setCanBid] = useState<boolean | null>(null);
   const [canBidMessage, setCanBidMessage] = useState<string>("");
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [phase, setPhase] = useState<Phase>("A");
@@ -66,7 +66,7 @@ export default function HouseDashboard() {
   // Removed polling; we now react to socket events only
 
   // Socket.IO integration for real-time updates
-  const { socket, auctionState, myTeams } = useSocket();
+  const { socket, auctionState, myTeams, serverConfig } = useSocket();
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -162,7 +162,9 @@ export default function HouseDashboard() {
                 setCanBidMessage(canBidData.message || "");
               } catch (err) {
                 console.error("Failed to check canBid:", err);
-                setCanBid(true);
+                // Unknown state — allow UI and rely on server validation
+                setCanBid(null);
+                setCanBidMessage("");
               }
             }
 
@@ -272,7 +274,9 @@ export default function HouseDashboard() {
                 setCanBidMessage(canBidData.message || "");
               } catch (err) {
                 console.error("Failed to check canBid:", err);
-                setCanBid(true);
+                // Unknown state — allow UI and rely on server validation
+                setCanBid(null);
+                setCanBidMessage("");
               }
 
               // Fetch current bid for this house for current team + all bids for leaderboard
@@ -455,21 +459,12 @@ export default function HouseDashboard() {
   }, [houseId, socket]);
   // Removed fetchData, auctionState, and activeRound from dependencies to prevent refresh loops
 
-  // Fetch global config once (maxBidAmount)
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetchWithAuth("/api/config", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          const v = data?.maxBidAmount;
-          setMaxBidAmountConfig(v === null || v === undefined ? null : Number(v));
-        }
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
+  // serverConfig (from socket) exposes admin-updated config including:
+  // - batchLimits
+  // - maxTeamsPerBatch
+  // - maxBidAmount
+  // - minBidAmount
+  // We'll derive client-side constraints from `serverConfig` below.
 
   // Phase computation loop (1s) using auctionState timestamps
   useEffect(() => {
@@ -663,6 +658,23 @@ export default function HouseDashboard() {
   const timeLeftValue = Math.max(0, timeLeft);
   const isTimeRunningOut = timeLeftValue < 10000;
   const budgetPercentage = (house.remainingBudget / house.totalBudget) * 100;
+
+  // Derived bidding constraints from serverConfig and live state
+  const currentHighest = allBids.length > 0 ? Math.max(...allBids.map((b) => b.amount)) : 0;
+  const minBidFromServer = serverConfig?.minBidAmount == null ? 1 : Number(serverConfig.minBidAmount);
+  const perBatchLimitForCurrentTeam = currentTeam
+    ? (serverConfig?.batchLimits?.[currentTeam.batch] ?? serverConfig?.maxTeamsPerBatch ?? 1)
+    : 1;
+  const ownedInBatch = currentTeam ? myTeams.filter((t) => t.batch === currentTeam.batch).length : 0;
+  const teamsLeftToBuy = Math.max(0, perBatchLimitForCurrentTeam - ownedInBatch);
+  let computedMax = house.remainingBudget;
+  if (teamsLeftToBuy > 1) {
+    computedMax = house.remainingBudget - (teamsLeftToBuy - 1) * minBidFromServer;
+  }
+  computedMax = Math.max(0, computedMax);
+  const cfgMax = serverConfig?.maxBidAmount == null ? null : Number(serverConfig?.maxBidAmount);
+  const effectiveMax = cfgMax == null ? Math.min(house.remainingBudget, computedMax) : Math.min(house.remainingBudget, computedMax, cfgMax);
+  const effectiveMin = Math.max(minBidFromServer, currentHighest + 1);
 
   return (
     <div
@@ -920,7 +932,13 @@ export default function HouseDashboard() {
               {/* Enhanced Bidding Section */}
               <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 {timeLeftValue > 0 ? (
-                  canBid ? (
+                  canBid === false ? (
+                    <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+                      <p className="text-yellow-300 font-bold text-xl sm:text-2xl">
+                        ⚠️ {canBidMessage || "Bidding is currently disabled for your house."}
+                      </p>
+                    </div>
+                  ) : (
                     <div className="space-y-6">
                       <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] text-center drop-shadow-[0_0_20px_#FFD700]">
                         💰 PLACE YOUR BID
@@ -953,23 +971,18 @@ export default function HouseDashboard() {
                         <input
                           type="number"
                           id="bidAmount"
-                          min={(allBids && allBids.length > 0) ? (Math.max(...allBids.map(b => b.amount)) + 1) : 1}
-                          max={
-                            maxBidAmountConfig == null
-                              ? house.remainingBudget
-                              : Math.min(house.remainingBudget, maxBidAmountConfig)
-                          }
+                          min={effectiveMin}
+                          max={effectiveMax}
                           value={bidAmount || ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             setBidAmount(val === "" ? 0 : parseInt(val, 10));
                           }}
                           onKeyDown={(e) => {
-                            const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
-                            const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
-                            const isHigherThanHighest = bidAmount > currentHighest;
+                            const currentHighestLocal = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                            const isHigherThanHighest = bidAmount > currentHighestLocal;
                             if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= effectiveMax && isHigherThanHighest) {
-                              e.preventDefault(); // Prevent form submission or other default behavior
+                              e.preventDefault();
                               console.log('[INPUT] Enter key pressed, calling placeBid');
                               placeBid();
                             }
@@ -984,28 +997,28 @@ export default function HouseDashboard() {
                             placeBid();
                           }}
                           disabled={
-                            (() => {
-                              const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
-                              const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                              (() => {
+                              const currentHighestLocal = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
                               return (
                                 loading ||
                                 isPlacingBid ||
                                 bidAmount <= 0 ||
                                 bidAmount > effectiveMax ||
-                                bidAmount <= currentHighest
+                                bidAmount <= currentHighestLocal ||
+                                bidAmount < minBidFromServer
                               );
                             })()
                           }
                           className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
-                            (() => {
-                              const effectiveMax = maxBidAmountConfig == null ? house.remainingBudget : Math.min(house.remainingBudget, maxBidAmountConfig);
-                              const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                              (() => {
+                              const currentHighestLocal = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
                               return (
                                 loading ||
                                 isPlacingBid ||
                                 bidAmount <= 0 ||
                                 bidAmount > effectiveMax ||
-                                bidAmount <= currentHighest
+                                bidAmount <= currentHighestLocal ||
+                                bidAmount < minBidFromServer
                               );
                             })()
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
@@ -1025,6 +1038,21 @@ export default function HouseDashboard() {
                           </div>
                         ) : null;
                       })()}
+                      {/* Client-side checks and explainers based on serverConfig */}
+                      {bidAmount > 0 && bidAmount < minBidFromServer && (
+                        <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                          <p className="text-yellow-300 font-bold text-base sm:text-lg">
+                            ⚠️ Bid below minimum (${minBidFromServer}). Increase bid to at least ${minBidFromServer}.
+                          </p>
+                        </div>
+                      )}
+                      {bidAmount > 0 && bidAmount > effectiveMax && (
+                        <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                          <p className="text-red-300 font-bold text-base sm:text-lg">
+                            ⚠️ Bid exceeds your safe maximum (${effectiveMax}). This ensures you can still acquire the remaining {teamsLeftToBuy} team(s) from batch {currentTeam?.batch} at a minimum of ${minBidFromServer} each.
+                          </p>
+                        </div>
+                      )}
                       {bidAmount > house.remainingBudget && (
                         <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
                           <p className="text-red-300 font-bold text-base sm:text-lg">
@@ -1071,14 +1099,6 @@ export default function HouseDashboard() {
                           </div>
                         )}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">
-                      <p className="text-yellow-300 font-bold text-xl sm:text-2xl">
-                        ⚠️{" "}
-                        {canBidMessage ||
-                          "You have already recruited 3 players from this batch!"}
-                      </p>
                     </div>
                   )
                 ) : (

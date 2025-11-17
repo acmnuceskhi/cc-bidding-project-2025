@@ -56,6 +56,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const {
       maxTeamsPerBatch,
+      minBidAmount,
       maxBidAmount,
       roundDurationSeconds,
       countdownWarningSeconds,
@@ -138,6 +139,23 @@ export async function PUT(request: NextRequest) {
         );
       }
       update.maxBidAmount = maxBidAmount;
+    }
+
+    // Validate minBidAmount (null allowed)
+    if (minBidAmount !== undefined) {
+      const isNull = minBidAmount === null;
+      const isValidNumber =
+        typeof minBidAmount === "number" &&
+        Number.isFinite(minBidAmount) &&
+        minBidAmount >= 0 &&
+        minBidAmount <= 1_000_000_000;
+      if (!isNull && !isValidNumber) {
+        return NextResponse.json(
+          { error: "minBidAmount must be null or a non-negative number" },
+          { status: 400 }
+        );
+      }
+      update.minBidAmount = minBidAmount;
     }
 
     if (countdownWarningSeconds !== undefined) {

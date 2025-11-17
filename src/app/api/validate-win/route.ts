@@ -129,14 +129,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (allBids.length === 0 || allBids[0].amount <= 0) {
-      // Clear Config.currentRound so the team becomes available again
-      await Config.update({
-        currentRound: "",
-        currentRoundStartTime: null,
-        currentRoundEndTime: null,
-      });
-
-      // Broadcast cleared auction state
+      // No bids — do not modify currentRound here. Let the admin or workflow
+      // decide if/when to advance or clear the current round.
+      // Broadcast current auction state (unchanged) so clients can refresh.
       try {
         const io = getSocketInstance();
         if (io) {
@@ -150,7 +145,7 @@ export async function POST(request: NextRequest) {
             currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
           });
         }
-      } catch { }
+      } catch {}
 
       return NextResponse.json({
         success: true,
@@ -201,12 +196,9 @@ export async function POST(request: NextRequest) {
       await session.endSession();
     }
 
-    // Clear Config.currentRound to free up the system for the next team
-    await Config.update({
-      currentRound: "",
-      currentRoundStartTime: null,
-      currentRoundEndTime: null,
-    });
+    // NOTE: Do NOT clear `Config.currentRound` here — keep the currentRound
+    // value intact so clients and workflows retain the reference to the
+    // validated team. Clearing should be an explicit admin action.
 
     // Emit budget update to the winning house and admins, broadcast cleared auction state, and push updated team assignments
     try {
