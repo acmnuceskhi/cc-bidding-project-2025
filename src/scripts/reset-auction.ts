@@ -2,12 +2,14 @@
  * Reset Auction Script
  *
  * This script resets the auction system to its initial state:
- * - Resets all rounds to "scheduled" status
+ * - Resets all rounds to "scheduled" status with passPhase = 1
  * - Clears all bids
+ * - Clears all locks
  * - Resets house budgets to their original amounts
- * - Clears participant house assignments
+ * - Clears team house assignments (bidding is team-based, not participant-based)
+ * - Resets config (if needed)
  *
- * Usage: npx tsx src/scripts/reset-auction.ts
+ * Usage: RUN_RESET_AUCTION=true npm run reset-auction
  */
 import { config } from "dotenv";
 import path from "path";
@@ -23,22 +25,25 @@ async function resetAuction() {
     const client = await clientPromise;
     const db = client.db();
 
-    // 1. Reset all rounds to "scheduled" status
+    // 1. Reset all rounds to "scheduled" status with passPhase = 1
     console.log("📋 Resetting rounds...");
     const roundsResult = await db.collection("rounds").updateMany(
       {},
       {
         $set: {
           status: "scheduled",
+          passPhase: 1,
           timerEnd: null,
           finalized: false,
           winningBid: null,
-          // scheduledStart is preserved to maintain planned schedule
+        },
+        $unset: {
+          scheduledStart: "",
         },
       }
     );
     console.log(
-      `   ✅ Reset ${roundsResult.modifiedCount} rounds to scheduled status\n`
+      `   ✅ Reset ${roundsResult.modifiedCount} rounds to scheduled status (passPhase 1)\n`
     );
 
     // 2. Delete all bids
@@ -46,7 +51,12 @@ async function resetAuction() {
     const bidsResult = await db.collection("bids").deleteMany({});
     console.log(`   ✅ Deleted ${bidsResult.deletedCount} bids\n`);
 
-    // 3. Reset house budgets to original amounts
+    // 3. Clear all locks
+    console.log("🔒 Clearing locks...");
+    const locksResult = await db.collection("_locks").deleteMany({});
+    console.log(`   ✅ Deleted ${locksResult.deletedCount} locks\n`);
+
+    // 4. Reset house budgets to original amounts
     console.log("🏯 Resetting house budgets...");
     const houses = await db.collection("houses").find({}).toArray();
     let housesUpdated = 0;
@@ -65,29 +75,43 @@ async function resetAuction() {
     }
     console.log(`   ✅ Reset ${housesUpdated} house budgets\n`);
 
-    // 4. Clear participant house assignments
-    console.log("👥 Clearing participant assignments...");
-    const participantsResult = await db.collection("participants").updateMany(
+    // 5. Clear team house assignments
+    console.log("🏆 Clearing team assignments...");
+    const teamsResult = await db.collection("teams").updateMany(
       {},
       {
-        $unset: {
-          houseId: "",
+        $set: {
+          houseId: null,
         },
       }
     );
     console.log(
-      `   ✅ Cleared ${participantsResult.modifiedCount} participant assignments\n`
+      `   ✅ Cleared ${teamsResult.modifiedCount} team assignments\n`
     );
+
+    // 6. Reset config (set auction to not started)
+    console.log("⚙️  Resetting config...");
+    await db.collection("config").updateOne(
+      {},
+      {
+        $set: {
+          auctionStarted: false,
+          currentRoundId: null,
+        },
+      },
+      { upsert: true }
+    );
+    console.log(`   ✅ Reset auction config\n`);
 
     // Summary
     console.log("✨ Auction reset complete!\n");
     console.log("Summary:");
-    console.log(`  - ${roundsResult.modifiedCount} rounds reset to scheduled`);
+    console.log(`  - ${roundsResult.modifiedCount} rounds reset to scheduled (passPhase 1)`);
     console.log(`  - ${bidsResult.deletedCount} bids cleared`);
+    console.log(`  - ${locksResult.deletedCount} locks cleared`);
     console.log(`  - ${housesUpdated} house budgets restored`);
-    console.log(
-      `  - ${participantsResult.modifiedCount} participant assignments cleared`
-    );
+    console.log(`  - ${teamsResult.modifiedCount} team assignments cleared`);
+    console.log(`  - Config reset (auctionStarted = false)`);
     console.log("\n🎯 Ready for a fresh auction!\n");
 
     process.exit(0);
@@ -97,4 +121,11 @@ async function resetAuction() {
   }
 }
 
-resetAuction();
+// When running directly with RUN_RESET_AUCTION=true
+if (process.env.RUN_RESET_AUCTION === "true") {
+  resetAuction();
+} else {
+  console.log("⚠️  Set RUN_RESET_AUCTION=true to run this script");
+  console.log("Example: RUN_RESET_AUCTION=true npm run reset-auction");
+  process.exit(0);
+}

@@ -14,7 +14,7 @@
     "import-excel": "powershell -NoProfile -Command \"$env:RUN_IMPORT_SCRIPT='true'; npx ts-node -r tsconfig-paths/register --project tsconfig.script.json src/scripts/import-excel-teams.ts\"",
     "test:watch": "jest --watch",
     "init-data": "npx tsx src/scripts/init-data.ts",
-    "reset-auction": "npx tsx src/scripts/reset-auction.ts",
+    "reset-auction": "powershell -NoProfile -Command \"$env:RUN_RESET_AUCTION='true'; npx tsx src/scripts/reset-auction.ts\"",
     "full-reset": "npx tsx src/scripts/full-reset.ts"
   },
   "dependencies": {

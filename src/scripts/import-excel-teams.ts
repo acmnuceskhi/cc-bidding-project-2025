@@ -24,9 +24,10 @@ import { Rounds } from "@/lib/models/rounds";
  * - Member 1 Email Address
  * - Member 2 Name
  * - Member 2 Email Address
- * - Vjudge Used (username)
  * - Total Solved
  * - Time Penalty
+ * 
+ * Expected Sheets: Freshmen, Sophomore, Junior, Senior
  */
 
 interface ExcelRow {
@@ -37,54 +38,51 @@ interface ExcelRow {
   "Member 1 Email Address": string;
   "Member 2 Name": string;
   "Member 2 Email Address": string;
-  "Vjudge Used": string;
   "Total Solved": number;
   "Time Penalty": number;
 }
 
 /**
- * Derives batch year from email address.
- * Example: k240847@nu.edu.pk → "2024" or 25K-1234@nu.edu.pk → "2025"
+ * Maps sheet name to batch year
+ * Freshmen → 2025, Sophomore → 2024, Junior → 2023, Senior → 2022
  */
-function deriveBatchFromEmail(email: string): string {
-  if (!email) {
-    console.log(`  ⚠️  Empty email, defaulting to current year`);
-    return new Date().getFullYear().toString();
+function deriveBatchFromSheetName(sheetName: string): string {
+  const lowerSheet = sheetName.toLowerCase().trim();
+  
+  if (lowerSheet.includes("freshmen") || lowerSheet.includes("freshman")) {
+    return "2025";
+  } else if (lowerSheet.includes("sophomore")) {
+    return "2024";
+  } else if (lowerSheet.includes("junior")) {
+    return "2023";
+  } else if (lowerSheet.includes("senior")) {
+    return "2022";
   }
   
-  // Try to extract year from email format
-  // Pattern 1: k240847 or k240847@nu.edu.pk (letter then 2 digits)
-  const pattern1 = email.match(/^[kK](\d{2})/i);
-  if (pattern1) {
-    const twoDigitYear = parseInt(pattern1[1], 10);
-    const fullYear = `20${twoDigitYear}`;
-    console.log(`  📧 Email: ${email} → Batch: ${fullYear} (pattern 1: letter+2digits)`);
-    return fullYear;
-  }
-  
-  // Pattern 2: 25K-1234 or 25K-1234@nu.edu.pk (2 digits then letter)
-  const pattern2 = email.match(/^(\d{2})[A-Za-z]/);
-  if (pattern2) {
-    const twoDigitYear = parseInt(pattern2[1], 10);
-    const fullYear = `20${twoDigitYear}`;
-    console.log(`  📧 Email: ${email} → Batch: ${fullYear} (pattern 2: 2digits+letter)`);
-    return fullYear;
-  }
-  
-  // Default to current year if no match
-  console.log(`  ⚠️  Email format not recognized: ${email}, defaulting to current year`);
+  // Fallback to current year
+  console.log(`  ⚠️  Unknown sheet name: ${sheetName}, defaulting to current year`);
   return new Date().getFullYear().toString();
 }
 
 /**
  * Generates roll number from email.
- * Example: k240847@nu.edu.pk → "k240847" or 25K-1234@nu.edu.pk → "25K-1234"
+ * Example: k250522@nu.edu.pk → "25K-0522" or k240847@nu.edu.pk → "24K-0847"
  */
 function extractRollNumber(email: string): string {
-  const match = email.match(/^([^@]+)@/);
+  const match = email.match(/^([kK])(\d{2})(\d{4})@/);
   if (match) {
-    return match[1];
+    const letter = match[1].toUpperCase();
+    const year = match[2];
+    const id = match[3];
+    return `${year}${letter}-${id}`;
   }
+  
+  // Pattern 2: 25K-1234@nu.edu.pk (already in correct format)
+  const match2 = email.match(/^(\d{2}[A-Za-z]-\d{4})@/);
+  if (match2) {
+    return match2[1].toUpperCase();
+  }
+  
   // Fallback: generate random roll number
   const letters = ["K", "L", "M", "I", "F", "P"];
   const year = new Date().getFullYear().toString().substring(2);
@@ -109,12 +107,12 @@ export async function importTeamsFromExcel(excelFilePath: string) {
     
     console.log(`Found ${workbook.SheetNames.length} sheets: ${workbook.SheetNames.join(", ")}`);
 
-    console.log("\n⚠️  WARNING: This will DELETE existing Excel-imported teams (batches 2023 & 2024)!");
+    console.log("\n⚠️  WARNING: This will DELETE existing Excel-imported teams (all 4 batches: 2022-2025)!");
     console.log("Press Ctrl+C within 3 seconds to cancel...");
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Clear existing Excel-imported teams (batches 2023 & 2024)
-    const excelBatchYears = ["2023", "2024"];
+    // Clear existing Excel-imported teams (all 4 batches)
+    const excelBatchYears = ["2022", "2023", "2024", "2025"];
     const db = (await clientPromise).db();
     
     const teamsToDelete = await db.collection("teams").find({ 
@@ -139,6 +137,10 @@ export async function importTeamsFromExcel(excelFilePath: string) {
       console.log(`\n${"=".repeat(60)}`);
       console.log(`📄 Processing sheet: ${sheetName}`);
       console.log("=".repeat(60));
+      
+      // Derive batch from sheet name
+      const batch = deriveBatchFromSheetName(sheetName);
+      console.log(`📅 Batch: ${batch}`);
       
       const worksheet = workbook.Sheets[sheetName];
       const rows: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet);
@@ -167,22 +169,15 @@ export async function importTeamsFromExcel(excelFilePath: string) {
           errorCount++;
           continue;
         }
-
-        // Derive batch from leader's email
-        const batch = deriveBatchFromEmail(row["Leader Email Address"]);
+        // Get team statistics
         const totalSolved = row["Total Solved"] || 0;
         const timePenalty = row["Time Penalty"] || 0;
-
-        // ICPC-style scoring
-        const pointsPerSolved = 100;
-        const totalPoints = totalSolved * pointsPerSolved;
 
         // Create team
         const teamResult = await Teams.create({
           name: row["Team Name"],
           successfulAttempts: totalSolved,
           unsuccessfulAttempts: 0, // Not provided in Excel
-          totalPoints,
           totalPenalty: timePenalty,
           timeTakenPerProblem: [], // Not provided in Excel
           batch,
@@ -193,6 +188,7 @@ export async function importTeamsFromExcel(excelFilePath: string) {
         console.log(`  ✅ Created team with ID: ${teamId}`);
 
         // Create participants (leader + members)
+        // Teams can have 2-3 members. Only add participants with valid name.
         const members = [
           {
             name: row["Leader Name"],
@@ -212,17 +208,34 @@ export async function importTeamsFromExcel(excelFilePath: string) {
         ];
 
         let memberCount = 0;
+        const usedRollNumbers = new Set<string>();
+        
         for (const member of members) {
-          if (member.name && member.email) {
+          // Only require name to be present (email is optional)
+          if (member.name) {
+            // Skip participants without email (Senior batch doesn't have emails)
+            if (!member.email) {
+              console.log(`    ⚠️  Skipping ${member.name} - no email provided`);
+              continue;
+            }
+
             const rollNumber = extractRollNumber(member.email);
+
+            // If duplicate roll number, generate a unique one (for teams with same person as multiple members)
+            let finalRollNumber = rollNumber;
+            if (usedRollNumbers.has(rollNumber)) {
+              finalRollNumber = `${rollNumber}-${memberCount + 1}`;
+              console.log(`    ⚠️  Duplicate roll number detected, using: ${finalRollNumber}`);
+            }
 
             await Participants.create({
               name: member.name,
-              rollNumber,
+              rollNumber: finalRollNumber,
               picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(member.name)}`,
               teamId,
             });
 
+            usedRollNumbers.add(rollNumber);
             memberCount++;
             console.log(`    ✅ Added ${member.isLeader ? "leader" : "member"}: ${member.name}`);
           }
@@ -230,6 +243,8 @@ export async function importTeamsFromExcel(excelFilePath: string) {
 
         if (memberCount === 0) {
           console.warn(`  ⚠️  Warning: No participants created for team ${row["Team Name"]}`);
+        } else if (memberCount < 2) {
+          console.warn(`  ⚠️  Warning: Team ${row["Team Name"]} has only ${memberCount} participant(s)`);
         }
 
         // Create scheduled round for this team
@@ -250,7 +265,7 @@ export async function importTeamsFromExcel(excelFilePath: string) {
 
     // Recalculate team ranks based on performance (batch-wise)
     console.log("\n" + "=".repeat(60));
-    console.log("🔄 Recalculating team ranks for imported batches (2023 & 2024)...");
+    console.log("🔄 Recalculating team ranks for all imported batches (2022-2025)...");
     
     // Only rank Excel-imported batches (reuse the constant from earlier)
     const allTeams = await Teams.getAll();
@@ -290,7 +305,7 @@ export async function importTeamsFromExcel(excelFilePath: string) {
       }
       console.log(`  ✅ Batch ${batch}: Ranked ${batchTeams.length} teams`);
     }
-    console.log("✅ Assigned team ranks for Excel-imported batches (2023 & 2024)");
+    console.log("✅ Assigned team ranks for all Excel-imported batches (2022-2025)");
 
     console.log("\n" + "=".repeat(60));
     console.log("✅ EXCEL IMPORT COMPLETED!");
