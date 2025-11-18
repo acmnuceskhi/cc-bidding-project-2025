@@ -127,13 +127,23 @@ export default function FinalTeamsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="min-h-screen relative">
+      {/* Background Image */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/arena-background.jpg')" }}
+      />
+      
+      {/* Dark overlay */}
+      <div className="fixed inset-0 bg-black/75" />
+      
+      {/* Content */}
+      <div className="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
         <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-yellow-500 mb-2">
-            Final Teams Line-Up
+          <h1 className="text-4xl md:text-5xl font-bold text-yellow-500 mb-2 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
+            ☯︎ Final Teams Line-Up ☯︎
           </h1>
-          <p className="text-muted-foreground">View all teams acquired by each house</p>
+          <p className="text-gray-300">View all teams acquired by each house</p>
         </div>
 
         <div className="mb-6">
@@ -141,7 +151,7 @@ export default function FinalTeamsPage() {
         </div>
 
         {loading ? (
-          <div className="text-center text-muted-foreground py-12">
+          <div className="text-center text-yellow-400 py-12">
             Loading teams...
           </div>
         ) : (
