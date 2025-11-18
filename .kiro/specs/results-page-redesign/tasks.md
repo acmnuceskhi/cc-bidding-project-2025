@@ -41,7 +41,12 @@
     - Ensure skeletons prevent layout shift
     - _Requirements: 8.1, 8.2, 8.5_
 
-- [ ] 3. Implement SortControls component with shadcn Button components
+- [x] 3. Implement SortControls component with shadcn Button components
+
+
+
+
+
   - Replace custom button elements with shadcn Button components
   - Implement ButtonGroup pattern with proper ARIA labels
   - Add Lucide icons (DollarSign, GraduationCap, Clock) to buttons

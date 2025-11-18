@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchPublic } from "@/lib/fetchPublic";
+import { SortControls } from "@/components/results";
 
 interface Team {
   teamId: string;
@@ -138,40 +139,8 @@ export default function FinalTeamsPage() {
         </h1>
 
         {/* Sorting Controls */}
-        <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-8 px-4">
-          <button
-            onClick={() => setSortBy("price")}
-            className={`px-3 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all ${
-              sortBy === "price"
-                ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
-                : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
-            }`}
-          >
-            <span className="hidden sm:inline">💰 Sort by Price</span>
-            <span className="sm:hidden">💰 Price</span>
-          </button>
-          <button
-            onClick={() => setSortBy("batch")}
-            className={`px-3 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all ${
-              sortBy === "batch"
-                ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
-                : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
-            }`}
-          >
-            <span className="hidden sm:inline">🎓 Sort by Batch</span>
-            <span className="sm:hidden">🎓 Batch</span>
-          </button>
-          <button
-            onClick={() => setSortBy("time")}
-            className={`px-3 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all ${
-              sortBy === "time"
-                ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
-                : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
-            }`}
-          >
-            <span className="hidden sm:inline">⏱️ Sort by Bid Time</span>
-            <span className="sm:hidden">⏱️ Time</span>
-          </button>
+        <div className="mb-8 px-4">
+          <SortControls sortBy={sortBy} onSortChange={setSortBy} />
         </div>
 
         {loading ? (
