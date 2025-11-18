@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchPublic } from "@/lib/fetchPublic";
-import { SortControls, HouseCard } from "@/components/results";
+import { SortControls, HouseCard, LoadingState, ErrorState } from "@/components/results";
 
 interface Team {
   teamId: string;
@@ -43,59 +43,62 @@ export default function FinalTeamsPage() {
   const [houses, setHouses] = useState<HouseWithTeams[]>([]);
   const [previousHouseTeamCounts, setPreviousHouseTeamCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("price");
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const [housesRes, teamsRes] = await Promise.all([
-          fetchPublic("/api/houses", { method: "GET" }),
-          fetchPublic("/api/teams", { method: "GET" }),
-        ]);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(false);
+      const [housesRes, teamsRes] = await Promise.all([
+        fetchPublic("/api/houses", { method: "GET" }),
+        fetchPublic("/api/teams", { method: "GET" }),
+      ]);
 
-        const [housesData, teamsData]: [House[], TeamWithDetails[]] =
-          await Promise.all([housesRes.json(), teamsRes.json()]);
+      const [housesData, teamsData]: [House[], TeamWithDetails[]] =
+        await Promise.all([housesRes.json(), teamsRes.json()]);
 
-        console.log("Houses data:", housesData);
-        console.log("Teams data:", teamsData);
+      console.log("Houses data:", housesData);
+      console.log("Teams data:", teamsData);
 
-        // Assign teams to their respective houses
-        const housesWithTeams: HouseWithTeams[] = housesData.map(
-          (house) => {
-            const houseIdStr = house._id ? String(house._id) : house.houseId;
-            const matchedTeams = teamsData.filter(
-              (t) => t.houseId && String(t.houseId) === houseIdStr
-            );
-            console.log(`House ${house.name} (${houseIdStr}):`, matchedTeams);
-            return {
-              ...house,
-              teams: matchedTeams,
-            };
-          }
-        );
+      // Assign teams to their respective houses
+      const housesWithTeams: HouseWithTeams[] = housesData.map(
+        (house) => {
+          const houseIdStr = house._id ? String(house._id) : house.houseId;
+          const matchedTeams = teamsData.filter(
+            (t) => t.houseId && String(t.houseId) === houseIdStr
+          );
+          console.log(`House ${house.name} (${houseIdStr}):`, matchedTeams);
+          return {
+            ...house,
+            teams: matchedTeams,
+          };
+        }
+      );
 
-        console.log("Houses with teams:", housesWithTeams);
+      console.log("Houses with teams:", housesWithTeams);
 
-        // Track previous team counts per house so we can animate only
-        // when a house gains teams (i.e. wins something new).
-        setPreviousHouseTeamCounts((prev) => {
-          const updated: Record<string, number> = { ...prev };
-          for (const h of housesWithTeams) {
-            const key = (h._id ? String(h._id) : h.houseId) || h.name;
-            updated[key] = h.teams.length;
-          }
-          return updated;
-        });
+      // Track previous team counts per house so we can animate only
+      // when a house gains teams (i.e. wins something new).
+      setPreviousHouseTeamCounts((prev) => {
+        const updated: Record<string, number> = { ...prev };
+        for (const h of housesWithTeams) {
+          const key = (h._id ? String(h._id) : h.houseId) || h.name;
+          updated[key] = h.teams.length;
+        }
+        return updated;
+      });
 
-        setHouses(housesWithTeams);
-      } catch (error) {
-        console.error("Failed to fetch final teams data:", error);
-      } finally {
-        setLoading(false);
-      }
+      setHouses(housesWithTeams);
+    } catch (error) {
+      console.error("Failed to fetch final teams data:", error);
+      setError(true);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     fetchData();
   }, []);
 
@@ -149,12 +152,13 @@ export default function FinalTeamsPage() {
           <SortControls sortBy={sortBy} onSortChange={setSortBy} />
         </header>
 
+        {/* Conditional rendering for loading, error, and content states */}
         {loading ? (
-          <div className="text-center text-yellow-400 py-12">
-            Loading teams...
-          </div>
+          <LoadingState />
+        ) : error ? (
+          <ErrorState onRetry={fetchData} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 transition-opacity duration-300 ease-in-out">
             {houses.map((house, index) => {
               const hasTeams = house.teams && house.teams.length > 0;
               const houseKey = (house._id ? String(house._id) : house.houseId) || house.name;
