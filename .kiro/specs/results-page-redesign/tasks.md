@@ -13,20 +13,29 @@
   - Verify all components are properly configured and importable
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [-] 2. Create reusable UI components for the results page
+- [x] 2. Create reusable UI components for the results page
 
 
-  - [ ] 2.1 Create EmptyState component for houses with no teams
+
+
+
+  - [x] 2.1 Create EmptyState component for houses with no teams
+
+
     - Build component with icon, message, and proper spacing
     - Apply muted styling for reduced visual prominence
     - _Requirements: 7.4_
   
-  - [ ] 2.2 Create ErrorState component with retry functionality
+  - [x] 2.2 Create ErrorState component with retry functionality
+
+
     - Build component with error icon, message, and retry button
     - Implement retry handler prop for refetching data
     - _Requirements: 8.4_
   
-  - [ ] 2.3 Create LoadingState component with skeleton loaders
+  - [x] 2.3 Create LoadingState component with skeleton loaders
+
+
     - Build skeleton grid matching final layout structure
     - Create skeleton cards for houses with proper spacing
     - Ensure skeletons prevent layout shift
