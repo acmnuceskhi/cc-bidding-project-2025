@@ -7,6 +7,7 @@ import { Config } from "@/lib/models/config";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { getSocketInstance } from "@/lib/socket-instance";
 import { logger } from "@/lib/logger";
+import clientPromise from "@/lib/mongodb";
 
 interface PhaseCounts {
   pass1: { total: number; scheduled: number; active: number; completed: number };
@@ -51,8 +52,15 @@ async function getCachedData() {
 
   // Create new in-flight promise
   inFlightCacheRequest = (async () => {
-    const allParticipants = await Participants.getAll();
-  const unsoldTeams = await Teams.getAll().then((list) => list.filter((t) => !t.houseId));
+    // PERF: Use DB query with projection instead of memory filtering
+    const client = await clientPromise;
+    const [allParticipants, unsoldTeamsRaw] = await Promise.all([
+      Participants.getAll(),
+      client.db().collection('teams')
+        .find({ houseId: null })
+        .project({ _id: 1, rank: 1, batch: 1 })
+        .toArray()
+    ]);
 
   const counts: PhaseCounts = {
     pass1: { total: 0, scheduled: 0, active: 0, completed: 0 },
@@ -65,6 +73,8 @@ async function getCachedData() {
     return allParticipants.filter((p) => p.teamId?.toString() === teamId)
       .length;
   };
+
+  const unsoldTeams = unsoldTeamsRaw as Array<{ _id: any; rank: number; batch: string | null }>
 
     cache = {
       phaseCounts: counts,

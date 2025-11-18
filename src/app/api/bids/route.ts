@@ -8,6 +8,7 @@ import { emitSocketEvent, getSocketInstance } from "@/lib/socket-instance";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import { logger } from "@/lib/logger";
+import { getCachedCollection } from "@/lib/cache";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
@@ -168,18 +169,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 👥 Get all teams already assigned to this house and get max teams per batch from config
-    const [houseTeams, config] = await Promise.all([
-      Teams.getAll().then((allTeams) =>
-        allTeams.filter((t) => t.houseId && t.houseId.toString() === houseId)
-      ),
-      Config.get(),
+    // 👥 Get count of teams in same batch and config (PERF: uses targeted DB count query + caching)
+    const [sameBatchCount, config] = await Promise.all([
+      Teams.countByHouseAndBatch(houseId, teamBatch),
+      getCachedCollection('config', () => Config.get(), 30000),
     ]);
 
     // 🏷️ In second pass, minimum roster check removed (team-based bidding)
-
-    // Count how many existing teams are in the same batch
-    const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
 
     // Compute per-batch limit (batch-specific overrides legacy scalar)
     const perBatchLimit =
