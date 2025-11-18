@@ -139,16 +139,15 @@ export default function FinalTeamsPage() {
       
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-yellow-500 mb-2 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
-            ☯︎ Final Teams Line-Up ☯︎
-          </h1>
-          <p className="text-gray-300">View all teams acquired by each house</p>
-        </div>
-
-        <div className="mb-6">
+        {/* Page Header with proper spacing and hierarchy */}
+        <header className="space-y-8 mb-12">
+          <div className="text-center">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
+              ☯︎ Final Teams Line-Up ☯︎
+            </h1>
+          </div>
           <SortControls sortBy={sortBy} onSortChange={setSortBy} />
-        </div>
+        </header>
 
         {loading ? (
           <div className="text-center text-yellow-400 py-12">
@@ -173,6 +172,13 @@ export default function FinalTeamsPage() {
             })}
           </div>
         )}
+
+        {/* Page Footer with proper spacing */}
+        <footer className="mt-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            May the strongest house prevail ☯︎
+          </p>
+        </footer>
       </div>
     </div>
   );
