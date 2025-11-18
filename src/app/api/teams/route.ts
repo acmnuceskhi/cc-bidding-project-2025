@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
 
         return {
           teamId: team._id?.toString(),
+          name: team.name || null,
           rank: team.rank,
           batch: team.batch || null,
           successfulAttempts: team.successfulAttempts,
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
+      name,
       rank,
       batch,
       successfulAttempts,
@@ -71,6 +73,7 @@ export async function POST(request: Request) {
 
     // Create the team
     const team = {
+      name: name || null,
       rank,
       batch: batch || null,
       successfulAttempts: successfulAttempts || 0,

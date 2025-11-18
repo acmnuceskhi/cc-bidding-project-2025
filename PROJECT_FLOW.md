@@ -1,6 +1,6 @@
 # CC Bidding Project – Project Logic Flow
 
-**Team-based auction system**. Qualified teams from Round 1 are auctioned to houses through competitive bidding.
+Team-based auction system. Qualified teams from Round 1 are auctioned to houses through competitive blind bidding with real-time Socket.io updates.
 
 ---
 
@@ -10,7 +10,7 @@
   - Starts, stops, and restarts rounds (from `/admin/rounds`)
   - Views all bids in real-time
   - Adjusts house budgets from `/admin` or `/api/houses/[id]/budget`
-  - Configures auction settings from `/admin/config` (teams per batch, round duration, etc.)
+  - Configures auction settings from `/admin/config` (teams per batch, round duration, countdown warning, delays)
   - Can restart any round at any time to refund winning bid and reset team assignment
   - **Note:** Rounds are predefined for all qualified teams; admin controls timing only
 
@@ -23,6 +23,7 @@
   - View team information (rank, batch, Round 1 stats, team members)
   - Cannot see bid amounts during active rounds
   - See all bids with timestamps when round ends
+  - Subscribe to live updates via Socket.io (no polling)
 
 ---
 
@@ -30,7 +31,7 @@
 
 ### A. Admin Workflow
 
-1. Start predefined round → status active
+1. Start predefined round (or start "next" unsold team) → status active
 2. Timer runs for the round (configurable via `/admin/config`)
 3. Admin can end round manually or let timer expire
 4. At round end:
@@ -44,11 +45,20 @@
    - Refunds the **winning house bid only** (only winner's budget was deducted)
    - Clears team assignment (team.houseId set to null)
    - Deletes all bids for that round
-   - Round status reset to scheduled/pending for re-auction
+
+- Round status reset to scheduled/pending for re-auction
+- If the round was unsold in pass 1, restart moves it to pass 2
+
 7. Admin configures auction settings from `/admin/config`:
    - Max teams per batch per house
-   - Round duration and countdown warning time
-   - Auto-start next round behavior
+
+- Round duration and countdown warning time
+- Auto-start next round behavior and delay between rounds
+
+Additional admin actions:
+
+- Validate win for the currently-open team via `POST /api/validate-win` (deducts winner budget and assigns team; emits socket updates)
+- Start next available unsold team via `POST /api/rounds/next/start`
 
 ### B. House Captain Workflow
 
@@ -57,7 +67,9 @@
 - All bids visible to everyone when round ends
 - Cannot exceed remaining budget
 - Can edit bid unlimited times before timer ends
-- Bid edits update `bids.amount` only
+- Last bid per house is considered; previous bid is replaced atomically
+- Send `{ teamId, amount }` to `POST /api/bids` (back-compat: `roundId` accepted as `teamId`)
+- Sending `amount: 0` acts as an explicit skip (no bid document created)
 
 ### C. Spectator / Projector Display
 
@@ -68,7 +80,7 @@
 - Round number and pass phase
 - Houses that placed bids (without amounts during round)
 - Winning house and **all bid amounts/timestamps** when round ends
-- Live updates via **WebSocket** (Socket.io)
+- Live updates via **Socket.io**
 
 ---
 
@@ -79,6 +91,7 @@
 - Tie → earlier bid timestamp wins
 - Tie with identical timestamps → Admin can rerun round
 - Bid submission and budget deduction are atomic to prevent overspending
+- Authoritative auction window (start/end) is stored in `config` and broadcast to clients
 
 ---
 
@@ -89,10 +102,11 @@
 | `teams`        | rank, batch, successfulAttempts, unsuccessfulAttempts, totalPoints, totalPenalty, timeTakenPerProblem, houseId?                     |
 | `participants` | name, batch, teamId, houseId?, isTeamCaptain                                                                                        |
 | `rounds`       | teamId, status ("scheduled" \| "active" \| "completed"), timerEnd, finalized, passPhase                                             |
-| `bids`         | roundId, houseId, teamId, amount, timestamp                                                                                         |
+| `bids`         | roundId, houseId, teamId, amount, timestamp (latest per house per team is authoritative)                                            |
 | `houses`       | name, totalBudget, remainingBudget                                                                                                  |
 | `users`        | username, password, role ("admin" \| "house_captain"), houseId?, createdAt, lastLogin?                                              |
 | `config`       | maxTeamsPerBatch, roundDurationSeconds, countdownWarningSeconds, autoStartNextRound, delayBetweenRoundsSeconds (singleton document) |
+| (config state) | currentRound, auctionStartTime, auctionEndTime, currentRoundStartTime, currentRoundEndTime                                          |
 
 ---
 
@@ -109,6 +123,7 @@
   - **Pass 1:** All qualified teams auctioned sequentially
   - **Pass 2:** Only triggers if any house fails to meet minimum team requirement in Pass 1
   - In Pass 2, only unsold teams are re-auctioned
+- **Bid semantics:** `amount: 0` is treated as "skip"; no batch-limit enforcement for skip
 
 ---
 
@@ -116,174 +131,94 @@
 
 ### Real-time Communication
 
-The system uses **Socket.io** for real-time bidding updates alongside traditional HTTP APIs. Both mechanisms work together for resilience.
+The system uses Socket.io for real-time bidding updates. HTTP APIs remain authoritative for mutations and one-off reads.
 
-**Architecture Principles:**
+Principles:
 
-1. **Database as Source of Truth**: All critical data (rounds, bids, teams, houses) stored in MongoDB
-2. **Stateless Socket.io**: Server doesn't hold state in memory; fetches from DB on reconnection
-3. **Polling Fallback**: Clients poll `/api/status` every 2 seconds as backup to Socket.io
-4. **Independent Time Sync**: Clients sync time once via `/api/time` and calculate countdowns locally
+- Database is the source of truth (MongoDB)
+- Socket server is stateless; authoritative state is derived from the `config` document and broadcast as `auction-state`
+- No periodic polling for UI state; clients request a one-time snapshot on connect and then listen for events
+- Independent time sync via `/api/time` every ~10s for stable countdowns
 
 ### Socket.io Events
 
-**Server → Client (Broadcast):**
+Server → Client:
 
-- `state-update` - Current auction state (screen, roundId, teamId, timeLeft)
-- `round-started` - Round begins with team details and timer
-- `round-ended` - Round completes with winner and all bids
-- `bid-notification` - House placed/updated bid (without amount for privacy)
+- `auction-state` — Authoritative snapshot built from `config`:
+  - `{ currentRound, auctionStartTime, auctionEndTime, currentRoundStartTime, currentRoundEndTime, serverTime }`
+- `state-update` — Lightweight signal to refresh UI context (bidding/results cues)
+- `round-started` — `{ roundId, timerEnd }` when a round opens
+- `round-ended` — `{ roundId, winner, losers }` when a round closes
+- `bid-notification` — `{ houseId, houseName, roundId }` on bid placement
+- `bids-update` —
+  - To `admins` room: `{ teamId, bids: Array<{ houseId, houseName, amount }> }`
+  - To a `house:<id>` room: `{ teamId, houseId, amount }`
+- `budget-update` — `{ houseId, remainingBudget }` after win validation
 
-**Client → Server (Admin only):**
+Client → Server:
 
-- `admin:start-round` - Start a round (triggers broadcast)
-- `admin:end-round` - End round manually (triggers broadcast)
-- `bid-placed` - Notify all clients when bid submitted
+- `request-state` — Acks with `auction-state` for immediate resync on connect/reconnect
+- `bid-placed` — Client-side notification after placing a bid via REST
 
-**Client → Server (House Captains):**
+### Resilience & Behavior
 
-- `bid-placed` - Notify bid submission (triggers broadcast)
+1. Stateless sockets
 
-### Resilience Mechanisms
+- On connect/reconnect, the server emits `auction-state` built from `config` (see `server.js: buildAuctionStateFromConfig`)
+- No in-memory authoritative state; UI can always resync via `request-state`
 
-**1. Stateless Socket.io Server**
+2. Reconnection
 
-- On client reconnection, server fetches current state from MongoDB
-- No in-memory state that can be lost on server restart
-- `currentState` rebuilt from database queries on every new connection
-- Implementation: `buildStateFromDB()` function queries active/recent rounds
+- Client auto-reconnects with backoff; on `connect` the hook sends `request-state`
+- If the ack is empty, the client falls back to `GET /api/config` once
 
-**2. Automatic Reconnection**
+3. Time sync
 
-- Socket.io client auto-reconnects with exponential backoff
-- On reconnect, client re-fetches `/api/status` to sync with DB
-- Polling continues even when Socket.io disconnected
-- Implementation: `useSocket` hook handles reconnection logic
+- `useServerTime` syncs via `GET /api/time` every ~10s; countdowns derive from `auction-state` timestamps + offset
 
-**3. API Polling Fallback**
+4. Rooms & auth
 
-- Projector polls `/api/status` every 2 seconds
-- House captain pages poll status during active rounds
-- Admin dashboard polls rounds list
-- Ensures functionality even if Socket.io fails completely
+- Client sends `handshake.auth.token` (JWT) from `sessionStorage`
+- Server joins `house:<houseId>` for captains; `admins` room for admins
+- API routes emit targeted updates using rooms
 
-**4. Independent Timer System**
+5. Error handling
 
-- Clients fetch server time once via `/api/time`
-- Calculate time offset: `serverTime - clientTime`
-- All countdowns use `Date.now() + offset` for accuracy
-- Timers continue running even if server crashes
-- Implementation: `useServerTime` and `useSynchronizedCountdown` hooks
+- Socket errors are logged (dev) and do not crash the server
+- UI removes listeners on unmount and shows reconnecting states when applicable
 
-**5. Error Handling**
+### Production Notes
 
-- Socket.io errors logged but don't crash server
-- Client shows reconnection status in UI
-- Graceful degradation: polling takes over if Socket.io fails
-- Try-catch blocks around all socket event handlers
+Socket.io configuration (see `server.js`):
 
-### Production Deployment Best Practices
-
-**Socket.io Configuration:**
-
-```typescript
-// server.js - Production-ready settings
-io = new SocketIOServer(httpServer, {
-  pingTimeout: 60000, // 60s before considering connection dead
-  pingInterval: 25000, // Send ping every 25s
-  connectTimeout: 45000, // 45s to establish connection
-  transports: ["websocket", "polling"], // Fallback to polling
+```ts
+new Server(httpServer, {
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectTimeout: 45000,
+  maxHttpBufferSize: 1e6,
+  transports: ["websocket", "polling"],
+  cors: {
+    origin: process.env.RENDER_EXTERNAL_URL || "*",
+    methods: ["GET", "POST"],
+  },
 });
 ```
 
-**State Management:**
+Authoritative state broadcasting:
 
-```typescript
-// socket-server.ts - Stateless approach
-io.on("connection", async (socket) => {
-  // Always fetch fresh state from DB, never from memory
-  const currentState = await buildStateFromDB();
-  socket.emit("state-update", currentState);
-});
+- On connect and on `request-state`, server emits `auction-state` built from `config`
+- API routes also emit `auction-state` after changes to `config` timestamps and currentRound
 
-async function buildStateFromDB(): Promise<AppState> {
-  // 1. Check for active round
-  const activeRound = await Rounds.findOne({ status: "active" });
-  if (activeRound) return buildBiddingState(activeRound);
+Scaling:
 
-  // 2. Check for recently completed round (show results)
-  const recentCompleted = await Rounds.findOne(
-    { status: "completed", finalized: true },
-    { sort: { timerEnd: -1 } }
-  );
-  if (recentCompleted && withinLast30Seconds(recentCompleted)) {
-    return buildResultsState(recentCompleted);
-  }
-
-  // 3. Default to waiting screen
-  return { screen: "waiting", message: "..." };
-}
-```
-
-**Client Reconnection:**
-
-```typescript
-// useSocket.ts - Handle reconnection
-socket.on("connect", async () => {
-  setIsConnected(true);
-
-  // Re-sync state from DB after reconnection
-  const res = await fetch("/api/status");
-  const freshState = await res.json();
-  // Update local state from authoritative DB source
-});
-```
-
-**Memory Management:**
-
-- Socket.io connections cleaned up on disconnect automatically
-- No in-memory state stored (prevents memory leaks)
-- Garbage collection handles closed connections
-- Event listeners properly removed on disconnect
-
-**Scalability:**
-
-- Single server instance sufficient for ~50 concurrent users
-- For horizontal scaling: use Redis adapter for Socket.io
-  ```bash
-  npm install @socket.io/redis-adapter redis
-  ```
-- Database connection pooling via MongoDB client (already configured)
-- Consider sticky sessions for multi-instance deployments
-
-**Crash Recovery:**
-
-- Server restart: clients auto-reconnect within 1-2 seconds
-- State recovered from MongoDB immediately via `buildStateFromDB()`
-- Active rounds continue (timers are client-side with `useServerTime`)
-- No data loss since all critical state in database
-
-**Monitoring:**
-
-- Log Socket.io connections/disconnections with timestamps
-- Track API polling frequency and response times
-- Monitor MongoDB query performance (add indexes if needed)
-- Alert on high reconnection rates (indicates server instability)
-- Track memory usage to detect leaks
-
-**Error Scenarios Handled:**
-
-1. Server crash → Clients reconnect, fetch state from DB, timers continue
-2. Database slowdown → Socket.io continues, polling provides fallback
-3. Network interruption → Client reconnects automatically, re-syncs state
-4. Socket.io failure → Polling provides full functionality
-5. Memory exhaustion → Stateless design prevents state accumulation
+- Single instance is sufficient for the expected audience; for horizontal scaling use the Redis adapter and sticky sessions
 
 ---
 
 ## 7. API Reference
 
-See **[API.md](./API.md)** for complete API endpoint documentation including:
+See `API.md` for complete endpoint documentation including:
 
 - **Authentication** - Login, logout, session management
 - **Round Management** - Create, start, end, restart rounds
@@ -293,16 +228,18 @@ See **[API.md](./API.md)** for complete API endpoint documentation including:
 - **Participants** - Query participants by team, house, or batch
 - **System Endpoints** - Projector status, server time sync
 
-**Quick Reference:**
+Quick reference:
 
-| Category     | Endpoints                                                                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| Auth         | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`                                                             |
-| Rounds       | `GET /api/rounds`, `POST /api/rounds`, `POST /api/rounds/:id/start`, `POST /api/rounds/:id/end`, `POST /api/rounds/:id/restart` |
-| Bidding      | `POST /api/bids`, `GET /api/bids`                                                                                               |
-| Houses       | `GET /api/houses`, `PATCH /api/houses/:id/budget`, `GET /api/houses/:id/canPlaceBid`                                            |
-| Teams        | `GET /api/teams`, `GET /api/teams/:id`                                                                                          |
-| Participants | `GET /api/participants`                                                                                                         |
-| System       | `GET /api/status`, `GET /api/time`                                                                                              |
+| Category     | Endpoints                                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth         | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`                                                                                                                   |
+| Rounds       | `GET /api/rounds`, `GET /api/rounds/:id`, `POST /api/rounds`, `POST /api/rounds/:id/start`, `POST /api/rounds/:id/end`, `POST /api/rounds/:id/restart`, `POST /api/rounds/next/start` |
+| Bidding      | `POST /api/bids` (body: `{ teamId, amount, previousAmount }`, back-compat `roundId`), `GET /api/bids?teamId=...`/`?houseId=...`                                                       |
+| Config       | `GET /api/config`, `PUT /api/config` (also emits `auction-state`)                                                                                                                     |
+| Validation   | `POST /api/validate-win` (finalize winner and budget; emits `budget-update`/`bids-update`)                                                                                            |
+| Houses       | `GET /api/houses`, `PATCH /api/houses/:id/budget`                                                                                                                                     |
+| Teams        | `GET /api/teams`, `GET /api/teams/:id`                                                                                                                                                |
+| Participants | `GET /api/participants`                                                                                                                                                               |
+| System       | `GET /api/status` (admin orchestration/snapshot), `GET /api/time` (time sync)                                                                                                         |
 
 ---

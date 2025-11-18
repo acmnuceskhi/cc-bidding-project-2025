@@ -43,6 +43,3 @@ next-env.d.ts
 
 # vscode settings
 .vscode/
-
-# large video files
-public/waiting-video.mp4

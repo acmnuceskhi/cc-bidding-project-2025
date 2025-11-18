@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Rounds } from "@/lib/models/rounds";
 import { Teams } from "@/lib/models/teams";
 import { verifyAuth, hasRole } from "@/lib/auth";
+import { emitSocketEvent, getSocketInstance } from "@/lib/socket-instance";
 
 export async function POST(request: NextRequest) {
   try {
@@ -152,6 +153,40 @@ export async function POST(request: NextRequest) {
 
     if (result.matchedCount === 0) {
       return NextResponse.json({ error: "Round not found" }, { status: 404 });
+    }
+
+    // Emit socket events to notify all clients
+    const io = getSocketInstance();
+    if (io) {
+      // Emit round-started event
+      io.emit("round-started", {
+        roundId: targetRoundId,
+        timerEnd: timerEnd.toISOString(),
+      });
+
+      // Emit state-update event (will trigger clients to fetch fresh state)
+      io.emit("state-update", {
+        screen: "bidding",
+        roundId: targetRoundId,
+        teamId: team._id?.toString() || "",
+        timeLeft: durationMs,
+      });
+
+      // Update authoritative config state and broadcast auction-state
+      await Config.update({
+        currentRound: targetRoundId,
+        currentRoundStartTime: new Date(),
+        currentRoundEndTime: timerEnd,
+      });
+      const cfgState = await Config.getAuctionState();
+      io.emit("auction-state", {
+        currentRound: cfgState.currentRound || "",
+        auctionStartTime: cfgState.auctionStartTime?.toISOString() || null,
+        auctionEndTime: cfgState.auctionEndTime?.toISOString() || null,
+        currentRoundStartTime: cfgState.currentRoundStartTime?.toISOString() || null,
+        currentRoundEndTime: cfgState.currentRoundEndTime?.toISOString() || null,
+        serverTime: Date.now(),
+      });
     }
 
     return NextResponse.json({

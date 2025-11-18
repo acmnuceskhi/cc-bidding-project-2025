@@ -4,11 +4,11 @@ import { useState, useEffect } from "react";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
 
 interface AuctionConfig {
-  maxTeamsPerBatch: number;
-  roundDurationSeconds: number;
+  batchLimits?: Record<string, number> | null;
+  minBidAmount?: number | null;
   countdownWarningSeconds: number;
-  autoStartNextRound: boolean;
-  delayBetweenRoundsSeconds: number;
+  auctionStartTime?: string | null;
+  auctionEndTime?: string | null;
 }
 
 export default function ConfigPage() {
@@ -18,11 +18,40 @@ export default function ConfigPage() {
   const [message, setMessage] = useState("");
 
   // Form state - use strings for inputs to avoid parsing issues while typing
-  const [maxTeamsPerBatch, setMaxTeamsPerBatch] = useState("1");
-  const [roundDurationSeconds, setRoundDurationSeconds] = useState("120");
+  const [batchLimits, setBatchLimits] = useState<Record<string, string>>({
+    "2022": "1",
+    "2023": "1",
+    "2024": "1",
+    "2025": "1",
+  });
+  const [minBidAmount, setMinBidAmount] = useState<string>("1");
   const [countdownWarningSeconds, setCountdownWarningSeconds] = useState("30");
-  const [autoStartNextRound, setAutoStartNextRound] = useState(false);
-  const [delayBetweenRoundsSeconds, setDelayBetweenRoundsSeconds] = useState("5");
+  const [auctionStartTimeLocal, setAuctionStartTimeLocal] = useState<string>("");
+  const [auctionEndTimeLocal, setAuctionEndTimeLocal] = useState<string>("");
+
+  // Helpers to convert between ISO and input[type=datetime-local] values
+  const isoToLocalInput = (iso?: string | null): string => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const hours = String(d.getHours()).padStart(2, "0");
+      const minutes = String(d.getMinutes()).padStart(2, "0");
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const localInputToIso = (local: string): string | null => {
+    if (!local) return null;
+    const d = new Date(local);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  };
 
   useEffect(() => {
     fetchConfig();
@@ -32,15 +61,31 @@ export default function ConfigPage() {
     try {
       setLoading(true);
       const res = await fetchWithAuth("/api/config");
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`GET /api/config ${res.status}: ${text || res.statusText}`);
+      }
       const data = await res.json();
       setConfig(data);
       
       // Update form state - convert to strings
-      setMaxTeamsPerBatch(String(data.maxTeamsPerBatch));
-      setRoundDurationSeconds(String(data.roundDurationSeconds));
-      setCountdownWarningSeconds(String(data.countdownWarningSeconds));
-      setAutoStartNextRound(data.autoStartNextRound);
-      setDelayBetweenRoundsSeconds(String(data.delayBetweenRoundsSeconds));
+      // Populate per-batch limits (if present)
+      const incomingBatchLimits: Record<string, number> | undefined = data.batchLimits || undefined;
+      setBatchLimits({
+        "2022": String(incomingBatchLimits?.["2022"] ?? 1),
+        "2023": String(incomingBatchLimits?.["2023"] ?? 1),
+        "2024": String(incomingBatchLimits?.["2024"] ?? 1),
+        "2025": String(incomingBatchLimits?.["2025"] ?? 1),
+      });
+      setMinBidAmount(
+        data.minBidAmount === null || data.minBidAmount === undefined
+          ? "1"
+          : String(data.minBidAmount)
+      );
+      setCountdownWarningSeconds(String(data.countdownWarningSeconds ?? 30));
+      // Times into datetime-local inputs (local timezone display)
+      setAuctionStartTimeLocal(isoToLocalInput(data.auctionStartTime));
+      setAuctionEndTimeLocal(isoToLocalInput(data.auctionEndTime));
     } catch (error) {
       console.error("Error fetching config:", error);
       setMessage("❌ Failed to load configuration");
@@ -58,11 +103,17 @@ export default function ConfigPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          maxTeamsPerBatch: parseInt(maxTeamsPerBatch),
-          roundDurationSeconds: parseInt(roundDurationSeconds),
-          countdownWarningSeconds: parseInt(countdownWarningSeconds),
-          autoStartNextRound,
-          delayBetweenRoundsSeconds: parseInt(delayBetweenRoundsSeconds),
+          batchLimits: {
+            "2022": parseInt(batchLimits["2022"] ?? "1", 10),
+            "2023": parseInt(batchLimits["2023"] ?? "1", 10),
+            "2024": parseInt(batchLimits["2024"] ?? "1", 10),
+            "2025": parseInt(batchLimits["2025"] ?? "1", 10),
+          },
+          minBidAmount:
+            minBidAmount.trim() === "" ? null : parseInt(minBidAmount, 10),
+          countdownWarningSeconds: parseInt(countdownWarningSeconds || "30", 10),
+          auctionStartTime: localInputToIso(auctionStartTimeLocal),
+          auctionEndTime: localInputToIso(auctionEndTimeLocal),
         }),
       });
 
@@ -74,11 +125,22 @@ export default function ConfigPage() {
         const newConfig = data.config || data;
         setConfig(newConfig);
         // Update form with saved values
-        setMaxTeamsPerBatch(String(newConfig.maxTeamsPerBatch));
-        setRoundDurationSeconds(String(newConfig.roundDurationSeconds));
-        setCountdownWarningSeconds(String(newConfig.countdownWarningSeconds));
-        setAutoStartNextRound(newConfig.autoStartNextRound);
-        setDelayBetweenRoundsSeconds(String(newConfig.delayBetweenRoundsSeconds));
+        setMinBidAmount(
+          newConfig.minBidAmount === null || newConfig.minBidAmount === undefined
+            ? "1"
+            : String(newConfig.minBidAmount)
+        );
+        setCountdownWarningSeconds(String(newConfig.countdownWarningSeconds ?? 30));
+        setAuctionStartTimeLocal(isoToLocalInput(newConfig.auctionStartTime));
+        setAuctionEndTimeLocal(isoToLocalInput(newConfig.auctionEndTime));
+        // Update batchLimits after save
+        const savedBatchLimits: Record<string, number> | undefined = newConfig.batchLimits || undefined;
+        setBatchLimits({
+          "2022": String(savedBatchLimits?.["2022"] ?? 1),
+          "2023": String(savedBatchLimits?.["2023"] ?? 1),
+          "2024": String(savedBatchLimits?.["2024"] ?? 1),
+          "2025": String(savedBatchLimits?.["2025"] ?? 1),
+        });
         setTimeout(() => setMessage(""), 3000);
       } else {
         setMessage(`❌ Error: ${data.error || "Failed to save"}`);
@@ -119,50 +181,102 @@ export default function ConfigPage() {
         )}
 
         <div className="space-y-6">
-          {/* Max Teams Per Batch */}
+          {/* Auction Window Times */}
           <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
             <label className="block text-xl font-bold text-[#FFD700] mb-3">
-              🎓 Max Teams Per Batch
+              🗓️ Auction Window
             </label>
             <p className="text-gray-300 mb-4">
-              Maximum number of teams from a single batch (22k, 23k, 24k, 25k) that a house can win
+              Set the overall start and end time of the auction. These values drive the global status banners and countdowns for all clients.
             </p>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              value={maxTeamsPerBatch}
-              onChange={(e) => setMaxTeamsPerBatch(e.target.value)}
-              className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
-            />
-            <p className="text-sm text-gray-400 mt-2">
-              Current: Each house can win up to {maxTeamsPerBatch || 1} team(s) from each batch
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Auction Start</label>
+                <input
+                  type="datetime-local"
+                  value={auctionStartTimeLocal}
+                  onChange={(e) => setAuctionStartTimeLocal(e.target.value)}
+                  className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAuctionStartTimeLocal("")}
+                  className="mt-2 text-sm text-yellow-300 hover:text-yellow-200"
+                >
+                  Clear start
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Auction End</label>
+                <input
+                  type="datetime-local"
+                  value={auctionEndTimeLocal}
+                  onChange={(e) => setAuctionEndTimeLocal(e.target.value)}
+                  className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAuctionEndTimeLocal("")}
+                  className="mt-2 text-sm text-yellow-300 hover:text-yellow-200"
+                >
+                  Clear end
+                </button>
+              </div>
+            </div>
+            <p className="text-sm text-gray-400 mt-3">Times are interpreted in your local timezone and saved as ISO-8601 (UTC) on the server.</p>
+          </div>
+
+
+          {/* Per-Batch Limits */}
+          <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
+            <label className="block text-xl font-bold text-[#FFD700] mb-3">
+              🗂️ Per-Batch Limits
+            </label>
+            <p className="text-gray-300 mb-4">
+              Set the max wins a house can have for each batch separately. Values override the legacy global "Max Teams Per Batch" when present.
             </p>
-            <p className="text-sm text-yellow-400 mt-2 font-semibold">
-              ⚠️ Recommended: 1 (ensures each house gets exactly 1 team from each of the 4 batches = 4 teams total)
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {Object.keys(batchLimits).map((year) => (
+                <div key={year}>
+                  <label className="block text-sm text-gray-300 mb-2">Batch {year}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={batchLimits[year]}
+                    onChange={(e) => setBatchLimits((s) => ({ ...s, [year]: e.target.value }))}
+                    className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-3 py-2 text-lg focus:outline-none focus:border-[#FFD700]"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-400 mt-3">
+              Leave a batch value as 0 to disable wins for that batch.
             </p>
           </div>
 
-          {/* Round Duration */}
+
+          {/* Min Bid Amount */}
           <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
             <label className="block text-xl font-bold text-[#FFD700] mb-3">
-              ⏱️ Round Duration (seconds)
+              🟢 Min Bid Amount (per bid)
             </label>
             <p className="text-gray-300 mb-4">
-              How long each bidding round lasts
+              Minimum allowed bid. This value is used by the server and clients
+              to enforce a floor and to compute the maximum affordable bid.
             </p>
             <input
               type="number"
-              min="30"
-              max="600"
-              value={roundDurationSeconds}
-              onChange={(e) => setRoundDurationSeconds(e.target.value)}
+              min="0"
+              value={minBidAmount}
+              onChange={(e) => setMinBidAmount(e.target.value)}
               className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
             />
             <p className="text-sm text-gray-400 mt-2">
-              Current: {roundDurationSeconds || 120} seconds ({Math.floor((parseInt(roundDurationSeconds) || 120) / 60)}:{((parseInt(roundDurationSeconds) || 120) % 60).toString().padStart(2, '0')} minutes)
+              Set to 0 to allow free/zero bids (not typical). Default: 1
             </p>
           </div>
+
 
           {/* Countdown Warning */}
           <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
@@ -185,53 +299,14 @@ export default function ConfigPage() {
             </p>
           </div>
 
-          {/* Auto Start Next Round */}
-          <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
-            <label className="flex items-center space-x-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoStartNextRound}
-                onChange={(e) => setAutoStartNextRound(e.target.checked)}
-                className="w-6 h-6 rounded border-2 border-[#FFD700]/50 bg-gray-800 checked:bg-[#FFD700] focus:outline-none focus:ring-2 focus:ring-[#FFD700]"
-              />
-              <span className="text-xl font-bold text-[#FFD700]">
-                🚀 Auto-Start Next Round
-              </span>
-            </label>
-            <p className="text-gray-300 ml-9 mt-2">
-              Automatically start the next round after current one completes
-            </p>
-          </div>
-
-          {/* Delay Between Rounds */}
-          {autoStartNextRound && (
-            <div className="bg-black/60 rounded-xl p-6 border border-[#FFD700]/30">
-              <label className="block text-xl font-bold text-[#FFD700] mb-3">
-                ⏳ Delay Between Rounds (seconds)
-              </label>
-              <p className="text-gray-300 mb-4">
-                Pause duration before auto-starting next round
-              </p>
-              <input
-                type="number"
-                min="0"
-                max="60"
-                value={delayBetweenRoundsSeconds}
-                onChange={(e) => setDelayBetweenRoundsSeconds(e.target.value)}
-                className="w-full bg-gray-800 text-white border-2 border-[#FFD700]/50 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-[#FFD700]"
-              />
-              <p className="text-sm text-gray-400 mt-2">
-                Wait {delayBetweenRoundsSeconds || 5} seconds before starting next round
-              </p>
-            </div>
-          )}
+          {/* Per-batch limits, min bid, and countdown settings remain */}
 
           {/* Action Buttons */}
           <div className="flex gap-4 pt-6">
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="flex-1 bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {saving ? "Saving..." : "💾 Save Configuration"}
             </button>

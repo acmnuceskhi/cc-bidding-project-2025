@@ -13,4 +13,8 @@ services:
         sync: false  # Set this in Render Dashboard
       - key: JWT_SECRET
         sync: false  # Set this in Render Dashboard - generate a secure random value
+      - key: NEXT_PUBLIC_POLLING_INTERVAL
+        value: "10000"  # 10 seconds polling interval
+      - key: RENDER_EXTERNAL_URL
+        sync: false  # Automatically set by Render, but can be overridden
     healthCheckPath: /api/ping

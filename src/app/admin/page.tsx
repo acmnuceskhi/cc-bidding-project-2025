@@ -9,7 +9,7 @@ export default function AdminRedirect() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/admin/overview");
+    router.replace("/admin/main");
   }, [router]);
 
   return <FullPageSpinner message="Loading admin dashboard..." />;

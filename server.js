@@ -1,7 +1,36 @@
+/* eslint-disable */
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
 const { Server } = require("socket.io");
+const { setSocketInstance } = require("./src/lib/socket-instance");
+const jwt = require("jsonwebtoken");
+const { MongoClient } = require("mongodb");
+const { config: loadEnv } = require("dotenv");
+const path = require("path");
+
+// Load environment variables similar to src/lib/mongodb.ts
+loadEnv({ path: path.resolve(process.cwd(), ".env.local") });
+loadEnv({ path: path.resolve(process.cwd(), ".env") });
+
+const MONGODB_URI = process.env.MONGODB_URI;
+let mongoClientPromise;
+function getMongoClient() {
+  if (!mongoClientPromise) {
+    if (!MONGODB_URI) {
+      throw new Error(
+        "Please define MONGODB_URI in your environment (e.g. .env.local)"
+      );
+    }
+    const client = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+    });
+    mongoClientPromise = client.connect();
+  }
+  return mongoClientPromise;
+}
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
@@ -11,82 +40,240 @@ const hostname =
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
+// Build current state from config (authoritative five fields)
+async function buildAuctionStateFromConfig() {
+  try {
+    const client = await getMongoClient();
+    const collection = client.db().collection("config");
+    const CONFIG_ID = "auction-config";
+    const doc = await collection.findOne({ _id: CONFIG_ID });
+
+    const normalizeDate = (v) => {
+      if (v === undefined) return undefined;
+      if (v === null) return null;
+      if (v instanceof Date) return v;
+      if (typeof v === "number") return new Date(v);
+      if (typeof v === "string") {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      if (v && typeof v === "object" && typeof v.toDate === "function") {
+        try {
+          const d = v.toDate();
+          return d instanceof Date ? d : null;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+
+    const state = doc || {};
+    const auctionStartTime = normalizeDate(state.auctionStartTime);
+    const auctionEndTime = normalizeDate(state.auctionEndTime);
+    const currentRoundStartTime = normalizeDate(state.currentRoundStartTime);
+    const currentRoundEndTime = normalizeDate(state.currentRoundEndTime);
+
+    return {
+      currentRound: state.currentRound || "",
+      auctionStartTime: auctionStartTime ? auctionStartTime.toISOString() : null,
+      auctionEndTime: auctionEndTime ? auctionEndTime.toISOString() : null,
+      currentRoundStartTime: currentRoundStartTime ? currentRoundStartTime.toISOString() : null,
+      currentRoundEndTime: currentRoundEndTime ? currentRoundEndTime.toISOString() : null,
+      serverTime: Date.now(),
+    };
+  } catch (error) {
+    if (dev) {
+      console.error("Error building auction state from config:", error);
+    }
+    return {
+      currentRound: "",
+      auctionStartTime: null,
+      auctionEndTime: null,
+      currentRoundStartTime: null,
+      currentRoundEndTime: null,
+      serverTime: Date.now(),
+    };
+  }
+}
+
 app.prepare().then(() => {
   const httpServer = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
     } catch (err) {
-      console.error("Error occurred handling", req.url, err);
+      if (dev) {
+        console.error("Error occurred handling", req.url, err);
+      }
       res.statusCode = 500;
       res.end("internal server error");
     }
   });
 
+  // Production-ready Socket.IO configuration
+  const corsOrigin =
+    process.env.NODE_ENV === "production" && process.env.RENDER_EXTERNAL_URL
+      ? [process.env.RENDER_EXTERNAL_URL]
+      : "*";
+
   const io = new Server(httpServer, {
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    connectTimeout: 45000,
+    maxHttpBufferSize: 1e6,
+    transports: ["websocket", "polling"],
     cors: {
-      origin: "*",
+      origin: corsOrigin,
       methods: ["GET", "POST"],
     },
   });
 
-  let currentState = {
-    screen: "waiting",
-    message: "Waiting for admin to start...",
-  };
+  // Export socket instance for use in API routes
+  setSocketInstance(io);
 
-  io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
+  // Authenticate sockets and join rooms
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake?.auth?.token;
+      if (!token) return next();
+      const secret = process.env.JWT_SECRET || "fallback-secret-key";
+      const payload = jwt.verify(token, secret);
+      socket.data.user = payload || null;
+      return next();
+    } catch (e) {
+      // Allow connection but without privileged rooms
+      return next();
+    }
+  });
 
-    // Send current state to newly connected client
-    socket.emit("state-update", currentState);
+  io.on("connection", async (socket) => {
+    if (dev) {
+      console.log("Client connected:", socket.id);
+    }
 
-    // Admin actions
-    socket.on("admin:start-round", (data) => {
-      console.log("Admin starting round:", data);
-      currentState = {
-        screen: "bidding",
-        roundId: data.roundId,
-        participantId: data.participantId,
-        participant: data.participant,
-        timerEnd: data.timerEnd,
-      };
-      io.emit("state-update", currentState);
-    });
+    // Join role-based rooms for targeted events
+    try {
+      const payload = socket.data?.user;
+      if (payload?.role === "house_captain" && payload.houseId) {
+        socket.join(`house:${payload.houseId}`);
+      }
+      if (payload?.role === "admin") {
+        socket.join("admins");
+      }
+    } catch { }
 
-    socket.on("admin:end-round", (data) => {
-      console.log("Admin ending round:", data);
-      currentState = {
-        screen: "results",
-        roundId: data.roundId,
-        winner: data.winner,
-        losers: data.losers,
-        participant: data.participant,
-      };
-      io.emit("state-update", currentState);
-    });
+    try {
+      const currentState = await buildAuctionStateFromConfig();
+      socket.emit("auction-state", currentState);
+    } catch (error) {
+      if (dev) {
+        console.error("Error sending initial auction state:", error);
+      }
+      socket.emit("auction-state", {
+        currentRound: "",
+        auctionStartTime: null,
+        auctionEndTime: null,
+        currentRoundStartTime: null,
+        currentRoundEndTime: null,
+        serverTime: Date.now(),
+      });
+    }
 
-    socket.on("admin:show-waiting", (data) => {
-      console.log("Admin showing waiting screen");
-      currentState = {
-        screen: "waiting",
-        message: data.message || "Waiting for next round...",
-      };
-      io.emit("state-update", currentState);
+    // Send the full configuration snapshot to the connecting client so
+    // the client can compute bidding constraints from authoritative values
+    try {
+      const client = await getMongoClient();
+      const cfgCol = client.db().collection("config");
+      const cfg = await cfgCol.findOne({ _id: "auction-config" });
+      if (cfg) {
+        const safe = {
+          ...cfg,
+          auctionStartTime: cfg.auctionStartTime ? (new Date(cfg.auctionStartTime)).toISOString() : null,
+          auctionEndTime: cfg.auctionEndTime ? (new Date(cfg.auctionEndTime)).toISOString() : null,
+          currentRoundStartTime: cfg.currentRoundStartTime ? (new Date(cfg.currentRoundStartTime)).toISOString() : null,
+          currentRoundEndTime: cfg.currentRoundEndTime ? (new Date(cfg.currentRoundEndTime)).toISOString() : null,
+        };
+        socket.emit("config-update", safe);
+      }
+    } catch (e) {
+      if (dev) console.warn("Failed to send initial config-update to client", e);
+    }
+
+    // Send initial teams state snapshot based on role
+    try {
+      const payload = socket.data?.user;
+      const client = await getMongoClient();
+      const teamsCol = client.db().collection("teams");
+      const rawTeams = await teamsCol.find({}).toArray();
+      const mapped = rawTeams.map((t) => ({
+        teamId: t._id?.toString(),
+        name: t.name || null,
+        rank: t.rank,
+        batch: t.batch || null,
+        houseId: t.houseId ? t.houseId.toString() : null,
+      }));
+      if (payload?.role === "admin") {
+        socket.emit("teams-update", { teams: mapped });
+      }
+      if (payload?.role === "house_captain" && payload.houseId) {
+        const mine = mapped.filter((t) => t.houseId === payload.houseId).map((t) => ({
+          teamId: t.teamId,
+          name: t.name,
+          rank: t.rank,
+          batch: t.batch,
+        }));
+        socket.emit("house-teams-update", { houseId: payload.houseId, teams: mine });
+      }
+    } catch (e) {
+      if (dev) console.warn("Initial teams snapshot failed", e);
+    }
+
+    // Allow clients to request the latest auction-state snapshot on demand
+    socket.on("request-state", async (ack) => {
+      try {
+        const currentState = await buildAuctionStateFromConfig();
+        if (typeof ack === "function") ack(currentState);
+        else socket.emit("auction-state", currentState);
+      } catch (err) {
+        if (dev) console.error("request-state failed:", err);
+      }
     });
 
     socket.on("bid-placed", (data) => {
-      console.log("Bid placed:", data);
-      io.emit("bid-notification", {
-        houseId: data.houseId,
-        houseName: data.houseName,
-        roundId: data.roundId,
-      });
+      try {
+        if (dev) {
+          console.log("Bid placed:", data);
+        }
+        io.emit("bid-notification", {
+          houseId: data.houseId,
+          houseName: data.houseName,
+          roundId: data.roundId,
+        });
+      } catch (error) {
+        if (dev) {
+          console.error("Error handling bid-placed event:", error);
+        }
+      }
     });
 
-    socket.on("disconnect", () => {
-      console.log("Client disconnected:", socket.id);
+    socket.on("disconnect", (reason) => {
+      if (dev) {
+        console.log("Client disconnected:", socket.id, "Reason:", reason);
+      }
     });
+
+    socket.on("error", (error) => {
+      if (dev) {
+        console.error("Socket error:", socket.id, error);
+      }
+    });
+  });
+
+  io.engine.on("connection_error", (err) => {
+    if (dev) {
+      console.error("Socket.IO connection error:", err);
+    }
   });
 
   httpServer
@@ -103,17 +290,21 @@ app.prepare().then(() => {
   // Graceful shutdown
   process.on("SIGTERM", () => {
     console.log("SIGTERM received, shutting down gracefully...");
-    httpServer.close(() => {
-      console.log("HTTP server closed");
-      process.exit(0);
+    io.close(() => {
+      httpServer.close(() => {
+        console.log("HTTP server closed");
+        process.exit(0);
+      });
     });
   });
 
   process.on("SIGINT", () => {
     console.log("SIGINT received, shutting down gracefully...");
-    httpServer.close(() => {
-      console.log("HTTP server closed");
-      process.exit(0);
+    io.close(() => {
+      httpServer.close(() => {
+        console.log("HTTP server closed");
+        process.exit(0);
+      });
     });
   });
 });

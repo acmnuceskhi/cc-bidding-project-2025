@@ -1,13 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { House } from "@/lib/models/houses";
+// import { House } from "@/lib/models/houses";
 import { fetchWithAuth } from "@/lib/fetchWithAuth";
-import { useSynchronizedCountdown } from "@/hooks/useSynchronizedCountdown";
 import { useToast } from "@/components/ToastProvider";
 import { FullPageSpinner } from "@/components/Spinner";
+import { useSocket } from "@/hooks/useSocket";
+import type { ServerToClientEvents } from "@/types/socket";
+
+type Phase = "A" | "B" | "CA" | "CB" | "CC" | "CD";
 
 interface Team {
   teamId: string;
@@ -17,6 +20,8 @@ interface Team {
   successfulAttempts?: number;
   totalPoints?: number;
   timeTaken?: number;
+  name?: string | null;
+  members?: Array<{ participantId: string; name: string; rollNumber?: string; picture?: string | null }>;
 }
 
 interface HouseApiResponse {
@@ -40,20 +45,27 @@ export default function HouseDashboard() {
   const params = useParams();
   const houseId = params.houseId as string;
 
-  const [house, setHouse] = useState<House | null>(null);
+  const [house, setHouse] = useState<HouseApiResponse | null>(null);
   const [activeRound, setActiveRound] = useState<
     (filteredRound & { roundNumber?: number }) | null
   >(null);
-  const [currentTeam, setCurrentTeam] =
-    useState<Team | null>(null);
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
   const [currentBid, setCurrentBid] = useState<number | null>(null);
+  const [currentBidTimestamp, setCurrentBidTimestamp] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [canBid, setCanBid] = useState<boolean>(true);
+  const [isPlacingBid, setIsPlacingBid] = useState(false); // Prevent concurrent bid submissions
+  const [canBid, setCanBid] = useState<boolean | null>(null);
   const [canBidMessage, setCanBidMessage] = useState<string>("");
   const [initialLoading, setInitialLoading] = useState<boolean>(true);
-  const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [phase, setPhase] = useState<Phase>("A");
+  const [allBids, setAllBids] = useState<Array<{ houseId: string; houseName: string; amount: number }>>([]);
+  const [housesMap, setHousesMap] = useState<Record<string, string>>({});
+  // Removed polling; we now react to socket events only
+
+  // Socket.IO integration for real-time updates
+  const { socket, auctionState, myTeams, serverConfig } = useSocket();
 
   // Function to get house background image
   const getHouseBackground = (houseName: string) => {
@@ -66,13 +78,10 @@ export default function HouseDashboard() {
     return houseMap[houseName] || "/arena-background.jpg";
   };
 
-  useEffect(() => {
-    const fetchData = async (isInitialLoad = false) => {
+  const fetchData = useCallback(async (isInitialLoad = false) => {
       try {
         if (isInitialLoad) {
           setInitialLoading(true);
-        } else {
-          setIsPolling(true);
         }
         const housesResponse = await fetchWithAuth("/api/houses", {
           cache: "no-store",
@@ -82,6 +91,12 @@ export default function HouseDashboard() {
         const selectedHouse = allHouses.find(
           (h: HouseApiResponse) => h.houseId === houseId
         );
+        // Build houses map for later bid name resolution
+        try {
+          const map: Record<string,string> = {};
+          allHouses.forEach((h: HouseApiResponse) => { map[h.houseId] = h.name; });
+          setHousesMap(map);
+        } catch {}
         if (!selectedHouse) {
           console.warn("No house found with ID:", houseId);
           setHouse(null);
@@ -89,116 +104,447 @@ export default function HouseDashboard() {
         }
         setHouse(selectedHouse);
 
-        const statusRes = await fetchWithAuth("/api/status", {
-          cache: "no-store",
-        });
-        const statusData = await statusRes.json();
+        // Drive state from auctionState only
+        const roundId = auctionState?.currentRound || "";
+        const startIso = auctionState?.currentRoundStartTime || null;
+        const endIso = auctionState?.currentRoundEndTime || null;
+        const now = Date.now();
+        const startMs = startIso ? new Date(startIso).getTime() : null;
+        const endMs = endIso ? new Date(endIso).getTime() : null;
 
-        if (
-          statusData &&
-          statusData.roundId &&
-          statusData.roundStatus === "active"
-        ) {
-          const serverTimerEnd = statusData.timerEnd
-            ? new Date(statusData.timerEnd)
-            : null;
+        const isActive = !!(roundId && startMs && endMs && now >= startMs && now < endMs);
 
-          if (serverTimerEnd) {
-            setActiveRound({
-              _id: statusData.roundId,
-              roundId: statusData.roundId,
-              teamId: statusData.team?.teamId || "",
-              status: "active",
-              timerEnd: serverTimerEnd.toISOString(),
-              roundNumber: statusData.roundNumber,
-            });
+        if (isActive) {
+          // Populate activeRound from auctionState
+          setActiveRound({
+            _id: roundId,
+            roundId,
+            teamId: "", // filled after fetching round
+            status: "active",
+            timerEnd: endIso || undefined,
+          });
 
-            setCurrentTeam(statusData.team || null);
+          // In round-less mode, currentRound is the teamId
+          let teamId: string | null = roundId;
 
-            if (selectedHouse && statusData.team?.teamId) {
+          // Fetch team details for display
+          if (teamId) {
+            try {
+              const teamRes = await fetchWithAuth(`/api/teams/${teamId}`, { cache: "no-store" });
+              if (teamRes.ok) {
+                const t = await teamRes.json();
+                setCurrentTeam({
+                  teamId: t.teamId,
+                  rank: t.rank,
+                  batch: t.batch,
+                  memberCount: t.memberCount,
+                  successfulAttempts: t.successfulAttempts,
+                  totalPoints: t.totalPoints,
+                  timeTaken: undefined,
+                });
+              } else {
+                setCurrentTeam(null);
+              }
+            } catch {
+              setCurrentTeam(null);
+            }
+
+            // Check bidding eligibility
+            if (selectedHouse) {
               try {
                 const canBidRes = await fetchWithAuth(
-                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?teamId=${statusData.team.teamId}`,
+                  `/api/houses/${selectedHouse.houseId}/canPlaceBid?teamId=${teamId}`,
                   { cache: "no-store" }
                 );
                 const canBidData = await canBidRes.json();
-
                 setCanBid(!!canBidData.canBid);
                 setCanBidMessage(canBidData.message || "");
               } catch (err) {
                 console.error("Failed to check canBid:", err);
-                setCanBid(true); // default to true to not block bidding if check fails
+                // Unknown state — allow UI and rely on server validation
+                setCanBid(null);
+                setCanBidMessage("");
               }
             }
 
-            // Fetch current bid for this house in this round
+            // Fetch current bid for this house in this round + all bids (leaderboard)
             try {
-              const bidsRes = await fetchWithAuth(
-                `/api/bids?roundId=${statusData.roundId}`,
-                {
-                  cache: "no-store",
-                }
-              );
+              const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
               const bidsData = await bidsRes.json();
-
               if (Array.isArray(bidsData)) {
-                const myBid = bidsData.find(
-                  (bid: any) => bid.houseId === houseId
-                );
+                const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
                 setCurrentBid(myBid ? myBid.amount : null);
+                setCurrentBidTimestamp(myBid && myBid.timestamp ? new Date(myBid.timestamp).toISOString() : null);
+                // Populate all bids mapping for live leaderboard
+                try {
+                  const mapped = bidsData
+                    .map((b: any) => ({
+                      houseId: b.houseId,
+                      houseName: housesMap[b.houseId] || b.houseName || `House ${String(b.houseId).slice(-4)}`,
+                      amount: b.amount,
+                    }))
+                    .sort((a: any, b: any) => b.amount - a.amount);
+                  setAllBids(mapped);
+                } catch {}
               } else {
                 setCurrentBid(null);
+                setCurrentBidTimestamp(null);
+                setAllBids([]);
               }
             } catch (error) {
               console.error("Failed to fetch current bid:", error);
               setCurrentBid(null);
+              setAllBids([]);
             }
           } else {
-            setActiveRound(null);
             setCurrentTeam(null);
-            setCurrentBid(null);
           }
         } else {
           setActiveRound(null);
           setCurrentTeam(null);
           setCurrentBid(null);
           setTimeLeft(0);
+          setCanBid(false);
+          setCanBidMessage("");
+          setBidAmount(0);
+          setAllBids([]);
         }
+
       } catch (error) {
         console.error("Failed to fetch house data:", error);
-        setHouse(null);
-        setActiveRound(null);
-        setCurrentTeam(null);
-        setTimeLeft(0);
       } finally {
         if (isInitialLoad) {
           setInitialLoading(false);
-        } else {
-          setIsPolling(false);
         }
+      }
+    }, [auctionState?.currentRound, auctionState?.currentRoundEndTime, auctionState?.currentRoundStartTime, houseId]);
+
+  // Fetch on phase transitions
+  useEffect(() => {
+    const run = async () => {
+      const roundId = auctionState?.currentRound || "";
+      if (!auctionState) return;
+
+      if (phase === "CB" || phase === "CD") {
+        if (!roundId) return;
+        try {
+          const teamId = roundId; // team-based identifier
+          setActiveRound({
+            _id: roundId,
+            roundId,
+            teamId: teamId,
+            status: phase === "CD" ? "active" : "scheduled",
+            timerEnd: auctionState.currentRoundEndTime || undefined,
+            scheduledStart: auctionState.currentRoundStartTime || undefined,
+          });
+
+          if (teamId) {
+            try {
+              const teamRes = await fetchWithAuth(`/api/teams/${teamId}`, { cache: "no-store" });
+              if (teamRes.ok) {
+                const t = await teamRes.json();
+                setCurrentTeam({
+                  teamId: t.teamId,
+                  name: t.name || null,
+                  rank: t.rank,
+                  batch: t.batch,
+                  memberCount: t.memberCount,
+                  successfulAttempts: t.successfulAttempts,
+                  totalPoints: t.totalPoints,
+                  timeTaken: undefined,
+                  members: t.members || [],
+                });
+              } else {
+                setCurrentTeam(null);
+              }
+            } catch {
+              setCurrentTeam(null);
+            }
+
+            // Check bidding eligibility (only relevant in CD)
+            if (phase === "CD" && house) {
+              try {
+                const canBidRes = await fetchWithAuth(
+                  `/api/houses/${house.houseId}/canPlaceBid?teamId=${teamId}`,
+                  { cache: "no-store" }
+                );
+                const canBidData = await canBidRes.json();
+                setCanBid(!!canBidData.canBid);
+                setCanBidMessage(canBidData.message || "");
+              } catch (err) {
+                console.error("Failed to check canBid:", err);
+                // Unknown state — allow UI and rely on server validation
+                setCanBid(null);
+                setCanBidMessage("");
+              }
+
+              // Fetch current bid for this house for current team + all bids for leaderboard
+              try {
+                const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
+                const bidsData = await bidsRes.json();
+                if (Array.isArray(bidsData)) {
+                  const myBid = bidsData.find((bid: any) => bid.houseId === houseId);
+                  setCurrentBid(myBid ? myBid.amount : null);
+                  // Map all bids for live leaderboard
+                  try {
+                    setAllBids(
+                      bidsData
+                        .map((b: any) => ({
+                          houseId: b.houseId,
+                          houseName: housesMap[b.houseId] || b.houseName || `House ${String(b.houseId).slice(-4)}`,
+                          amount: b.amount,
+                        }))
+                        .sort((a: any, b: any) => b.amount - a.amount)
+                    );
+                  } catch {}
+                } else {
+                  setCurrentBid(null);
+                  setAllBids([]);
+                }
+              } catch (error) {
+                console.error("Failed to fetch current bid:", error);
+                setCurrentBid(null);
+                setAllBids([]);
+              }
+            } else {
+              setCanBid(false);
+              setCanBidMessage("");
+              setCurrentBid(null);
+            }
+          } else {
+            setCurrentTeam(null);
+          }
+        } catch {}
+      } else if (phase === "CC") {
+        // Results phase - load all bids for the last round
+        if (!roundId) {
+          setAllBids([]);
+          return;
+        }
+        try {
+          // Ensure houses map populated (in case initial fetchData not run recently)
+          if (!housesMap || Object.keys(housesMap).length === 0) {
+            try {
+              const housesResponse = await fetchWithAuth("/api/houses", { cache: "no-store" });
+              const hh = await housesResponse.json();
+              const map: Record<string,string> = {};
+              hh.forEach((h: HouseApiResponse) => { map[h.houseId] = h.name; });
+              setHousesMap(map);
+            } catch {}
+          }
+          const bidsRes = await fetchWithAuth(`/api/bids?teamId=${roundId}`, { cache: "no-store" });
+          const bidsData = await bidsRes.json();
+          if (Array.isArray(bidsData)) {
+            setAllBids(
+              bidsData
+                .map((b: any) => ({
+                  houseId: b.houseId,
+                  houseName: housesMap[b.houseId] || b.houseName || `House ${String(b.houseId).slice(-4)}`,
+                  amount: b.amount,
+                }))
+                .sort((a: any, b: any) => b.amount - a.amount)
+            );
+          } else {
+            setAllBids([]);
+          }
+          // Fetch team info for enriched results summary
+          try {
+            const teamRes = await fetchWithAuth(`/api/teams/${roundId}`, { cache: "no-store" });
+            if (teamRes.ok) {
+              const t = await teamRes.json();
+              setCurrentTeam({
+                teamId: t.teamId,
+                name: t.name || null,
+                rank: t.rank,
+                batch: t.batch,
+                memberCount: t.memberCount,
+                successfulAttempts: t.successfulAttempts,
+                totalPoints: t.totalPoints,
+                timeTaken: undefined,
+                members: t.members || [],
+              });
+            } else {
+              setCurrentTeam(null);
+            }
+          } catch {
+            setCurrentTeam(null);
+          }
+        } catch {
+          setAllBids([]);
+        }
+        // During CC, bids cannot be placed
+        setCanBid(false);
+        setCanBidMessage("");
+      } else {
+        // Phases A, B, CA — clear transient states
+        setActiveRound(null);
+        setCurrentTeam(null);
+        setCurrentBid(null);
+        setAllBids([]);
+        setCanBid(false);
+        setCanBidMessage("");
       }
     };
 
+    run();
+    // Re-run on phase or current round id changes
+  }, [phase, auctionState, house, houseId]);
+
+  useEffect(() => {
     fetchData(true);
 
-    const pollInterval = setInterval(() => {
-      fetchData(false);
-    }, 3000);
+    // Listen to socket events for real-time updates
+    if (socket) {
+      const handleBidNotification = (data: { houseId: string; houseName: string; roundId: string }) => {
+        // Refresh data when another house places a bid
+        if (data.roundId === activeRound?.roundId && data.houseId !== houseId) {
+          fetchData(false);
+        }
+      };
 
-    return () => clearInterval(pollInterval);
-  }, [houseId]);
+      const handleAuctionState = () => {
+        // Explicitly handle auction-state broadcasts as well
+        fetchData(false);
+      };
 
-  const { remainingMs: houseRemaining } = useSynchronizedCountdown(
-    activeRound?.timerEnd ?? null
-  );
+      socket.on("bid-notification", handleBidNotification);
+      socket.on("auction-state", handleAuctionState);
+
+      // Budget updates targeted to this house
+      const budgetUpdateHandler = (data: Parameters<ServerToClientEvents["budget-update"]>[0]) => {
+        if (!data || typeof data !== "object") return;
+        if (data.houseId === houseId) {
+          setHouse((prev) => (prev ? { ...prev, remainingBudget: data.remainingBudget } : prev));
+        }
+      };
+      socket.on("budget-update", budgetUpdateHandler);
+
+      // Bids updates: enriched payload for everyone OR house-scoped payload
+      const bidsUpdateHandler = (data: Parameters<ServerToClientEvents["bids-update"]>[0]) => {
+        const teamId = auctionState?.currentRound || "";
+        if (!teamId) return;
+        if (!data || typeof data !== "object") return;
+        if ("bids" in data && Array.isArray((data as any).bids) && data.teamId === teamId) {
+          try {
+            const mapped = (data as any).bids
+              .map((b: any) => ({
+                houseId: b.houseId,
+                houseName: b.houseName || housesMap[b.houseId] || `House ${String(b.houseId).slice(-4)}`,
+                amount: b.amount,
+              }))
+              .sort((a: any, b: any) => b.amount - a.amount);
+            setAllBids(mapped);
+            const mine = mapped.find((b: any) => b.houseId === houseId);
+            if (mine) setCurrentBid(mine.amount);
+          } catch {}
+        } else if ("houseId" in data && data.teamId === teamId && data.houseId === houseId) {
+          setCurrentBid(data.amount);
+          if ("timestamp" in data && data.timestamp) {
+            setCurrentBidTimestamp(new Date((data as any).timestamp).toISOString());
+          }
+        }
+      };
+      socket.on("bids-update", bidsUpdateHandler);
+
+      return () => {
+        socket.off("bid-notification", handleBidNotification);
+        socket.off("auction-state", handleAuctionState);
+        socket.off("budget-update", budgetUpdateHandler);
+        socket.off("bids-update", bidsUpdateHandler);
+      };
+    }
+
+    return () => {};
+  }, [houseId, socket]);
+  // Removed fetchData, auctionState, and activeRound from dependencies to prevent refresh loops
+
+  // serverConfig (from socket) exposes admin-updated config including:
+  // - batchLimits
+  // - minBidAmount
+  // We'll derive client-side constraints from `serverConfig` below.
+
+  // Phase computation loop (1s) using auctionState timestamps
   useEffect(() => {
-    setTimeLeft(houseRemaining);
-  }, [houseRemaining]);
+    let interval: NodeJS.Timeout | null = null;
+    const calc = () => {
+      const now = Date.now();
+      const aStart = auctionState?.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+      const aEnd = auctionState?.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
+      const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+      const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
+
+      let nextPhase: Phase = phase;
+      let nextTimeLeft = 0;
+
+      if (aStart && now < aStart) {
+        nextPhase = "A";
+        nextTimeLeft = aStart - now;
+      } else if (aEnd && now >= aEnd) {
+        nextPhase = "B";
+        nextTimeLeft = 0;
+      } else {
+        // Auction live window
+        if (rStart && now < rStart) {
+          nextPhase = "CB"; // Upcoming round
+          nextTimeLeft = rStart - now;
+        } else if (rStart && rEnd && now >= rStart && now < rEnd) {
+          nextPhase = "CD"; // Active round
+          nextTimeLeft = rEnd - now;
+        } else if (rEnd && now >= rEnd) {
+          nextPhase = "CC"; // Post-round results
+          nextTimeLeft = 0;
+        } else {
+          nextPhase = "CA"; // Waiting for next round during live auction
+          nextTimeLeft = 0;
+        }
+      }
+
+      setPhase(nextPhase);
+      setTimeLeft(nextTimeLeft);
+    };
+
+    calc();
+    interval = setInterval(calc, 1000);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [auctionState, phase]);
 
   const toast = useToast();
 
   const placeBid = async () => {
-    if (!activeRound || !currentTeam || !house || bidAmount <= 0) return;
+    // Prevent concurrent bid submissions
+    if (isPlacingBid) {
+      console.log('[PLACE_BID] Already placing a bid, ignoring duplicate call');
+      return;
+    }
+    
+    if (!activeRound || !currentTeam || !house || bidAmount <= 0) {
+      console.log('[PLACE_BID] Rejected - preconditions not met:', { 
+        hasActiveRound: !!activeRound, 
+        hasCurrentTeam: !!currentTeam, 
+        hasHouse: !!house, 
+        bidAmount 
+      });
+      return;
+    }
+
+    // Enforce beating the global highest bid on the client for UX
+    const currentHighest = allBids.length > 0 ? Math.max(...allBids.map((b) => b.amount)) : 0;
+    if (bidAmount <= currentHighest) {
+      toast.show(`Bid must be higher than the current highest bid ($${currentHighest}).`, { type: 'error', duration: 3000 });
+      return;
+    }
+    
+    console.log('[PLACE_BID] Attempting to place bid:', {
+      roundId: activeRound.roundId,
+      teamId: currentTeam.teamId,
+      amount: bidAmount,
+      currentBid,
+      houseId
+    });
+    
+    setIsPlacingBid(true);
     setLoading(true);
 
     const toastId = toast.show("Placing bid…", { type: "info" });
@@ -224,6 +570,7 @@ export default function HouseDashboard() {
           duration: 3000,
         });
         setLoading(false);
+        setIsPlacingBid(false);
         return;
       }
 
@@ -266,6 +613,7 @@ export default function HouseDashboard() {
             });
           }
           setLoading(false);
+          setIsPlacingBid(false);
         })
         .catch(() => {
           toast.update(toastId, "Failed to parse response", {
@@ -273,6 +621,7 @@ export default function HouseDashboard() {
             duration: 3000,
           });
           setLoading(false);
+          setIsPlacingBid(false);
         });
     } catch (error: any) {
       toast.update(
@@ -281,6 +630,7 @@ export default function HouseDashboard() {
         { type: "error", duration: 3500 }
       );
       setLoading(false);
+      setIsPlacingBid(false);
     }
   };
 
@@ -296,7 +646,7 @@ export default function HouseDashboard() {
 
   if (!house) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-red-900 via-orange-900 to-yellow-900 flex items-center justify-center">
         <div className="text-xl text-white">House not found.</div>
       </div>
     );
@@ -304,7 +654,28 @@ export default function HouseDashboard() {
 
   const timeLeftValue = Math.max(0, timeLeft);
   const isTimeRunningOut = timeLeftValue < 10000;
-  const budgetPercentage = (house.remainingBudget / house.totalBudget) * 100;
+  // Do not expose totalBudget in UI; only show remainingBudget
+
+  // Derived bidding constraints — use frontend constants per user request
+  const MIN_BID = 500;
+  const TOTAL_TEAMS_PER_HOUSE = 11;
+
+  const currentHighest = allBids.length > 0 ? Math.max(...allBids.map((b) => b.amount)) : 0;
+
+  // Compute teams-left using a fixed total allowed per house
+  const totalAllowed = TOTAL_TEAMS_PER_HOUSE;
+  const houseOwnedCount = myTeams.length;
+  const teamsLeftToBuy = Math.max(0, totalAllowed - houseOwnedCount);
+
+  let computedMax = house.remainingBudget;
+  if (teamsLeftToBuy > 1) {
+    computedMax = house.remainingBudget - (teamsLeftToBuy - 1) * MIN_BID;
+  }
+  computedMax = Math.max(0, computedMax);
+
+  // Effective bounds used by the UI
+  const effectiveMax = Math.min(house.remainingBudget, computedMax);
+  const effectiveMin = Math.max(MIN_BID, currentHighest + 1);
 
   return (
     <div
@@ -320,13 +691,13 @@ export default function HouseDashboard() {
       <div className="absolute inset-0 bg-black/75 backdrop-blur-xs"></div>
 
       {/* Neon grid overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-size-[4rem_4rem] opacity-20"></div>
 
       {/* Content */}
       <div className="relative z-10 min-h-screen p-4 sm:p-8">
         <div className="max-w-7xl mx-auto">
           {/* Enhanced Header */}
-          <div className="bg-gradient-to-r from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+          <div className="bg-linear-to-r from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 mb-6 sm:mb-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
               <div className="text-center sm:text-left">
                 <h1 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-2">
@@ -335,6 +706,26 @@ export default function HouseDashboard() {
                 <p className="text-lg sm:text-xl text-gray-200">
                   Command Center
                 </p>
+                {auctionState && (!activeRound || activeRound.status !== "active") && (
+                  <div className="mt-2 inline-block px-3 py-1 rounded-lg bg-black/40 border border-white/10 text-gray-100 text-sm">
+                    {(() => {
+                      const now = Date.now();
+                      const aStartMs = auctionState.auctionStartTime ? new Date(auctionState.auctionStartTime).getTime() : null;
+                      const aEndMs = auctionState.auctionEndTime ? new Date(auctionState.auctionEndTime).getTime() : null;
+                      if (phase === "CB") return `Round starts in ${Math.max(0, Math.floor(timeLeft / 1000))}s`;
+                      if (phase === "A") {
+                        if (aStartMs && now < aStartMs) return `Auction starts in ${Math.max(0, Math.floor((aStartMs - now) / 1000))}s`;
+                        return "Auction not started";
+                      }
+                      if (phase === "CA") {
+                        if (aEndMs && now < aEndMs) return `Auction live • ends in ${Math.max(0, Math.floor((aEndMs - now) / 1000))}s`;
+                        return "Auction live";
+                      }
+                      if (phase === "B") return "Auction finished";
+                      return "Auction status";
+                    })()}
+                  </div>
+                )}
               </div>
               <button
                 onClick={async () => {
@@ -348,7 +739,7 @@ export default function HouseDashboard() {
                     console.error("Logout failed:", err);
                   }
                 }}
-                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+                className="bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
               >
                 Logout
               </button>
@@ -365,37 +756,78 @@ export default function HouseDashboard() {
                     <span className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
                       ${house.remainingBudget}
                     </span>
-                    <span className="text-lg sm:text-xl text-gray-400">
-                      / ${house.totalBudget}
-                    </span>
                   </div>
                 </div>
                 <div className="text-center sm:text-right">
                   <div className="text-2xl sm:text-3xl font-bold text-[#FFD700] drop-shadow-[0_0_10px_#FFD700]">
-                    {budgetPercentage.toFixed(0)}%
+                    Remaining
                   </div>
-                  <div className="text-sm text-gray-400">Remaining</div>
                 </div>
               </div>
-              <div className="w-full bg-black/60 rounded-full h-4 border border-[#FFD700]/30 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all shadow-[0_0_10px_currentColor] ${
-                    budgetPercentage > 50
-                      ? "bg-green-500"
-                      : budgetPercentage > 25
-                        ? "bg-yellow-500"
-                        : "bg-red-500"
-                  }`}
-                  style={{ width: `${budgetPercentage}%` }}
-                ></div>
+              {/* Remaining budget shown above; progress bar removed to avoid exposing totalBudget */}
+              {/* Owned Teams (socket live) */}
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-white mb-2">🎖️ Owned Teams</h3>
+                {myTeams.length === 0 ? (
+                  <div className="text-gray-400 text-sm">No teams recruited yet.</div>
+                ) : (
+                  <div>
+                    {(() => {
+                      // Group by batch, keep non-empty batches first
+                      const items = myTeams.slice();
+                      items.sort((a, b) => {
+                        const aBatch = a.batch || "";
+                        const bBatch = b.batch || "";
+                        if (aBatch !== bBatch) {
+                          if (!aBatch) return 1;
+                          if (!bBatch) return -1;
+                          return String(aBatch).localeCompare(String(bBatch), undefined, { numeric: true });
+                        }
+                        return a.rank - b.rank;
+                      });
+
+                      const groups: Record<string, typeof items> = {};
+                      for (const t of items) {
+                        const key = t.batch || "__UNBATCHED__";
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(t);
+                      }
+
+                      return Object.entries(groups).map(([batchKey, teams]) => {
+                        const label = batchKey === "__UNBATCHED__" ? "Unbatched" : batchKey;
+                        return (
+                          <div key={batchKey} className="mb-4">
+                            <div className="text-sm text-gray-300 font-semibold mb-2">{label}</div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {teams.map((t) => (
+                                <div
+                                  key={t.teamId}
+                                  className="bg-black/50 border border-[#FFD700]/30 rounded-lg px-3 py-2 flex items-center justify-between text-sm text-gray-200"
+                                >
+                                  <span className="font-semibold text-[#FFD700]">#{t.rank}</span>
+                                  <span className="truncate flex-1 ml-2">{t.name || `Team ${t.rank}`}</span>
+                                  {t.batch && (
+                                    <span className="text-xs bg-[#FFD700]/10 border border-[#FFD700]/30 rounded px-2 py-0.5 ml-2 text-[#FFD700]">
+                                      {t.batch}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {activeRound && currentTeam ? (
+          {phase === "CD" && activeRound && currentTeam ? (
             <div className="space-y-6 sm:space-y-8">
               {/* Enhanced Round & Team Info */}
-              <div className="bg-gradient-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+              <div className="bg-linear-to-br from-gray-900/90 to-black/90 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-0 mb-6">
                   <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">
                     ⚔️ ROUND {activeRound.roundNumber || "?"}
@@ -419,7 +851,16 @@ export default function HouseDashboard() {
                       isTimeRunningOut ? "bg-red-500" : "bg-green-500"
                     }`}
                     style={{
-                      width: `${Math.max(0, (timeLeftValue / 60000) * 100)}%`,
+                      width: (() => {
+                        const rStart = auctionState?.currentRoundStartTime ? new Date(auctionState.currentRoundStartTime).getTime() : null;
+                        const rEnd = auctionState?.currentRoundEndTime ? new Date(auctionState.currentRoundEndTime).getTime() : null;
+                        if (rStart && rEnd) {
+                          const total = rEnd - rStart;
+                          const left = Math.max(0, timeLeftValue);
+                          return `${Math.max(0, Math.min(100, (left / total) * 100))}%`;
+                        }
+                        return "0%";
+                      })() 
                     }}
                   ></div>
                 </div>
@@ -431,7 +872,7 @@ export default function HouseDashboard() {
                 <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8">
                   {/* Team Rank Badge */}
                   <div className="relative shrink-0 mx-auto sm:mx-0">
-                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-gradient-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
+                    <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
                       <span className="text-5xl sm:text-6xl font-bold text-black">#{currentTeam.rank}</span>
                     </div>
                   </div>
@@ -439,7 +880,7 @@ export default function HouseDashboard() {
                   {/* Team Details */}
                   <div className="flex-1 space-y-4 w-full">
                     <h3 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] text-center sm:text-left">
-                      Team #{currentTeam.rank}
+                      {(currentTeam.name ? currentTeam.name : `Team #${currentTeam.rank}`)}
                     </h3>
                     
                     {/* Upper Row: Batch, Rank in Batch, Points */}
@@ -462,9 +903,13 @@ export default function HouseDashboard() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-[#FFD700] font-bold text-lg">👥 {currentTeam.memberCount} Members</span>
                       </div>
-                      <div className="text-gray-300 text-sm">
-                        Ready for bidding
-                      </div>
+                      {currentTeam.members && currentTeam.members.length > 0 ? (
+                        <div className="text-gray-300 text-sm">
+                          {currentTeam.members.map((m) => m.name).join(", ")}
+                        </div>
+                      ) : (
+                        <div className="text-gray-300 text-sm">Ready for bidding</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -473,20 +918,38 @@ export default function HouseDashboard() {
               {/* Enhanced Bidding Section */}
               <div className="bg-black/80 rounded-2xl p-6 sm:p-8 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
                 {timeLeftValue > 0 ? (
-                  canBid ? (
+                  canBid === false ? (
+                    <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">
+                      <p className="text-yellow-300 font-bold text-xl sm:text-2xl">
+                        ⚠️ {canBidMessage || "Bidding is currently disabled for your house."}
+                      </p>
+                    </div>
+                  ) : (
                     <div className="space-y-6">
                       <h2 className="text-2xl sm:text-3xl font-bold text-[#FFD700] text-center drop-shadow-[0_0_20px_#FFD700]">
                         💰 PLACE YOUR BID
                       </h2>
 
                       {currentBid !== null && (
-                        <div className="bg-gradient-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
+                        <div className="bg-linear-to-r from-[#FFD700]/20 to-yellow-600/20 border-2 border-[#FFD700] rounded-xl p-4 text-center shadow-[0_0_25px_rgba(255,215,0,0.4)]">
                           <div className="text-gray-200 text-sm sm:text-base mb-1">
                             Your Active Bid
                           </div>
                           <div className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_15px_#FFD700]">
                             ${currentBid}
                           </div>
+                          {currentBidTimestamp && auctionState?.currentRoundStartTime && (
+                            <div className="text-xs text-gray-300 mt-1">
+                              ⏱️ {(() => {
+                                try {
+                                  const s = new Date(auctionState.currentRoundStartTime!).getTime();
+                                  const t = new Date(currentBidTimestamp).getTime();
+                                  const diff = Math.max(0, Math.floor((t - s) / 1000));
+                                  return `${diff}s after start`;
+                                } catch { return ""; }
+                              })()}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -494,15 +957,19 @@ export default function HouseDashboard() {
                         <input
                           type="number"
                           id="bidAmount"
-                          min="1"
-                          max={house.remainingBudget}
+                          min={effectiveMin}
+                          max={effectiveMax}
                           value={bidAmount || ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             setBidAmount(val === "" ? 0 : parseInt(val, 10));
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && !loading && bidAmount > 0 && bidAmount <= house.remainingBudget) {
+                            const currentHighestLocal = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                            const isHigherThanHighest = bidAmount > currentHighestLocal;
+                            if (e.key === "Enter" && !loading && !isPlacingBid && bidAmount > 0 && bidAmount <= effectiveMax && isHigherThanHighest) {
+                              e.preventDefault();
+                              console.log('[INPUT] Enter key pressed, calling placeBid');
                               placeBid();
                             }
                           }}
@@ -510,23 +977,68 @@ export default function HouseDashboard() {
                           placeholder="Enter bid amount"
                         />
                         <button
-                          onClick={placeBid}
+                          onClick={(e) => {
+                            e.preventDefault(); // Prevent any default behavior
+                            console.log('[BUTTON] Bid button clicked');
+                            placeBid();
+                          }}
                           disabled={
-                            loading ||
-                            bidAmount <= 0 ||
-                            bidAmount > house.remainingBudget
+                              (() => {
+                              const currentHighestLocal = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                              return (
+                                loading ||
+                                isPlacingBid ||
+                                bidAmount <= 0 ||
+                                bidAmount > effectiveMax ||
+                                bidAmount <= currentHighestLocal ||
+                                bidAmount < MIN_BID
+                              );
+                            })()
                           }
                           className={`px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-xl sm:text-2xl font-bold transition-all transform whitespace-nowrap ${
-                            loading ||
-                            bidAmount <= 0 ||
-                            bidAmount > house.remainingBudget
+                              (() => {
+                              const currentHighestLocal = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                              return (
+                                loading ||
+                                isPlacingBid ||
+                                bidAmount <= 0 ||
+                                bidAmount > effectiveMax ||
+                                bidAmount <= currentHighestLocal ||
+                                bidAmount < MIN_BID
+                              );
+                            })()
                               ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                              : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
+                              : "bg-linear-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white hover:scale-105 shadow-[0_0_30px_rgba(34,197,94,0.5)]"
                           }`}
                         >
                           {loading ? "⏳ Placing..." : "✅ Place Bid"}
                         </button>
                       </div>
+                      {(() => {
+                        const currentHighest = allBids.length > 0 ? Math.max(...allBids.map(b => b.amount)) : 0;
+                        return bidAmount > 0 && bidAmount <= currentHighest ? (
+                          <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                            <p className="text-yellow-300 font-bold text-base sm:text-lg">
+                              ⚠️ Your bid must exceed the current highest bid (${currentHighest}).
+                            </p>
+                          </div>
+                        ) : null;
+                      })()}
+                      {/* Client-side checks and explainers based on serverConfig */}
+                      {bidAmount > 0 && bidAmount < MIN_BID && (
+                        <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(255,215,0,0.3)]">
+                          <p className="text-yellow-300 font-bold text-base sm:text-lg">
+                            ⚠️ Bid below minimum (${MIN_BID}). Increase bid to at least ${MIN_BID}.
+                          </p>
+                        </div>
+                      )}
+                      {bidAmount > 0 && bidAmount > effectiveMax && (
+                        <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                          <p className="text-red-300 font-bold text-base sm:text-lg">
+                            ⚠️ Bid exceeds your safe maximum (${effectiveMax}). This ensures you can still acquire the remaining {teamsLeftToBuy} team(s) across all batches at a minimum of ${MIN_BID} each.
+                          </p>
+                        </div>
+                      )}
                       {bidAmount > house.remainingBudget && (
                         <div className="bg-red-900/80 border-2 border-red-500 rounded-lg p-4 text-center shadow-[0_0_20px_rgba(239,68,68,0.5)]">
                           <p className="text-red-300 font-bold text-base sm:text-lg">
@@ -534,14 +1046,39 @@ export default function HouseDashboard() {
                           </p>
                         </div>
                       )}
-                    </div>
-                  ) : (
-                    <div className="bg-yellow-900/80 border-2 border-yellow-500 rounded-xl p-6 text-center shadow-[0_0_30px_rgba(255,215,0,0.3)]">
-                      <p className="text-yellow-300 font-bold text-xl sm:text-2xl">
-                        ⚠️{" "}
-                        {canBidMessage ||
-                          "You have already recruited 3 players from this batch!"}
-                      </p>
+                      
+                      {/* Live Bids Leaderboard */}
+                      <div className="mt-6">
+                        <h3 className="text-lg sm:text-xl font-semibold text-white mb-3">Live Bids</h3>
+                        {allBids.length === 0 ? (
+                          <div className="text-gray-300 text-sm">No bids yet. Be the first!</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {allBids.map((b, idx) => {
+                              const isWinner = idx === 0;
+                              const isOwn = b.houseId === house.houseId;
+                              return (
+                                <div
+                                  key={`${b.houseId}-${idx}`}
+                                  className={`flex items-center justify-between px-5 py-3 rounded-xl border text-sm sm:text-base transition-all
+                                    ${isWinner ? 'bg-[#FFD700]/25 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.4)] font-bold text-[#FFD700]' : ''}
+                                    ${!isWinner && isOwn ? 'bg-white/10 border-white/40 text-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.3)]' : ''}
+                                    ${!isWinner && !isOwn ? 'bg-white/5 border-white/10 text-white' : ''}`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="opacity-60">{idx + 1}.</span>
+                                    <span>{b.houseName}</span>
+                                    {isWinner && <span className="text-[#FFD700] text-xs sm:text-sm bg-[#FFD700]/10 px-2 py-1 rounded-md border border-[#FFD700]/40">Top</span>}
+                                    {isOwn && !isWinner && <span className="text-white text-xs sm:text-sm bg-white/20 px-2 py-1 rounded-md border border-white/40">Your Bid</span>}
+                                    {isOwn && isWinner && <span className="text-white text-xs sm:text-sm bg-white/30 px-2 py-1 rounded-md border border-white/60">You Lead 🎯</span>}
+                                  </div>
+                                  <span className={`${isWinner ? 'font-bold' : ''}`}>${b.amount}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 ) : (
@@ -553,18 +1090,131 @@ export default function HouseDashboard() {
                 )}
               </div>
             </div>
+          ) : phase === "CB" && activeRound && currentTeam ? (
+            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
+              <div className="text-center mb-6">
+                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700]">⚔️ Upcoming Round</h2>
+                <p className="text-lg sm:text-xl text-gray-300 mt-2">Starts in {formatTime(Math.max(0, timeLeft))}</p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8">
+                <div className="relative shrink-0 mx-auto sm:mx-0">
+                  <div className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-linear-to-br from-[#FFD700] via-[#FFB800] to-[#FFA500] flex items-center justify-center border-4 border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.5)]">
+                    <span className="text-5xl sm:text-6xl font-bold text-black">#{currentTeam.rank}</span>
+                  </div>
+                </div>
+                <div className="flex-1 space-y-4 w-full">
+                  <h3 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-[0_0_15px_#FFFFFF] text-center sm:text-left">
+                    {(currentTeam.name ? currentTeam.name : `Team #${currentTeam.rank}`)}
+                  </h3>
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                    <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                      📚 Batch {currentTeam.batch}
+                    </span>
+                    <span className="bg-[#FFD700]/10 text-[#FFD700] px-4 py-2 rounded-lg font-semibold text-base sm:text-lg border border-[#FFD700]/40 shadow-[0_0_15px_rgba(255,215,0,0.2)]">
+                      🏆 Rank #{currentTeam.rank}
+                    </span>
+                  </div>
+                  <div className="bg-black/40 rounded-lg p-4 border border-[#FFD700]/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[#FFD700] font-bold text-lg">👥 {currentTeam.memberCount} Members</span>
+                    </div>
+                    {currentTeam.members && currentTeam.members.length > 0 && (
+                      <div className="text-gray-300 text-sm">
+                        {currentTeam.members.map((m) => m.name).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : phase === "CC" ? (
+            <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_35px_rgba(255,215,0,0.4)] backdrop-blur-md">
+              <div className="text-center mb-8">
+                <h2 className="text-4xl sm:text-5xl font-bold text-[#FFD700] drop-shadow-[0_0_25px_#FFD700] mb-4">🏆 Round Result</h2>
+                {currentTeam && (
+                  <div className="mb-6">
+                    <div className="text-2xl sm:text-3xl font-semibold text-white mb-2">{currentTeam.name || `Team #${currentTeam.rank}`}</div>
+                    <div className="flex flex-wrap justify-center gap-4 text-sm sm:text-base text-white/80">
+                      {currentTeam.batch && <span>📚 Batch {currentTeam.batch}</span>}
+                      <span>👥 {currentTeam.memberCount} member{currentTeam.memberCount !== 1 ? 's' : ''}</span>
+                      {typeof currentTeam.totalPoints === 'number' && <span>⭐ {currentTeam.totalPoints} pts</span>}
+                      {typeof currentTeam.successfulAttempts === 'number' && <span>✅ {currentTeam.successfulAttempts} solved</span>}
+                    </div>
+                    {currentTeam.members && currentTeam.members.length > 0 && (
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        {currentTeam.members.map(m => (
+                          <span key={m.participantId} className="px-3 py-1 rounded-md bg-white/10 text-white text-sm">{m.name}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {allBids.length === 0 ? (
+                  <p className="text-gray-300 mt-2">No bids placed. No winner.</p>
+                ) : (
+                  (() => {
+                    const winner = allBids[0];
+                    const youWon = winner && winner.houseId === house.houseId;
+                    return (
+                      <p className={`mt-2 font-bold text-xl ${youWon ? "text-green-400" : "text-[#FFD700]"}`}>
+                        Winner: {winner.houseName} {winner.amount > 0 ? `( $${winner.amount} )` : '(No Winner)'} {youWon && '🎉'}
+                      </p>
+                    );
+                  })()
+                )}
+              </div>
+              {allBids.length > 0 && (
+                <div className="max-w-3xl mx-auto">
+                  <h3 className="text-lg sm:text-xl font-semibold text-white mb-3">All Bids</h3>
+                  <div className="space-y-2">
+                    {allBids.map((b, idx) => {
+                      const isWinner = idx === 0;
+                      const isOwn = b.houseId === house.houseId;
+                      return (
+                        <div
+                          key={`${b.houseId}-${idx}`}
+                          className={`flex items-center justify-between px-5 py-3 rounded-xl border text-sm sm:text-base transition-all
+                            ${isWinner ? 'bg-[#FFD700]/25 border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.4)] font-bold text-[#FFD700]' : ''}
+                            ${!isWinner && isOwn ? 'bg-white/10 border-white/40 text-white font-semibold shadow-[0_0_12px_rgba(255,255,255,0.3)]' : ''}
+                            ${!isWinner && !isOwn ? 'bg-white/5 border-white/10 text-white' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="opacity-60">{idx + 1}.</span>
+                            <span>{b.houseName}</span>
+                            {isWinner && <span className="text-[#FFD700] text-xs sm:text-sm bg-[#FFD700]/10 px-2 py-1 rounded-md border border-[#FFD700]/40">Winner</span>}
+                            {isOwn && !isWinner && <span className="text-white text-xs sm:text-sm bg-white/20 px-2 py-1 rounded-md border border-white/40">Your Bid</span>}
+                            {isOwn && isWinner && <span className="text-white text-xs sm:text-sm bg-white/30 px-2 py-1 rounded-md border border-white/60">You Won 🎉</span>}
+                          </div>
+                          <span className={`${isWinner ? 'font-bold' : ''}`}>${b.amount}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="bg-black/80 rounded-2xl p-8 sm:p-12 border-2 border-[#FFD700]/50 shadow-[0_0_30px_rgba(255,215,0,0.3)] backdrop-blur-md">
               <div className="text-center">
-                <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">
-                  ⏸️ No Active Round
-                </h2>
-                <p className="text-lg sm:text-xl text-gray-300">
-                  Waiting for the next battle to begin...
-                </p>
-                <p className="text-gray-400 mt-4">
-                  The admin will start the next round soon
-                </p>
+                {phase === "A" && (
+                  <>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">⏳ Auction Not Started</h2>
+                    <p className="text-lg sm:text-xl text-gray-300">Starts in {formatTime(Math.max(0, timeLeft))}</p>
+                  </>
+                )}
+                {phase === "B" && (
+                  <>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-2 drop-shadow-[0_0_20px_#FFD700]">🏁 Auction Finished</h2>
+                    <p className="text-lg sm:text-xl text-gray-300">Thanks for participating!</p>
+                  </>
+                )}
+                {phase === "CA" && (
+                  <>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#FFD700] mb-4 drop-shadow-[0_0_20px_#FFD700]">⏸️ No Active Round</h2>
+                    <p className="text-lg sm:text-xl text-gray-300">Waiting for the next battle to begin...</p>
+                    <p className="text-gray-400 mt-4">The admin will start the next round soon</p>
+                  </>
+                )}
               </div>
             </div>
           )}

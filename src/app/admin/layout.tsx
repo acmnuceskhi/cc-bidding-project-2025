@@ -24,23 +24,22 @@ export default function AdminLayout({
   useEffect(() => {
     if (mounted) {
       setIsAuthenticated(true);
-
+      
       if (pathname === "/admin") {
-        router.push("/admin/overview");
+        router.push("/admin/main");
       }
     }
   }, [mounted, pathname, router]);
 
   const tabs = [
-    { name: "Overview", path: "/admin/overview", icon: "📊" },
+    { name: "Main", path: "/admin/main", icon: "🚀" },
     { name: "Houses", path: "/admin/houses", icon: "🏯" },
     { name: "Teams", path: "/admin/teams", icon: "🥋" },
-    { name: "Rounds", path: "/admin/rounds", icon: "⏱️" },
     { name: "Config", path: "/admin/config", icon: "⚙️" },
   ];
 
   const isActiveTab = (path: string) => {
-    if (pathname === "/admin" && path === "/admin/overview") return true;
+    if (pathname === "/admin" && path === "/admin/main") return true;
     return pathname === path;
   };
 
@@ -63,7 +62,7 @@ export default function AdminLayout({
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xs"></div>
 
       {/* Neon grid overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#FFD70010_1px,transparent_1px),linear-gradient(to_bottom,#FFD70010_1px,transparent_1px)] bg-size-[4rem_4rem] opacity-20"></div>
 
       {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col">
@@ -91,7 +90,7 @@ export default function AdminLayout({
                     console.error("Logout failed:", err);
                   }
                 }}
-                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+                className="bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white py-2 sm:py-3 px-4 sm:px-6 rounded-xl font-bold transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.5)]"
               >
                 Logout
               </button>
@@ -102,13 +101,13 @@ export default function AdminLayout({
         {/* Enhanced Tab Navigation - This will be sticky */}
         <div className="sticky top-0 z-20 bg-black/40 border-b-2 border-[#FFD700]/50 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="flex justify-center space-x-1 sm:space-x-2 overflow-x-auto">
+            <div className="flex flex-wrap justify-center gap-1 sm:gap-2">
               {tabs.map((tab) => (
                 <Link key={tab.path} href={tab.path}>
                   <div
-                    className={`px-4 sm:px-6 py-3 sm:py-4 font-semibold text-base sm:text-lg transition-all cursor-pointer whitespace-nowrap ${
+                    className={`px-3 sm:px-6 py-3 sm:py-4 font-semibold text-sm sm:text-lg transition-all cursor-pointer whitespace-nowrap ${
                       isActiveTab(tab.path)
-                        ? "bg-gradient-to-r from-[#FFD700] to-[#FFB800] text-black border-t-4 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]"
+                        ? "bg-linear-to-r from-[#FFD700] to-[#FFB800] text-black border-t-4 border-[#FFD700] shadow-[0_0_20px_rgba(255,215,0,0.5)]"
                         : "bg-black/20 text-gray-300 hover:bg-black/40 hover:text-white hover:shadow-[0_0_15px_rgba(255,215,0,0.3)]"
                     }`}
                   >

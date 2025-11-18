@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Houses } from "@/lib/models/houses";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { getSocketInstance } from "@/lib/socket-instance";
 
 // PATCH /api/houses/[id]/budget - Admin adjusts house budget
 export async function PATCH(
@@ -89,22 +90,20 @@ export async function PATCH(
 
     if (totalBudget !== undefined) {
       // Update total budget
+      // Calculate actual spent amount - this is always totalBudget - remainingBudget
+      // Even if both are negative, the difference gives the correct spent amount
       const currentSpent = house.totalBudget - house.remainingBudget;
       newTotalBudget = totalBudget;
       newRemainingBudget = totalBudget - currentSpent;
 
-      // Prevent negative remaining budget
+      // Allow admins to fix overspending situations by setting higher budgets
+      // Only warn if the new budget is still insufficient
       if (newRemainingBudget < 0) {
-        return NextResponse.json(
-          {
-            error: "BUDGET_CONSTRAINT_VIOLATION",
-            message: `Cannot set totalBudget to ${totalBudget}. House has already spent ${currentSpent}, which would result in negative remaining budget (${newRemainingBudget}).`,
-            currentSpent,
-            proposedTotal: totalBudget,
-            resultingRemaining: newRemainingBudget,
-          },
-          { status: 409 }
+        console.warn(
+          `Warning: Setting totalBudget to ${totalBudget} for house ${house.name}. ` +
+          `House has spent ${currentSpent}, resulting in negative remaining budget (${newRemainingBudget}).`
         );
+        // Allow the update anyway - admins need to fix overspending
       }
     }
 
@@ -137,6 +136,17 @@ export async function PATCH(
 
     // Fetch updated house
     const updatedHouse = await Houses.getById(id);
+
+    // Emit socket event to notify all clients about budget update
+    const io = await getSocketInstance();
+    if (io) {
+      io.to(`house:${id}`).emit("budget-update", {
+        houseId: id,
+        totalBudget: newTotalBudget,
+        remainingBudget: newRemainingBudget,
+        spent: newTotalBudget - newRemainingBudget,
+      });
+    }
 
     return NextResponse.json({
       success: true,

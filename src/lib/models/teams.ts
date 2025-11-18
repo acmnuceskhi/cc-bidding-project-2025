@@ -8,6 +8,8 @@ import { ObjectId, InsertOneResult, UpdateResult } from "mongodb";
  */
 export interface Team {
   _id?: ObjectId;
+  // Optional display name for the team
+  name?: string;
 
   // Round 1 stats
   rank: number; // team position; 1 = best
@@ -63,6 +65,7 @@ export const Teams = {
       .db()
       .collection<Team>(collectionName)
       .insertOne({
+        name: team.name,
         successfulAttempts: team.successfulAttempts ?? 0,
         unsuccessfulAttempts: team.unsuccessfulAttempts ?? 0,
         totalPoints: team.totalPoints ?? 0,
@@ -74,8 +77,8 @@ export const Teams = {
           typeof team.rank === "number"
             ? team.rank
             : (() => {
-                throw new Error("rank is required when creating a Team");
-              })(),
+              throw new Error("rank is required when creating a Team");
+            })(),
       } as Team);
   },
 
