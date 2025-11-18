@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchPublic } from "@/lib/fetchPublic";
-import { SortControls } from "@/components/results";
+import { SortControls, HouseCard } from "@/components/results";
 
 interface Team {
   teamId: string;
@@ -127,124 +127,42 @@ export default function FinalTeamsPage() {
   };
 
   return (
-    <div
-      className="min-h-screen bg-cover bg-center flex flex-col items-center justify-start text-white"
-      style={{ backgroundImage: "url('/arena-background.jpg')" }}
-    >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold text-yellow-500 mb-2">
+            Final Teams Line-Up
+          </h1>
+          <p className="text-muted-foreground">View all teams acquired by each house</p>
+        </div>
 
-      <div className="relative z-10 w-full max-w-7xl p-8 text-center">
-        <h1 className="text-5xl font-extrabold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-8">
-          ☯︎ Final Teams Line-Up ☯︎
-        </h1>
-
-        {/* Sorting Controls */}
-        <div className="mb-8 px-4">
+        <div className="mb-6">
           <SortControls sortBy={sortBy} onSortChange={setSortBy} />
         </div>
 
         {loading ? (
-          <div className="text-yellow-400 text-lg animate-pulse mt-12">
+          <div className="text-center text-muted-foreground py-12">
             Loading teams...
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {houses.map((house, index) => {
-              const getHouseBackground = (houseName: string) => {
-                const houseMap: Record<string, string> = {
-                  "Lord Shen": "/lord-shen.jpg",
-                  "Dragon Warrior": "/dragon-warrior.jpg",
-                  "Master Oogway": "/master-oogway.jpg",
-                  "Tai Lung": "/tai-lung.jpg",
-                };
-                return houseMap[houseName] || "/arena-background.jpg";
-              };
               const hasTeams = house.teams && house.teams.length > 0;
               const houseKey = (house._id ? String(house._id) : house.houseId) || house.name;
               const prevCount = previousHouseTeamCounts[houseKey] ?? 0;
               const isNewlyGained = hasTeams && house.teams.length > prevCount;
               
               return (
-                <div
+                <HouseCard
                   key={house.houseId || `house-${index}`}
-                  className={`relative p-6 rounded-2xl border transition-transform overflow-hidden ${
-                    isNewlyGained
-                      ? "border-[#FFD700] shadow-[0_0_30px_rgba(255,215,0,0.8)] animate-pulse"
-                      : hasTeams
-                        ? "border-[#FFD700] shadow-[0_0_25px_rgba(255,215,0,0.5)]"
-                        : "border-[#FFD700]/40 shadow-[0_0_25px_rgba(255,215,0,0.3)] hover:scale-105"
-                  }`}
-                >
-                  {/* Background image */}
-                  <div
-                    className="absolute inset-0 bg-cover bg-center"
-                    style={{ backgroundImage: `url('${getHouseBackground(house.name)}')` }}
-                  ></div>
-                  
-                  {/* Dark overlay */}
-                  <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"></div>
-                  
-                  {/* Content */}
-                  <div className="relative z-10">
-                    <h2
-                      className="text-2xl font-bold mb-4 drop-shadow-[0_0_10px_rgba(255,215,0,0.6)]"
-                      style={{ color: house.color || "#FFD700" }}
-                    >
-                      House of {house.name}
-                    </h2>
-
-                {house.teams.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-3 text-sm text-gray-200">
-                    {getSortedTeams(house.teams).map((team, tIndex) => (
-                      <div
-                        key={
-                          team.teamId ||
-                          `team-${team.rank}-${tIndex}`
-                        }
-                        className="p-3 bg-black/30 rounded-lg border border-white/10 hover:bg-black/50 transition-all"
-                      >
-                        <div className="flex items-center space-x-3">
-                          {/* Team Rank Badge */}
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#FFD700] to-[#FFA500] flex items-center justify-center flex-shrink-0 border-2 border-white/40">
-                            <span className="text-lg font-bold text-black">#{team.rank}</span>
-                          </div>
-                          <div className="flex-1">
-                            <div className="font-bold text-white">
-                              {team.name || `Team #${team.rank}`}
-                            </div>
-                            <div className="text-xs text-gray-300">
-                              Batch: {team.batch} • {team.memberCount} members
-                            </div>
-                            {team.soldPrice !== undefined && (
-                              <div className="mt-1 text-sm font-semibold text-[#FFD700]">
-                                💰 Sold for: ${team.soldPrice.toLocaleString()}
-                              </div>
-                            )}
-                            {team.successfulAttempts !== undefined && (
-                              <div className="mt-1 text-xs text-green-400">
-                                ✓ {team.successfulAttempts} solved
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-400 py-4">
-                    No teams yet
-                  </div>
-                )}
-                  </div>
-                </div>
+                  house={house}
+                  sortedTeams={getSortedTeams(house.teams)}
+                  isNewlyGained={isNewlyGained}
+                />
               );
             })}
           </div>
         )}
-
-        <footer className="mt-16 text-gray-400 text-sm">
-          Powered by <span className="text-[#FFD700]">CC Bidding System</span>
-        </footer>
       </div>
     </div>
   );

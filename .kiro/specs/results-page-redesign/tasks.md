@@ -107,24 +107,29 @@
     - Set 8px gap between badges
     - _Requirements: 3.2, 3.4_
 
-- [-] 5. Implement HouseCard component with background and layout
+- [x] 5. Implement HouseCard component with background and layout
 
 
-  - [ ] 5.1 Create HouseCard structure using shadcn Card
+
+
+  - [x] 5.1 Create HouseCard structure using shadcn Card
+
     - Wrap house content in Card component with 24px padding
     - Set up relative positioning for layered content
     - Add border with house-specific color
     - Apply hover scale effect (1.02) with smooth transition
     - _Requirements: 4.1, 3.3, 7.3_
   
-  - [ ] 5.2 Implement background image layer
+  - [x] 5.2 Implement background image layer
+
     - Add background image div with absolute positioning
     - Apply house-specific background images
     - Set appropriate opacity (30%) for text readability
     - Add dark overlay for contrast
     - _Requirements: 7.1_
   
-  - [ ] 5.3 Implement house header with title and team count
+  - [x] 5.3 Implement house header with title and team count
+
     - Create CardHeader with house name using responsive text (24px mobile, 32px desktop)
     - Apply house-specific color to title
     - Add Badge showing team count
@@ -132,13 +137,15 @@
     - Ensure heading is at least 1.5x body text size
     - _Requirements: 2.2, 7.2_
   
-  - [ ] 5.4 Implement teams container in CardContent
+  - [x] 5.4 Implement teams container in CardContent
+
     - Create container for TeamCard components with 16px spacing
     - Integrate EmptyState component for houses with no teams
     - Apply proper z-index for content layer
     - _Requirements: 3.2_
   
-  - [ ] 5.5 Implement animation for newly acquired teams
+  - [x] 5.5 Implement animation for newly acquired teams
+
     - Add pulse animation effect for new teams
     - Apply gold glow shadow animation
     - Use CSS keyframes for smooth animation
