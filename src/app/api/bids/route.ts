@@ -318,10 +318,8 @@ export async function POST(request: NextRequest) {
       if (io) {
         // Admin sees all latest bids for current team
         const latestBids = await Bids.getByTeam(rawTeamId);
-        const allHouses = await Houses.getAll();
-        const houseNameById = new Map(
-          allHouses.map((h) => [h._id?.toString(), h.name])
-        );
+        // PERF FIX: Use lightweight ID-name map instead of full house documents
+        const houseNameById = await Houses.getIdNameMap();
         const adminBids = latestBids
           .map((b) => ({
             houseId: b.houseId.toString(),
