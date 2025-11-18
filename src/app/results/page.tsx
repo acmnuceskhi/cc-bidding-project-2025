@@ -19,8 +19,11 @@ interface TeamWithDetails extends Team {
   soldTo?: string;
   soldToHouseName?: string;
   soldPrice?: number;
+  bidTimestamp?: string;
   roundNumber?: number;
 }
+
+type SortOption = "price" | "batch" | "time";
 
 interface House {
   houseId?: string;
@@ -39,6 +42,7 @@ export default function FinalTeamsPage() {
   const [houses, setHouses] = useState<HouseWithTeams[]>([]);
   const [previousHouseTeamCounts, setPreviousHouseTeamCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<SortOption>("price");
 
   useEffect(() => {
     async function fetchData() {
@@ -62,16 +66,10 @@ export default function FinalTeamsPage() {
             const matchedTeams = teamsData.filter(
               (t) => t.houseId && String(t.houseId) === houseIdStr
             );
-            // Sort teams by soldPrice (highest first)
-            const sortedTeams = matchedTeams.sort((a, b) => {
-              const priceA = a.soldPrice ?? 0;
-              const priceB = b.soldPrice ?? 0;
-              return priceB - priceA;
-            });
-            console.log(`House ${house.name} (${houseIdStr}):`, sortedTeams);
+            console.log(`House ${house.name} (${houseIdStr}):`, matchedTeams);
             return {
               ...house,
-              teams: sortedTeams,
+              teams: matchedTeams,
             };
           }
         );
@@ -100,6 +98,33 @@ export default function FinalTeamsPage() {
     fetchData();
   }, []);
 
+  // Sort teams based on selected option
+  const getSortedTeams = (teams: TeamWithDetails[]) => {
+    const sorted = [...teams];
+    switch (sortBy) {
+      case "price":
+        return sorted.sort((a, b) => {
+          const priceA = a.soldPrice ?? 0;
+          const priceB = b.soldPrice ?? 0;
+          return priceB - priceA;
+        });
+      case "batch":
+        return sorted.sort((a, b) => {
+          const batchA = a.batch || "";
+          const batchB = b.batch || "";
+          return batchA.localeCompare(batchB);
+        });
+      case "time":
+        return sorted.sort((a, b) => {
+          const timeA = a.bidTimestamp ? new Date(a.bidTimestamp).getTime() : 0;
+          const timeB = b.bidTimestamp ? new Date(b.bidTimestamp).getTime() : 0;
+          return timeA - timeB; // Earlier bids first
+        });
+      default:
+        return sorted;
+    }
+  };
+
   return (
     <div
       className="min-h-screen bg-cover bg-center flex flex-col items-center justify-start text-white"
@@ -108,9 +133,43 @@ export default function FinalTeamsPage() {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
 
       <div className="relative z-10 w-full max-w-7xl p-8 text-center">
-        <h1 className="text-5xl font-extrabold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-12">
+        <h1 className="text-5xl font-extrabold text-[#FFD700] drop-shadow-[0_0_20px_#FFD700] mb-8">
           ☯︎ Final Teams Line-Up ☯︎
         </h1>
+
+        {/* Sorting Controls */}
+        <div className="flex justify-center gap-4 mb-8">
+          <button
+            onClick={() => setSortBy("price")}
+            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+              sortBy === "price"
+                ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
+                : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
+            }`}
+          >
+            💰 Sort by Price
+          </button>
+          <button
+            onClick={() => setSortBy("batch")}
+            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+              sortBy === "batch"
+                ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
+                : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
+            }`}
+          >
+            🎓 Sort by Batch
+          </button>
+          <button
+            onClick={() => setSortBy("time")}
+            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+              sortBy === "time"
+                ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
+                : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
+            }`}
+          >
+            ⏱️ Sort by Bid Time
+          </button>
+        </div>
 
         {loading ? (
           <div className="text-yellow-400 text-lg animate-pulse mt-12">
@@ -164,7 +223,7 @@ export default function FinalTeamsPage() {
 
                 {house.teams.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3 text-sm text-gray-200">
-                    {house.teams.map((team, tIndex) => (
+                    {getSortedTeams(house.teams).map((team, tIndex) => (
                       <div
                         key={
                           team.teamId ||

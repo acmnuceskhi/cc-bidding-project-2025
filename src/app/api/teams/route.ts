@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         // Get winning bid for this team (if any)
         const teamId = team._id?.toString();
         let soldPrice: number | undefined;
+        let bidTimestamp: Date | undefined;
         if (teamId && team.houseId) {
           try {
             const bids = await Bids.getByTeam(teamId);
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
               (bid) => bid.houseId.toString() === team.houseId?.toString()
             );
             soldPrice = winningBid?.amount;
+            bidTimestamp = winningBid?.timestamp;
           } catch (error) {
             console.error(`Error fetching bid for team ${teamId}:`, error);
           }
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest) {
           timeTakenPerProblem: team.timeTakenPerProblem,
           houseId: team.houseId ? team.houseId.toString() : null,
           soldPrice,
+          bidTimestamp: bidTimestamp ? bidTimestamp.toISOString() : undefined,
           memberCount: teamMembers.length,
           members: teamMembers.map((p) => ({
             participantId: p._id?.toString(),
