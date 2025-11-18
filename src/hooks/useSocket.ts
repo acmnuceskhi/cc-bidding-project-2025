@@ -8,6 +8,7 @@ import type {
   ClientToServerEvents,
   AuctionState,
 } from "@/types/socket";
+import { logger } from "@/lib/logger";
 
 export function useSocket() {
   const [isConnected, setIsConnected] = useState(false);

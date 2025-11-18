@@ -6,6 +6,7 @@ import { Bids } from "@/lib/models/bids";
 import { Config } from "@/lib/models/config";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { getSocketInstance } from "@/lib/socket-instance";
+import { logger } from "@/lib/logger";
 
 interface PhaseCounts {
   pass1: { total: number; scheduled: number; active: number; completed: number };
@@ -166,7 +167,7 @@ export async function GET() {
       }
     });
   } catch (error) {
-    console.error("Error fetching status:", error);
+    logger.error("Error fetching status:", error);
     return NextResponse.json(
       { success: false, error: "INTERNAL_SERVER_ERROR" },
       { status: 500 }
@@ -237,7 +238,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    console.error("Error in POST /api/status:", error);
+    logger.error("Error in POST /api/status:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

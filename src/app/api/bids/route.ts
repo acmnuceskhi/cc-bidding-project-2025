@@ -7,6 +7,7 @@ import { verifyAuth } from "@/lib/auth";
 import { emitSocketEvent, getSocketInstance } from "@/lib/socket-instance";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { logger } from "@/lib/logger";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
@@ -358,7 +359,7 @@ export async function POST(request: NextRequest) {
       newAmount: amount,
     });
   } catch (error) {
-    console.error("Error creating bid:", error);
+    logger.error("Error creating bid:", error);
     return NextResponse.json(
       {
         success: false,
@@ -415,7 +416,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(bids);
   } catch (error) {
-    console.error("Error fetching bids:", error);
+    logger.error("Error fetching bids:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
