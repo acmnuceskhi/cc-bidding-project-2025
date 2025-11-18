@@ -138,36 +138,39 @@ export default function FinalTeamsPage() {
         </h1>
 
         {/* Sorting Controls */}
-        <div className="flex justify-center gap-4 mb-8">
+        <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-8 px-4">
           <button
             onClick={() => setSortBy("price")}
-            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+            className={`px-3 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all ${
               sortBy === "price"
                 ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
                 : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
             }`}
           >
-            💰 Sort by Price
+            <span className="hidden sm:inline">💰 Sort by Price</span>
+            <span className="sm:hidden">💰 Price</span>
           </button>
           <button
             onClick={() => setSortBy("batch")}
-            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+            className={`px-3 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all ${
               sortBy === "batch"
                 ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
                 : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
             }`}
           >
-            🎓 Sort by Batch
+            <span className="hidden sm:inline">🎓 Sort by Batch</span>
+            <span className="sm:hidden">🎓 Batch</span>
           </button>
           <button
             onClick={() => setSortBy("time")}
-            className={`px-6 py-2 rounded-lg font-semibold transition-all ${
+            className={`px-3 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-all ${
               sortBy === "time"
                 ? "bg-[#FFD700] text-black shadow-[0_0_15px_rgba(255,215,0,0.6)]"
                 : "bg-black/50 text-gray-300 border border-[#FFD700]/30 hover:border-[#FFD700]/60"
             }`}
           >
-            ⏱️ Sort by Bid Time
+            <span className="hidden sm:inline">⏱️ Sort by Bid Time</span>
+            <span className="sm:hidden">⏱️ Time</span>
           </button>
         </div>
 
@@ -248,18 +251,9 @@ export default function FinalTeamsPage() {
                                 💰 Sold for: ${team.soldPrice.toLocaleString()}
                               </div>
                             )}
-                            {(team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
-                              <div className="flex gap-3 mt-1 text-xs">
-                                {team.successfulAttempts !== undefined && (
-                                  <span className="text-green-400">
-                                    ✓ {team.successfulAttempts} solved
-                                  </span>
-                                )}
-                                {team.totalPoints !== undefined && (
-                                  <span className="text-yellow-400">
-                                    ★ {team.totalPoints} pts
-                                  </span>
-                                )}
+                            {team.successfulAttempts !== undefined && (
+                              <div className="mt-1 text-xs text-green-400">
+                                ✓ {team.successfulAttempts} solved
                               </div>
                             )}
                           </div>
