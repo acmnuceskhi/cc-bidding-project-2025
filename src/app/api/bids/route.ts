@@ -337,12 +337,8 @@ export async function POST(request: NextRequest) {
           bids: adminBids,
         });
 
-        // Broadcast enriched bids to all clients (e.g., projector)
-        // Safe for houses: their listener ignores non-house payload shapes
-        io.emit("bids-update", {
-          teamId: rawTeamId,
-          bids: adminBids,
-        });
+        // PERF FIX: Removed redundant global broadcast - targeted rooms sufficient
+        // Projector gets updates via bid-placed event, admins via room, houses via room
 
         // House sees only its own latest bid
         io.to(`house:${houseId}`).emit("bids-update", {

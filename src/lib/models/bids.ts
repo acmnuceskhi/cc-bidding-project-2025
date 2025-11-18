@@ -28,6 +28,8 @@ async function ensureIndexes() {
 
     // Compound index for amount+timestamp queries (for finding winning bids)
     await col.createIndex({ roundId: 1, amount: -1, timestamp: 1 });
+    // PERF FIX: Optimized index for house-specific bid queries with sorting
+    await col.createIndex({ houseId: 1, roundId: 1, amount: -1, timestamp: 1 });
     // Defensive TTL index for lightweight locks used by admin operations
     // Stale lock documents will be automatically removed after 5 minutes.
     try {
