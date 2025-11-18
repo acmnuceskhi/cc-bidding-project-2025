@@ -29,13 +29,28 @@ let cache: {
 
 const CACHE_TTL = 30000; // 30 seconds
 
+// In-flight request tracking to prevent cache stampede
+let inFlightCacheRequest: Promise<{
+  phaseCounts: PhaseCounts;
+  unsoldTeams: UnsoldTeam[];
+  participants: Participant[];
+  timestamp: number;
+}> | null = null;
+
 async function getCachedData() {
   const now = Date.now();
   if (cache && now - cache.timestamp < CACHE_TTL) {
     return cache;
   }
 
-  const allParticipants = await Participants.getAll();
+  // If a request is already in flight, wait for it instead of hitting DB again
+  if (inFlightCacheRequest) {
+    return await inFlightCacheRequest;
+  }
+
+  // Create new in-flight promise
+  inFlightCacheRequest = (async () => {
+    const allParticipants = await Participants.getAll();
   const unsoldTeams = await Teams.getAll().then((list) => list.filter((t) => !t.houseId));
 
   const counts: PhaseCounts = {
@@ -50,19 +65,28 @@ async function getCachedData() {
       .length;
   };
 
-  cache = {
-    phaseCounts: counts,
-    unsoldTeams: unsoldTeams.map((t) => ({
-      teamId: t._id?.toString() || "",
-      rank: t.rank,
-      batch: t.batch ?? null,
-      memberCount: getMemberCount(t._id?.toString() || ""),
-    })),
-    participants: allParticipants,
-    timestamp: now,
-  };
+    cache = {
+      phaseCounts: counts,
+      unsoldTeams: unsoldTeams.map((t) => ({
+        teamId: t._id?.toString() || "",
+        rank: t.rank,
+        batch: t.batch ?? null,
+        memberCount: getMemberCount(t._id?.toString() || ""),
+      })),
+      participants: allParticipants,
+      timestamp: now,
+    };
 
-  return cache;
+    return cache;
+  })();
+
+  try {
+    const result = await inFlightCacheRequest;
+    return result;
+  } finally {
+    // Clear in-flight request after completion
+    inFlightCacheRequest = null;
+  }
 }
 
 // GET /api/status - Get current status for projector display
@@ -134,6 +158,12 @@ export async function GET() {
       auctionEndTime: cfg.auctionEndTime?.toISOString() || null,
       currentRoundStartTime: cfg.currentRoundStartTime?.toISOString() || null,
       currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
+    }, {
+      headers: {
+        // Add HTTP cache headers for CDN/browser caching
+        // max-age=10 for client-side, s-maxage=30 for shared caches (projector displays)
+        'Cache-Control': 'public, max-age=10, s-maxage=30',
+      }
     });
   } catch (error) {
     console.error("Error fetching status:", error);

@@ -5,32 +5,13 @@ const next = require("next");
 const { Server } = require("socket.io");
 const { setSocketInstance } = require("./src/lib/socket-instance");
 const jwt = require("jsonwebtoken");
-const { MongoClient } = require("mongodb");
-const { config: loadEnv } = require("dotenv");
-const path = require("path");
 
-// Load environment variables similar to src/lib/mongodb.ts
-loadEnv({ path: path.resolve(process.cwd(), ".env.local") });
-loadEnv({ path: path.resolve(process.cwd(), ".env") });
-
-const MONGODB_URI = process.env.MONGODB_URI;
-let mongoClientPromise;
-function getMongoClient() {
-  if (!mongoClientPromise) {
-    if (!MONGODB_URI) {
-      throw new Error(
-        "Please define MONGODB_URI in your environment (e.g. .env.local)"
-      );
-    }
-    const client = new MongoClient(MONGODB_URI, {
-      maxPoolSize: 10,
-      minPoolSize: 2,
-      maxIdleTimeMS: 30000,
-    });
-    mongoClientPromise = client.connect();
-  }
-  return mongoClientPromise;
-}
+// Import shared MongoDB connection from src/lib/mongodb.ts
+// This eliminates duplicate connection pools (was creating 2x10 connections)
+const getMongoClient = async () => {
+  const clientPromise = require("./src/lib/mongodb").default;
+  return await clientPromise;
+};
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT || "3000", 10);
