@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { fetchPublic } from "@/lib/fetchPublic";
 import { SortControls, HouseCard, LoadingState, ErrorState } from "@/components/results";
 
@@ -45,6 +45,11 @@ export default function FinalTeamsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("price");
+
+  // Memoize the sort handler to prevent unnecessary re-renders
+  const handleSortChange = useCallback((newSortBy: SortOption) => {
+    setSortBy(newSortBy);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -102,32 +107,34 @@ export default function FinalTeamsPage() {
     fetchData();
   }, []);
 
-  // Sort teams based on selected option
-  const getSortedTeams = (teams: TeamWithDetails[]) => {
-    const sorted = [...teams];
-    switch (sortBy) {
-      case "price":
-        return sorted.sort((a, b) => {
-          const priceA = a.soldPrice ?? 0;
-          const priceB = b.soldPrice ?? 0;
-          return priceB - priceA;
-        });
-      case "batch":
-        return sorted.sort((a, b) => {
-          const batchA = a.batch || "";
-          const batchB = b.batch || "";
-          return batchA.localeCompare(batchB);
-        });
-      case "time":
-        return sorted.sort((a, b) => {
-          const timeA = a.bidTimestamp ? new Date(a.bidTimestamp).getTime() : 0;
-          const timeB = b.bidTimestamp ? new Date(b.bidTimestamp).getTime() : 0;
-          return timeA - timeB; // Earlier bids first
-        });
-      default:
-        return sorted;
-    }
-  };
+  // Sort teams based on selected option - memoized for performance
+  const getSortedTeams = useMemo(() => {
+    return (teams: TeamWithDetails[]) => {
+      const sorted = [...teams];
+      switch (sortBy) {
+        case "price":
+          return sorted.sort((a, b) => {
+            const priceA = a.soldPrice ?? 0;
+            const priceB = b.soldPrice ?? 0;
+            return priceB - priceA;
+          });
+        case "batch":
+          return sorted.sort((a, b) => {
+            const batchA = a.batch || "";
+            const batchB = b.batch || "";
+            return batchA.localeCompare(batchB);
+          });
+        case "time":
+          return sorted.sort((a, b) => {
+            const timeA = a.bidTimestamp ? new Date(a.bidTimestamp).getTime() : 0;
+            const timeB = b.bidTimestamp ? new Date(b.bidTimestamp).getTime() : 0;
+            return timeA - timeB; // Earlier bids first
+          });
+        default:
+          return sorted;
+      }
+    };
+  }, [sortBy]);
 
   return (
     <div className="min-h-screen relative">
@@ -146,10 +153,10 @@ export default function FinalTeamsPage() {
         <header className="space-y-8 mb-12">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
-              ☯︎ Final Teams Line-Up ☯︎
+              ☯︎ Bidding Results ☯︎
             </h1>
           </div>
-          <SortControls sortBy={sortBy} onSortChange={setSortBy} />
+          <SortControls sortBy={sortBy} onSortChange={handleSortChange} />
         </header>
 
         {/* Conditional rendering for loading, error, and content states */}

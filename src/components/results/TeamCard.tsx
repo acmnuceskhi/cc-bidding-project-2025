@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { GraduationCap, CheckCircle, Clock } from "lucide-react";
 
 interface Team {
@@ -26,7 +27,7 @@ interface TeamCardProps {
   team: TeamWithDetails;
 }
 
-export function TeamCard({ team }: TeamCardProps) {
+export const TeamCard = memo(function TeamCard({ team }: TeamCardProps) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg bg-black/40 hover:bg-black/50 transition-colors border border-white/10">
       {/* Rank Badge */}
@@ -78,4 +79,4 @@ export function TeamCard({ team }: TeamCardProps) {
       )}
     </div>
   );
-}
+});

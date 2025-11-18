@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TeamCard } from "./TeamCard";
@@ -53,7 +54,7 @@ const getHouseBackground = (houseName: string): string => {
   return houseMap[houseName] || "/arena-background.jpg";
 };
 
-export function HouseCard({ house, sortedTeams, isNewlyGained = false }: HouseCardProps) {
+export const HouseCard = memo(function HouseCard({ house, sortedTeams, isNewlyGained = false }: HouseCardProps) {
   const hasTeams = house.teams && house.teams.length > 0;
   
   return (
@@ -104,4 +105,4 @@ export function HouseCard({ house, sortedTeams, isNewlyGained = false }: HouseCa
       </div>
     </Card>
   );
-}
+});

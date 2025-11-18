@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { DollarSign, GraduationCap, Clock } from "lucide-react";
 
@@ -8,7 +9,7 @@ interface SortControlsProps {
   onSortChange: (sortBy: SortOption) => void;
 }
 
-export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
+export const SortControls = memo(function SortControls({ sortBy, onSortChange }: SortControlsProps) {
   return (
     <div
       className="flex flex-wrap justify-center gap-3 md:gap-4"
@@ -64,4 +65,4 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
       </Button>
     </div>
   );
-}
+});
