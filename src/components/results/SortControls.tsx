@@ -20,18 +20,15 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
         size="lg"
         onClick={() => onSortChange("price")}
         className={`min-h-[44px] min-w-[44px] transition-all ${
-          sortBy === "price" 
-            ? "bg-yellow-500 text-black hover:bg-yellow-600" 
-            : "border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10"
+          sortBy === "price"
+            ? "bg-yellow-500 text-black hover:bg-yellow-600"
+            : "border-yellow-500/50 text-black hover:bg-yellow-500/10"
         }`}
         aria-label="Sort by price"
         aria-pressed={sortBy === "price"}
       >
-        <span className="flex items-center gap-2">
-          <DollarSign className="h-5 w-5" aria-hidden="true" />
-          <span className="hidden sm:inline">Sort by Price</span>
-          <span className="sm:hidden sr-only">Price</span>
-        </span>
+        <DollarSign className="h-5 w-5 mr-2" aria-hidden="true" />
+        <span className="hidden sm:inline">Sort by Price</span>
       </Button>
 
       <Button
@@ -39,18 +36,15 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
         size="lg"
         onClick={() => onSortChange("batch")}
         className={`min-h-[44px] min-w-[44px] transition-all ${
-          sortBy === "batch" 
-            ? "bg-yellow-500 text-black hover:bg-yellow-600" 
-            : "border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10"
+          sortBy === "batch"
+            ? "bg-yellow-500 text-black hover:bg-yellow-600"
+            : "border-yellow-500/50 text-black hover:bg-yellow-500/10"
         }`}
         aria-label="Sort by batch"
         aria-pressed={sortBy === "batch"}
       >
-        <span className="flex items-center gap-2">
-          <GraduationCap className="h-5 w-5" aria-hidden="true" />
-          <span className="hidden sm:inline">Sort by Batch</span>
-          <span className="sm:hidden sr-only">Batch</span>
-        </span>
+        <GraduationCap className="h-5 w-5 mr-2" aria-hidden="true" />
+        <span className="hidden sm:inline">Sort by Batch</span>
       </Button>
 
       <Button
@@ -58,18 +52,15 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
         size="lg"
         onClick={() => onSortChange("time")}
         className={`min-h-[44px] min-w-[44px] transition-all ${
-          sortBy === "time" 
-            ? "bg-yellow-500 text-black hover:bg-yellow-600" 
-            : "border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10"
+          sortBy === "time"
+            ? "bg-yellow-500 text-black hover:bg-yellow-600"
+            : "border-yellow-500/50 text-black hover:bg-yellow-500/10"
         }`}
         aria-label="Sort by bid time"
         aria-pressed={sortBy === "time"}
       >
-        <span className="flex items-center gap-2">
-          <Clock className="h-5 w-5" aria-hidden="true" />
-          <span className="hidden sm:inline">Sort by Bid Time</span>
-          <span className="sm:hidden sr-only">Time</span>
-        </span>
+        <Clock className="h-5 w-5 mr-2" aria-hidden="true" />
+        <span className="hidden sm:inline">Sort by Bid Time</span>
       </Button>
     </div>
   );
