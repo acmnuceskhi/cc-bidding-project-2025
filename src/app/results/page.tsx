@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { motion } from "framer-motion";
 import { fetchPublic } from "@/lib/fetchPublic";
-import { SortControls, HouseCard, LoadingState, ErrorState } from "@/components/results";
+import { getCachedData, setCachedData, clearCache } from "@/lib/cache";
+import {
+  titleVariants,
+  sortControlsVariants,
+  containerVariants,
+  prefersReducedMotion,
+} from "@/lib/animations";
+import { SortControls, RefreshButton, HouseCard, LoadingState, ErrorState } from "@/components/results";
 
 interface Team {
   teamId: string;
@@ -51,8 +59,19 @@ export default function FinalTeamsPage() {
     setSortBy(newSortBy);
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (skipCache = false) => {
     try {
+      // Check cache first if not skipping
+      if (!skipCache) {
+        const cachedHouses = getCachedData<HouseWithTeams[]>("houses");
+        if (cachedHouses) {
+          setHouses(cachedHouses);
+          setLoading(false);
+          setError(false);
+          return;
+        }
+      }
+
       setLoading(true);
       setError(false);
       const [housesRes, teamsRes] = await Promise.all([
@@ -82,6 +101,9 @@ export default function FinalTeamsPage() {
       );
 
       console.log("Houses with teams:", housesWithTeams);
+
+      // Cache the data
+      setCachedData("houses", housesWithTeams);
 
       // Track previous team counts per house so we can animate only
       // when a house gains teams (i.e. wins something new).
@@ -136,6 +158,11 @@ export default function FinalTeamsPage() {
     };
   }, [sortBy]);
 
+  const handleRefresh = () => {
+    clearCache("houses");
+    fetchData(true);
+  };
+
   return (
     <div className="min-h-screen relative">
       {/* Background Image */}
@@ -151,21 +178,39 @@ export default function FinalTeamsPage() {
       <div className="relative z-10 container mx-auto px-4 py-8 max-w-7xl">
         {/* Page Header with proper spacing and hierarchy */}
         <header className="space-y-8 mb-12">
-          <div className="text-center">
+          <motion.div
+            className="text-center"
+            initial="hidden"
+            animate="visible"
+            variants={prefersReducedMotion() ? {} : titleVariants}
+          >
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
               ☯︎ Bidding Results ☯︎
             </h1>
-          </div>
-          <SortControls sortBy={sortBy} onSortChange={handleSortChange} />
+          </motion.div>
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={prefersReducedMotion() ? {} : sortControlsVariants}
+            className="flex flex-wrap justify-center items-center gap-3 md:gap-4"
+          >
+            <SortControls sortBy={sortBy} onSortChange={handleSortChange} />
+            <RefreshButton onRefresh={handleRefresh} isLoading={loading} />
+          </motion.div>
         </header>
 
         {/* Conditional rendering for loading, error, and content states */}
         {loading ? (
           <LoadingState />
         ) : error ? (
-          <ErrorState onRetry={fetchData} />
+          <ErrorState onRetry={handleRefresh} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 transition-opacity duration-300 ease-in-out">
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            initial="hidden"
+            animate="visible"
+            variants={prefersReducedMotion() ? {} : containerVariants}
+          >
             {houses.map((house, index) => {
               const hasTeams = house.teams && house.teams.length > 0;
               const houseKey = (house._id ? String(house._id) : house.houseId) || house.name;
@@ -181,7 +226,7 @@ export default function FinalTeamsPage() {
                 />
               );
             })}
-          </div>
+          </motion.div>
         )}
 
         {/* Page Footer with proper spacing */}
