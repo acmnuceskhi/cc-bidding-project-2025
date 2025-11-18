@@ -62,10 +62,16 @@ export default function FinalTeamsPage() {
             const matchedTeams = teamsData.filter(
               (t) => t.houseId && String(t.houseId) === houseIdStr
             );
-            console.log(`House ${house.name} (${houseIdStr}):`, matchedTeams);
+            // Sort teams by soldPrice (highest first)
+            const sortedTeams = matchedTeams.sort((a, b) => {
+              const priceA = a.soldPrice ?? 0;
+              const priceB = b.soldPrice ?? 0;
+              return priceB - priceA;
+            });
+            console.log(`House ${house.name} (${houseIdStr}):`, sortedTeams);
             return {
               ...house,
-              teams: matchedTeams,
+              teams: sortedTeams,
             };
           }
         );
@@ -178,6 +184,11 @@ export default function FinalTeamsPage() {
                             <div className="text-xs text-gray-300">
                               Batch: {team.batch} • {team.memberCount} members
                             </div>
+                            {team.soldPrice !== undefined && (
+                              <div className="mt-1 text-sm font-semibold text-[#FFD700]">
+                                💰 Sold for: ${team.soldPrice.toLocaleString()}
+                              </div>
+                            )}
                             {(team.successfulAttempts !== undefined || team.totalPoints !== undefined) && (
                               <div className="flex gap-3 mt-1 text-xs">
                                 {team.successfulAttempts !== undefined && (

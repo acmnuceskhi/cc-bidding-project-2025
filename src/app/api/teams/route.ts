@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Teams } from "@/lib/models/teams";
 import { Participants } from "@/lib/models/participants";
+import { Bids } from "@/lib/models/bids";
 import { verifyAuth } from "@/lib/auth";
 
 // GET /api/teams - Get all teams (public for results page)
@@ -17,6 +18,22 @@ export async function GET(request: NextRequest) {
           (p) => p.teamId?.toString() === team._id?.toString()
         );
 
+        // Get winning bid for this team (if any)
+        const teamId = team._id?.toString();
+        let soldPrice: number | undefined;
+        if (teamId && team.houseId) {
+          try {
+            const bids = await Bids.getByTeam(teamId);
+            // Find the bid from the house that won this team
+            const winningBid = bids.find(
+              (bid) => bid.houseId.toString() === team.houseId?.toString()
+            );
+            soldPrice = winningBid?.amount;
+          } catch (error) {
+            console.error(`Error fetching bid for team ${teamId}:`, error);
+          }
+        }
+
         return {
           teamId: team._id?.toString(),
           name: team.name || null,
@@ -28,6 +45,7 @@ export async function GET(request: NextRequest) {
           totalPenalty: team.totalPenalty,
           timeTakenPerProblem: team.timeTakenPerProblem,
           houseId: team.houseId ? team.houseId.toString() : null,
+          soldPrice,
           memberCount: teamMembers.length,
           members: teamMembers.map((p) => ({
             participantId: p._id?.toString(),
