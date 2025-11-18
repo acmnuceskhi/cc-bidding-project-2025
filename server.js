@@ -93,10 +93,30 @@ app.prepare().then(() => {
   });
 
   // Production-ready Socket.IO configuration
-  const corsOrigin =
-    process.env.NODE_ENV === "production" && process.env.RENDER_EXTERNAL_URL
-      ? [process.env.RENDER_EXTERNAL_URL]
-      : "*";
+  // Support both Heroku and Render deployments
+  // Priority: EXTERNAL_URL (unified) > RENDER_EXTERNAL_URL > HEROKU_EXTERNAL_URL
+  let corsOrigin = "*";
+  if (process.env.NODE_ENV === "production") {
+    const origins = [];
+    
+    // Unified environment variable (works for both platforms)
+    if (process.env.EXTERNAL_URL) {
+      origins.push(process.env.EXTERNAL_URL);
+    }
+    
+    // Platform-specific variables (fallback)
+    if (process.env.RENDER_EXTERNAL_URL) {
+      origins.push(process.env.RENDER_EXTERNAL_URL);
+    }
+    if (process.env.HEROKU_EXTERNAL_URL) {
+      origins.push(process.env.HEROKU_EXTERNAL_URL);
+    }
+    
+    // If we have any production origins, use them; otherwise allow all (dev mode)
+    if (origins.length > 0) {
+      corsOrigin = origins;
+    }
+  }
 
   const io = new Server(httpServer, {
     pingTimeout: 60000,
