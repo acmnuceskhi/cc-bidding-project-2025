@@ -18,11 +18,13 @@
     "full-reset": "npx tsx src/scripts/full-reset.ts"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
     "babel-plugin-react-compiler": "^1.0.0",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
+    "framer-motion": "^12.23.24",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.548.0",
     "mongodb": "^6.20.0",
