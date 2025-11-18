@@ -109,6 +109,21 @@ export const Teams = {
   },
 
   /**
+   * Count teams assigned to a specific house and batch
+   * PERF: Efficient database count instead of fetching all teams
+   */
+  async countByHouseAndBatch(houseId: string, batch: string): Promise<number> {
+    const client = await clientPromise;
+    return client
+      .db()
+      .collection<Team>(collectionName)
+      .countDocuments({ 
+        houseId: new ObjectId(houseId), 
+        batch 
+      });
+  },
+
+  /**
    * Deletes a team by ID (most likely not needed)
    * Safe delete: Prevents deletion if any participants reference this team
    * @param id - The ID of the team to delete

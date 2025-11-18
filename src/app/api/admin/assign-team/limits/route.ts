@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
     if (teamId) {
       const team = await Teams.getById(teamId);
       if (!team) return NextResponse.json({ error: "TEAM_NOT_FOUND" }, { status: 404 });
-      const allTeams = await Teams.getAll();
-      const sameBatchCount = allTeams.filter((t) => t.houseId && t.houseId.toString() === houseId && t.batch === team.batch).length;
+      // PERF FIX: Use countDocuments instead of fetching all teams
+      const sameBatchCount = await Teams.countByHouseAndBatch(houseId, team.batch as string);
       const perBatchLimit = (cfg.batchLimits && cfg.batchLimits[team.batch as string]) ?? 1;
       const teamsLeftToBuy = Math.max(0, perBatchLimit - sameBatchCount);
       let computedMax = house.remainingBudget;
@@ -60,11 +60,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Otherwise compute for all batches found in teams' data
+    // PERF FIX: Get distinct batches from database instead of fetching all teams
     const allTeams = await Teams.getAll();
     const batches = Array.from(new Set(allTeams.map((t) => t.batch).filter(Boolean))) as string[];
     const result: Record<string, any> = {};
     for (const batch of batches) {
-      const sameBatchCount = allTeams.filter((t) => t.houseId && t.houseId.toString() === houseId && t.batch === batch).length;
+      const sameBatchCount = await Teams.countByHouseAndBatch(houseId, batch);
       const perBatchLimit = (cfg.batchLimits && cfg.batchLimits[batch]) ?? 1;
       const teamsLeftToBuy = Math.max(0, perBatchLimit - sameBatchCount);
       let computedMax = house.remainingBudget;

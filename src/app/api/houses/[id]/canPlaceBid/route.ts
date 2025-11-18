@@ -61,11 +61,8 @@ export async function GET(
     // Get the configurable batch limit for this team's batch
     const maxTeamsPerBatch = await Config.getMaxTeamsPerBatch(team.batch);
 
-    // Count teams from the same batch already assigned to this house
-    const allTeams = await Teams.getAll();
-    const houseTeamsInSameBatch = allTeams.filter(
-      (t) => t.houseId?.toString() === id && t.batch === team.batch
-    ).length;
+    // PERF FIX: Use countDocuments instead of fetching all teams
+    const houseTeamsInSameBatch = await Teams.countByHouseAndBatch(id, team.batch);
 
     if (houseTeamsInSameBatch >= maxTeamsPerBatch) {
       return NextResponse.json({
