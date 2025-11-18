@@ -83,19 +83,19 @@ export const HouseCard = memo(function HouseCard({ house, sortedTeams, isNewlyGa
         
         {/* Content */}
         <div className="relative z-10">
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 sm:pb-4">
             <div className="flex items-center justify-between gap-2">
               <CardTitle 
-                className="text-xl font-bold drop-shadow-lg"
+                className="text-lg sm:text-xl md:text-2xl font-bold drop-shadow-lg"
                 style={{ color: house.color || "#FFD700" }}
               >
                 {house.name}
               </CardTitle>
-              <Badge variant="secondary" className="shrink-0">
+              <Badge variant="secondary" className="shrink-0 text-sm sm:text-base">
                 {house.teams.length}
               </Badge>
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm sm:text-base text-gray-400">
               ${house.remainingBudget.toLocaleString()} remaining
             </div>
           </CardHeader>

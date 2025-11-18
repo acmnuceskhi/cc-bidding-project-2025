@@ -29,27 +29,27 @@ interface TeamCardProps {
 
 export const TeamCard = memo(function TeamCard({ team }: TeamCardProps) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-black/40 hover:bg-black/50 transition-colors border border-white/10">
+    <div className="flex items-center gap-3 p-3 sm:p-4 rounded-lg bg-black/40 hover:bg-black/50 transition-colors border border-white/10">
         {/* Rank Badge */}
-        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center shrink-0">
-          <span className="text-sm font-bold text-black">#{team.rank}</span>
+        <div className="h-10 sm:h-11 w-10 sm:w-11 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center shrink-0">
+          <span className="text-sm sm:text-base font-bold text-black">#{team.rank}</span>
         </div>
         
         {/* Team Info */}
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm text-white truncate">
+          <div className="font-semibold text-sm sm:text-base text-white truncate">
             {team.name || `Team #${team.rank}`}
           </div>
-          <div className="flex items-center gap-1 text-[10px] text-gray-300">
+          <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-300">
             <span className="flex items-center gap-0.5">
-              <GraduationCap className="h-2.5 w-2.5" />
+              <GraduationCap className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
               {team.batch}
             </span>
             {team.successfulAttempts !== undefined && (
               <>
                 <span>•</span>
                 <span className="flex items-center gap-0.5 text-green-400">
-                  <CheckCircle className="h-2.5 w-2.5" />
+                  <CheckCircle className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                   {team.successfulAttempts}
                 </span>
               </>
@@ -63,7 +63,7 @@ export const TeamCard = memo(function TeamCard({ team }: TeamCardProps) {
               <>
                 <span>•</span>
                 <span className="flex items-center gap-0.5 text-blue-400">
-                  <Clock className="h-2.5 w-2.5" />
+                  <Clock className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
                   {team.totalPenalty}
                 </span>
               </>
@@ -73,7 +73,7 @@ export const TeamCard = memo(function TeamCard({ team }: TeamCardProps) {
         
         {/* Price */}
         {team.soldPrice !== undefined && (
-          <div className="text-sm font-bold text-yellow-400 shrink-0">
+          <div className="text-sm sm:text-base font-bold text-yellow-400 shrink-0">
             ${team.soldPrice.toLocaleString()}
           </div>
         )}

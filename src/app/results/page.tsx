@@ -184,7 +184,7 @@ export default function FinalTeamsPage() {
             animate="visible"
             variants={prefersReducedMotion() ? {} : titleVariants}
           >
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]">
               ☯︎ Bidding Results ☯︎
             </h1>
           </motion.div>
@@ -230,8 +230,8 @@ export default function FinalTeamsPage() {
         )}
 
         {/* Page Footer with proper spacing */}
-        <footer className="mt-12 text-center">
-          <p className="text-sm text-muted-foreground">
+        <footer className="mt-8 sm:mt-12 text-center">
+          <p className="text-sm sm:text-base text-muted-foreground">
             May the strongest house prevail ☯︎
           </p>
         </footer>
