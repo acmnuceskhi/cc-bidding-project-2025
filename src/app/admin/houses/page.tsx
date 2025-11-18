@@ -38,7 +38,7 @@ export default function HousesPage() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [hasActiveRound, setHasActiveRound] = useState(false);
   const [editingHouse, setEditingHouse] = useState<string | null>(null);
-    const [budgetInput, setBudgetInput] = useState<{ remainingBudget?: string }>({});
+  const [budgetInput, setBudgetInput] = useState<{ totalBudget?: string; adjustBy?: string; remainingBudget?: string }>({});
   const [editMode, setEditMode] = useState<"total" | "adjust">("total");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
