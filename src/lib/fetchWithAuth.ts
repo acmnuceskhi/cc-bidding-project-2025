@@ -83,9 +83,10 @@ export async function fetchWithAuth(
       const headersArray = Array.from(res.headers.entries());
 
       // Remove from in-flight after a short delay to allow deduplication window
+      // Extended to 250ms to match free-tier response times for better hit rate
       setTimeout(() => {
         inFlightRequests.delete(requestKey);
-      }, 100);
+      }, 250);
 
       return {
         status: res.status,

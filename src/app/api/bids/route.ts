@@ -7,6 +7,8 @@ import { verifyAuth } from "@/lib/auth";
 import { emitSocketEvent, getSocketInstance } from "@/lib/socket-instance";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { logger } from "@/lib/logger";
+import { getCachedCollection } from "@/lib/cache";
 
 // POST /api/bids - Place a bid
 export async function POST(request: NextRequest) {
@@ -167,18 +169,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 👥 Get all teams already assigned to this house and get max teams per batch from config
-    const [houseTeams, config] = await Promise.all([
-      Teams.getAll().then((allTeams) =>
-        allTeams.filter((t) => t.houseId && t.houseId.toString() === houseId)
-      ),
-      Config.get(),
+    // 👥 Get count of teams in same batch and config (PERF: uses targeted DB count query + caching)
+    const [sameBatchCount, config] = await Promise.all([
+      Teams.countByHouseAndBatch(houseId, teamBatch),
+      getCachedCollection('config', () => Config.get(), 30000),
     ]);
 
     // 🏷️ In second pass, minimum roster check removed (team-based bidding)
-
-    // Count how many existing teams are in the same batch
-    const sameBatchCount = houseTeams.filter((t) => t.batch === teamBatch).length;
 
     // Compute per-batch limit (batch-specific overrides legacy scalar)
     const perBatchLimit =
@@ -318,10 +315,8 @@ export async function POST(request: NextRequest) {
       if (io) {
         // Admin sees all latest bids for current team
         const latestBids = await Bids.getByTeam(rawTeamId);
-        const allHouses = await Houses.getAll();
-        const houseNameById = new Map(
-          allHouses.map((h) => [h._id?.toString(), h.name])
-        );
+        // PERF FIX: Use lightweight ID-name map instead of full house documents
+        const houseNameById = await Houses.getIdNameMap();
         const adminBids = latestBids
           .map((b) => ({
             houseId: b.houseId.toString(),
@@ -337,12 +332,8 @@ export async function POST(request: NextRequest) {
           bids: adminBids,
         });
 
-        // Broadcast enriched bids to all clients (e.g., projector)
-        // Safe for houses: their listener ignores non-house payload shapes
-        io.emit("bids-update", {
-          teamId: rawTeamId,
-          bids: adminBids,
-        });
+        // PERF FIX: Removed redundant global broadcast - targeted rooms sufficient
+        // Projector gets updates via bid-placed event, admins via room, houses via room
 
         // House sees only its own latest bid
         io.to(`house:${houseId}`).emit("bids-update", {
@@ -364,7 +355,7 @@ export async function POST(request: NextRequest) {
       newAmount: amount,
     });
   } catch (error) {
-    console.error("Error creating bid:", error);
+    logger.error("Error creating bid:", error);
     return NextResponse.json(
       {
         success: false,
@@ -421,7 +412,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(bids);
   } catch (error) {
-    console.error("Error fetching bids:", error);
+    logger.error("Error fetching bids:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

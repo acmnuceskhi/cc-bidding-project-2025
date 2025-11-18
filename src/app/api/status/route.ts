@@ -6,6 +6,8 @@ import { Bids } from "@/lib/models/bids";
 import { Config } from "@/lib/models/config";
 import { verifyAuth, hasRole } from "@/lib/auth";
 import { getSocketInstance } from "@/lib/socket-instance";
+import { logger } from "@/lib/logger";
+import clientPromise from "@/lib/mongodb";
 
 interface PhaseCounts {
   pass1: { total: number; scheduled: number; active: number; completed: number };
@@ -29,14 +31,36 @@ let cache: {
 
 const CACHE_TTL = 30000; // 30 seconds
 
+// In-flight request tracking to prevent cache stampede
+let inFlightCacheRequest: Promise<{
+  phaseCounts: PhaseCounts;
+  unsoldTeams: UnsoldTeam[];
+  participants: Participant[];
+  timestamp: number;
+}> | null = null;
+
 async function getCachedData() {
   const now = Date.now();
   if (cache && now - cache.timestamp < CACHE_TTL) {
     return cache;
   }
 
-  const allParticipants = await Participants.getAll();
-  const unsoldTeams = await Teams.getAll().then((list) => list.filter((t) => !t.houseId));
+  // If a request is already in flight, wait for it instead of hitting DB again
+  if (inFlightCacheRequest) {
+    return await inFlightCacheRequest;
+  }
+
+  // Create new in-flight promise
+  inFlightCacheRequest = (async () => {
+    // PERF: Use DB query with projection instead of memory filtering
+    const client = await clientPromise;
+    const [allParticipants, unsoldTeamsRaw] = await Promise.all([
+      Participants.getAll(),
+      client.db().collection('teams')
+        .find({ houseId: null })
+        .project({ _id: 1, rank: 1, batch: 1 })
+        .toArray()
+    ]);
 
   const counts: PhaseCounts = {
     pass1: { total: 0, scheduled: 0, active: 0, completed: 0 },
@@ -50,19 +74,30 @@ async function getCachedData() {
       .length;
   };
 
-  cache = {
-    phaseCounts: counts,
-    unsoldTeams: unsoldTeams.map((t) => ({
-      teamId: t._id?.toString() || "",
-      rank: t.rank,
-      batch: t.batch ?? null,
-      memberCount: getMemberCount(t._id?.toString() || ""),
-    })),
-    participants: allParticipants,
-    timestamp: now,
-  };
+  const unsoldTeams = unsoldTeamsRaw as Array<{ _id: any; rank: number; batch: string | null }>
 
-  return cache;
+    cache = {
+      phaseCounts: counts,
+      unsoldTeams: unsoldTeams.map((t) => ({
+        teamId: t._id?.toString() || "",
+        rank: t.rank,
+        batch: t.batch ?? null,
+        memberCount: getMemberCount(t._id?.toString() || ""),
+      })),
+      participants: allParticipants,
+      timestamp: now,
+    };
+
+    return cache;
+  })();
+
+  try {
+    const result = await inFlightCacheRequest;
+    return result;
+  } finally {
+    // Clear in-flight request after completion
+    inFlightCacheRequest = null;
+  }
 }
 
 // GET /api/status - Get current status for projector display
@@ -134,9 +169,15 @@ export async function GET() {
       auctionEndTime: cfg.auctionEndTime?.toISOString() || null,
       currentRoundStartTime: cfg.currentRoundStartTime?.toISOString() || null,
       currentRoundEndTime: cfg.currentRoundEndTime?.toISOString() || null,
+    }, {
+      headers: {
+        // Add HTTP cache headers for CDN/browser caching
+        // max-age=10 for client-side, s-maxage=30 for shared caches (projector displays)
+        'Cache-Control': 'public, max-age=10, s-maxage=30',
+      }
     });
   } catch (error) {
-    console.error("Error fetching status:", error);
+    logger.error("Error fetching status:", error);
     return NextResponse.json(
       { success: false, error: "INTERNAL_SERVER_ERROR" },
       { status: 500 }
@@ -207,7 +248,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
-    console.error("Error in POST /api/status:", error);
+    logger.error("Error in POST /api/status:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -8,35 +8,35 @@ export async function GET(request: NextRequest) {
   try {
     const teams = await Teams.getAll();
 
-    // Transform to include only required fields and fetch team members
-    const filteredTeams = await Promise.all(
-      teams.map(async (team) => {
-        // Get participants for this team
-        const allParticipants = await Participants.getAll();
-        const teamMembers = allParticipants.filter(
-          (p) => p.teamId?.toString() === team._id?.toString()
-        );
+    // PERF FIX: Fetch all participants once instead of N times
+    const allParticipants = await Participants.getAll();
 
-        return {
-          teamId: team._id?.toString(),
-          name: team.name || null,
-          rank: team.rank,
-          batch: team.batch || null,
-          successfulAttempts: team.successfulAttempts,
-          unsuccessfulAttempts: team.unsuccessfulAttempts,
-          totalPoints: team.totalPoints,
-          totalPenalty: team.totalPenalty,
-          timeTakenPerProblem: team.timeTakenPerProblem,
-          houseId: team.houseId ? team.houseId.toString() : null,
-          memberCount: teamMembers.length,
-          members: teamMembers.map((p) => ({
-            participantId: p._id?.toString(),
-            name: p.name,
-            picture: p.picture || null,
-          })),
-        };
-      })
-    );
+    // Transform to include only required fields and fetch team members
+    const filteredTeams = teams.map((team) => {
+      // Get participants for this team
+      const teamMembers = allParticipants.filter(
+        (p) => p.teamId?.toString() === team._id?.toString()
+      );
+
+      return {
+        teamId: team._id?.toString(),
+        name: team.name || null,
+        rank: team.rank,
+        batch: team.batch || null,
+        successfulAttempts: team.successfulAttempts,
+        unsuccessfulAttempts: team.unsuccessfulAttempts,
+        totalPoints: team.totalPoints,
+        totalPenalty: team.totalPenalty,
+        timeTakenPerProblem: team.timeTakenPerProblem,
+        houseId: team.houseId ? team.houseId.toString() : null,
+        memberCount: teamMembers.length,
+        members: teamMembers.map((p) => ({
+          participantId: p._id?.toString(),
+          name: p.name,
+          picture: p.picture || null,
+        })),
+      };
+    });
 
     return NextResponse.json(filteredTeams);
   } catch (error) {

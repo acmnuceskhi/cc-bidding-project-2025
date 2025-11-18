@@ -42,6 +42,20 @@ export const Houses = {
     return client.db().collection<House>(collectionName).find({}).toArray();
   },
 
+  /**
+   * PERF: Get house ID to name mapping (lightweight for socket broadcasts)
+   * Returns Map of house IDs to names, avoiding full document transfer
+   */
+  async getIdNameMap(): Promise<Map<string, string>> {
+    const client = await clientPromise;
+    const houses = await client
+      .db()
+      .collection<House>(collectionName)
+      .find({}, { projection: { _id: 1, name: 1 } })
+      .toArray();
+    return new Map(houses.map((h) => [h._id?.toString() || "", h.name]));
+  },
+
   // Create a new house
   async create(house: House): Promise<InsertOneResult<House>> {
     const client = await clientPromise;
