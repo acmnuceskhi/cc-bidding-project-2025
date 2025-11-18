@@ -19,7 +19,11 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
         variant={sortBy === "price" ? "default" : "outline"}
         size="lg"
         onClick={() => onSortChange("price")}
-        className="min-h-[44px] min-w-[44px] transition-all"
+        className={`min-h-[44px] min-w-[44px] transition-all ${
+          sortBy === "price" 
+            ? "bg-yellow-500 text-black hover:bg-yellow-600" 
+            : "border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10"
+        }`}
         aria-label="Sort by price"
         aria-pressed={sortBy === "price"}
       >
@@ -34,7 +38,11 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
         variant={sortBy === "batch" ? "default" : "outline"}
         size="lg"
         onClick={() => onSortChange("batch")}
-        className="min-h-[44px] min-w-[44px] transition-all"
+        className={`min-h-[44px] min-w-[44px] transition-all ${
+          sortBy === "batch" 
+            ? "bg-yellow-500 text-black hover:bg-yellow-600" 
+            : "border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10"
+        }`}
         aria-label="Sort by batch"
         aria-pressed={sortBy === "batch"}
       >
@@ -49,7 +57,11 @@ export function SortControls({ sortBy, onSortChange }: SortControlsProps) {
         variant={sortBy === "time" ? "default" : "outline"}
         size="lg"
         onClick={() => onSortChange("time")}
-        className="min-h-[44px] min-w-[44px] transition-all"
+        className={`min-h-[44px] min-w-[44px] transition-all ${
+          sortBy === "time" 
+            ? "bg-yellow-500 text-black hover:bg-yellow-600" 
+            : "border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10"
+        }`}
         aria-label="Sort by bid time"
         aria-pressed={sortBy === "time"}
       >
