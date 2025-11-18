@@ -74,7 +74,7 @@ export const HouseCard = memo(function HouseCard({ house, sortedTeams, isNewlyGa
       >
         {/* Background Image Layer */}
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-30"
+          className="absolute inset-0 bg-cover bg-center opacity-80"
           style={{ backgroundImage: `url('${getHouseBackground(house.name)}')` }}
         />
         
