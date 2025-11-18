@@ -5,6 +5,7 @@ import { fetchPublic } from "@/lib/fetchPublic";
 
 interface Team {
   teamId: string;
+  name?: string | null;
   rank: number;
   batch: string;
   memberCount: number;
@@ -171,7 +172,9 @@ export default function FinalTeamsPage() {
                             <span className="text-lg font-bold text-black">#{team.rank}</span>
                           </div>
                           <div className="flex-1">
-                            <div className="font-bold text-white">Team #{team.rank}</div>
+                            <div className="font-bold text-white">
+                              {team.name || `Team #${team.rank}`}
+                            </div>
                             <div className="text-xs text-gray-300">
                               Batch: {team.batch} • {team.memberCount} members
                             </div>
