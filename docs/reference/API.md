@@ -1,12 +1,14 @@
+⚠️ **STATUS:** This API documentation may be out of sync with the latest repository state. Please verify endpoint behavior against current route files in `src/app/api/` before relying on this documentation.
+
 # CC Bidding Project - API Documentation
 
 Complete API reference for the team-based auction system.
 
 **Related Documentation:**
 
-- [README.md](./README.md) - Project overview
+- [README.md](../../README.md) - Project overview
 - [PROJECT_FLOW.md](./PROJECT_FLOW.md) - System workflows and Socket.io architecture
-- [ONBOARDING.md](./ONBOARDING.md) - Setup and development guide
+- [ONBOARDING.md](../../ONBOARDING.md) - Setup and development guide
 
 ---
 

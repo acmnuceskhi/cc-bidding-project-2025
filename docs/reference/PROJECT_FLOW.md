@@ -4,6 +4,12 @@ Team-based auction system. Qualified teams from Round 1 are auctioned to houses 
 
 ---
 
+> ⚠️ **STALENESS WARNING**  
+> This document describes the system logic and architecture as understood during development. It may not reflect all implementation details or recent changes to the codebase. For the most accurate and up-to-date information, always verify against the actual source code in `src/`.
+>
+
+---
+
 ## 1. Actors
 
 - **Admin**
@@ -216,7 +222,17 @@ Scaling:
 
 ---
 
-## 7. API Reference
+## 7. Deployment & Operations
+
+For production deployment guidance, performance optimization, and incident analysis, see:
+
+- **[DEPLOYMENT.md](../ops/DEPLOYMENT.md)** - Infrastructure setup, MongoDB configuration, deployment checklist
+- **[PERFORMANCE.md](../ops/PERFORMANCE.md)** - Query optimization, connection pooling, load testing
+- **[INCIDENT_REPORT.md](./INCIDENT_REPORT.md)** - Nov 18 failure analysis and lessons learned
+
+---
+
+## 8. API Reference
 
 See `API.md` for complete endpoint documentation including:
 

@@ -4,11 +4,13 @@
 
 - [Root README](../../README.md) - Project overview
 - [ONBOARDING.md](../../ONBOARDING.md) - Environment setup (`.env.local` configuration)
-- [PROJECT_FLOW.md](../../PROJECT_FLOW.md) - Data models and auction logic
+- [PROJECT_FLOW.md](../../docs/reference/PROJECT_FLOW.md) - Data models and auction logic
 
 ---
 
 > Utility scripts to manage data for the CC Bidding System. All scripts load `.env.local` / `.env` and exit 0 on success, 1 on failure.
+>
+> **Staleness warning:** Scripts have not been re-verified after recent app updates. Validate locally before relying on them for production.
 
 ## Scripts
 
@@ -116,6 +118,8 @@ npm run import-excel
 
 Resets auction to initial state while preserving teams, participants, and house definitions. Use this between auction rounds or to restart a fresh auction.
 
+> No dashboard reset exists. Use this script when you need to clear auction state; the UI only provides per-round restart.
+
 **What it resets:**
 - ✅ All rounds → `status: "scheduled"`, `passPhase: 1`
 - ✅ Clears `timerEnd`, `finalized`, `winningBid` from all rounds
@@ -150,6 +154,8 @@ npm run reset-auction
 ### full-reset
 
 Drops all collections and reseeds canonical demo data.
+
+> No dashboard reset exists. This destructive script is for local/dev reseeding or emergency recovery only.
 
 - 4 houses (1000 credits each)
 - 16 teams with Round 1 stats (ranks 1-16)

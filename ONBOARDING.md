@@ -3,8 +3,8 @@
 **Quick Navigation:**
 
 - [README.md](./README.md) - Project overview
-- [PROJECT_FLOW.md](./PROJECT_FLOW.md) - System workflows and architecture
-- [API.md](./API.md) - API endpoint documentation
+- [PROJECT_FLOW.md](./docs/reference/PROJECT_FLOW.md) - System workflows and architecture
+- [API.md](./docs/reference/API.md) - API endpoint documentation
 
 ---
 
@@ -88,6 +88,13 @@ const db = client.db();
 - `npm run lint` — Run ESLint
 - `npm run format` — Run Prettier and rewrite files
 - `npm run format:check` — Check Prettier formatting
+- `npm test` — Run Jest test suite (uses in-memory MongoDB)
+- `npm run test:watch` — Run tests in watch mode
+- `npm run seed-test-data` — Seed database with test teams and users
+- `npm run import-excel` — Import teams from Excel file
+- `npm run init-data` — Initialize database with fresh data
+- `npm run reset-auction` — Reset auction state (clear rounds, bids, assignments)
+- `npm run full-reset` — Full database reset (removes all collections)
 
 ## Pre-PR checklist
 

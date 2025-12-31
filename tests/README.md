@@ -4,13 +4,14 @@
 
 - [Root README](../README.md) - Project overview
 - [ONBOARDING.md](../ONBOARDING.md) - Development setup
-- [API.md](../API.md) - API endpoints being tested
+- [API.md](../docs/reference/API.md) - API endpoints being tested
 
 ---
 
 ## Purpose
 
 - Document how to run the test suite for this repository and how the test environment is configured.
+- **Staleness warning:** The test suite has not been re-checked or updated after the latest app changes. Do not assume current tests are passing or fully aligned with the codebase without revalidating.
 
 Quick run (Windows PowerShell)
 
